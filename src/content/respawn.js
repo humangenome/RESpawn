@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -59,6 +59,8 @@
     html.classList.toggle('rs-no-shortcuts', !cfg.showShortcuts);
     html.classList.toggle('rs-left-slide', cfg.leftNav === 'slide');
     html.classList.toggle('rs-left-hide', cfg.leftNav === 'hide');
+    html.classList.toggle('rs-fl-hidden', !cfg.filterline);
+    document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
     const sw = document.getElementById('rs-switch');
     if (sw) { sw.setAttribute('aria-pressed', String(!!cfg.enabled)); sw.querySelector('b').textContent = cfg.enabled ? 'On' : 'Off'; }
   };
@@ -91,6 +93,10 @@
       ['hideAds', 'Hide ads'],
       ['hideBadges', 'Hide "Top 1%" badges'],
     ]],
+    ['Filter bar', [
+      ['filterline', 'Show filter bar'],
+      ['filterScore', 'Score filter: more than', 'number'],
+    ]],
   ];
   let panel = null;
   const closePanel = () => { panel?.remove(); panel = null; document.removeEventListener('click', outside, true); document.removeEventListener('keydown', esc, true); };
@@ -106,7 +112,12 @@
     for (const [title, items] of SETTINGS) {
       panel.append(el('div', { class: 'rs-panel-sec', text: title }));
       for (const [key, label, choices] of items) {
-        if (choices) {
+        if (choices === 'number') {
+          const n = el('input', { type: 'number', class: 'rs-num', step: '1', 'aria-label': label });
+          n.value = String(cfg[key] ?? 0);
+          n.onchange = () => { saveCfg({ [key]: Math.max(-99999, Math.min(99999, parseInt(n.value, 10) || 0)) }); n.value = String(cfg[key]); refilter(); };
+          panel.append(el('label', { class: 'rs-set' }, [el('span', { text: label }), n]));
+        } else if (choices) {
           const seg = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-label': label });
           for (const [v, t] of choices) {
             const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(cfg[key] === v), text: t });
@@ -178,25 +189,150 @@
   };
 
   // ---------- sort tabs ----------
+  const FUNNEL = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4.5h14l-5.4 6.3v4.6l-3.2 1.6v-6.2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>';
   const sortTabs = () => {
-    document.getElementById('rs-sorts')?.remove();
+    const old = document.getElementById('rs-sortbar');
+    if (old?.isConnected && old.dataset.url === location.href) return;
+    old?.remove(); document.getElementById('rs-filterline')?.remove();
+    if (isCommentsPage()) return;
+    // Subreddits and the home "Following" feed have a "Sort by" menu; "For You" only has the "View" menu.
     const dd = document.querySelector('shreddit-sort-dropdown[header-text="Sort by"]');
-    if (!dd || isCommentsPage()) return;
-    const sub = subOf();
-    const base = sub ? `/r/${sub}` : '';
-    const cur = (location.pathname.match(/\/(best|hot|new|top|rising|controversial)\/?$/) || [, sub ? 'hot' : 'best'])[1];
+    const view = document.querySelector('shreddit-sort-dropdown[header-text="View"]');
+    if (!dd && !view) return;
+    // The tabs mirror Reddit's own sort menu: real links on subreddits, its own buttons on "Following".
+    // The home "For You" feed has no sort menu, so it gets no tabs.
     const tabs = el('div', { id: 'rs-sorts', role: 'tablist', 'aria-label': 'Sort' });
-    for (const s of ['best', 'hot', 'new', 'top', 'rising']) tabs.append(el('a', { href: `${base}/${s}/`, role: 'tab', 'aria-selected': String(s === cur), class: s === cur ? 'rs-cur' : null, text: s[0].toUpperCase() + s.slice(1) }));
+    const items = dd ? [...dd.querySelectorAll('[slot="dropdown-items"] data[value]')] : [];
+    for (const d of items) {
+      const label = (d.querySelector('.text-body-2') || d).textContent.trim();
+      if (!label) continue;
+      const a = d.querySelector('a[href]');
+      const on = !!d.querySelector('[aria-selected="true"], [rpl-selected]');
+      const tab = el(a ? 'a' : 'button', { href: a?.getAttribute('href'), type: a ? null : 'button', role: 'tab', 'aria-selected': String(on), class: on ? 'rs-cur' : null, text: label });
+      if (!a) {
+        tab.onclick = () => {
+          (d.querySelector('[tabindex]') || d.querySelector('li') || d).click();
+          tabs.querySelectorAll('[role="tab"]').forEach((t) => { t.classList.toggle('rs-cur', t === tab); t.setAttribute('aria-selected', String(t === tab)); });
+        };
+      }
+      tabs.append(tab);
+    }
     const all = el('button', { type: 'button', class: 'rs-expand-all', text: 'Expand all' });
     all.onclick = () => {
       const open = all.textContent === 'Expand all';
-      for (const b of document.querySelectorAll('.rs-x[data-kind="image"], .rs-x[data-kind="gallery"], .rs-x[data-kind="text"]')) if ((b.getAttribute('aria-expanded') === 'true') !== open) b.click();
+      for (const b of document.querySelectorAll('.rs-row:not(.rs-filtered) .rs-x[data-kind="image"], .rs-row:not(.rs-filtered) .rs-x[data-kind="gallery"], .rs-row:not(.rs-filtered) .rs-x[data-kind="text"]')) if ((b.getAttribute('aria-expanded') === 'true') !== open) b.click();
       all.textContent = open ? 'Collapse all' : 'Expand all';
     };
-    tabs.append(all);
-    const holder = dd.closest('div') || dd.parentElement;
-    holder.parentElement.insertBefore(tabs, holder);
+    const funnel = el('button', { type: 'button', class: 'rs-funnel', title: 'Filter bar', 'aria-label': 'Show or hide the filter bar', 'aria-pressed': String(!!cfg.filterline), html: FUNNEL });
+    funnel.onclick = () => { saveCfg({ filterline: !cfg.filterline }); applyEnabled(); };
+    tabs.append(funnel, all);
+    const wrap = el('div', { id: 'rs-sortbar', 'data-url': location.href }, [tabs]);
+    const holder = dd ? (dd.closest('div') || dd.parentElement) : (view.closest('shreddit-layout-event-setter') || view);
+    holder.parentElement.insertBefore(wrap, holder);
+    // Reddit's row is only as wide as its contents; let it stretch, then put the filter bar on its own line under it.
+    const feedW = (document.querySelector('shreddit-feed') || document.querySelector('main'))?.getBoundingClientRect().width || 0;
+    let row = wrap.parentElement;
+    for (let i = 0; row && i < 4 && row.getBoundingClientRect().width < feedW * 0.9; row = row.parentElement, i++) row.classList.add('rs-grow');
+    if (row && row !== document.body) { row.classList.add('rs-grow-row'); row.after(filterLine()); } else wrap.after(filterLine());
+    // On home the bar sits after Reddit's "For You / Following" tabs: give it a divider.
+    const feedL = (document.querySelector('shreddit-feed') || document.querySelector('main'))?.getBoundingClientRect().left || 0;
+    wrap.classList.toggle('rs-after-tabs', wrap.getBoundingClientRect().left - feedL > 40);
+    paintFilters();
   };
+
+  // ---------- filter bar (RES's "filterline") ----------
+  // Each chip cycles: off -> show only matching posts -> hide matching posts -> off. Right-click turns it off.
+  const FILTER_KEYS = ['nsfw', 'spoiler', 'visited', 'comments', 'expando', 'score'];
+  const fdef = (k) => {
+    const n = +cfg.filterScore || 0;
+    return {
+      nsfw: ['nsfw', 'no nsfw', 'NSFW posts'],
+      spoiler: ['spoiler', 'no spoilers', 'spoilers'],
+      visited: ['visited', 'not visited', 'posts you have opened'],
+      comments: ['comments opened', 'comments not opened', 'posts whose comments you have opened'],
+      expando: ['expando', 'no expando', 'posts with an expand button'],
+      score: [`score > ${n}`, `score ≤ ${n}`, `posts with more than ${n} points`],
+    }[k];
+  };
+  const fstate = (k) => (cfg.filters || {})[k] || 'off';
+  const flag = (p, a) => p.hasAttribute(a) && p.getAttribute(a) !== 'false';
+  // "Visited" = you opened the post from a RESpawn row, or opened its comments. Kept in this browser only.
+  let seen = null;
+  const seenMap = () => { if (!seen) { try { seen = JSON.parse(localStorage.getItem('rs-seen') || '{}'); } catch { seen = {}; } } return seen; };
+  const markSeen = (id) => {
+    if (!id) return;
+    const m = seenMap(); m[id] = Date.now();
+    const ids = Object.keys(m);
+    if (ids.length > 4000) for (const old of ids.sort((a, b) => m[a] - m[b]).slice(0, ids.length - 3000)) delete m[old];
+    try { localStorage.setItem('rs-seen', JSON.stringify(m)); } catch { /* storage full */ }
+  };
+  const commentsOpened = (id) => localStorage.getItem(`rs-visit-${id}`) !== null;
+  const matches = (post, row, k) => {
+    const id = post.id;
+    switch (k) {
+      case 'nsfw': return flag(post, 'nsfw') || flag(post, 'subreddit-nsfw');
+      case 'spoiler': return flag(post, 'spoiler');
+      case 'visited': return !!seenMap()[id] || commentsOpened(id);
+      case 'comments': return commentsOpened(id);
+      case 'expando': return !!row.querySelector('.rs-x');
+      case 'score': return (+post.getAttribute('score') || 0) > (+cfg.filterScore || 0);
+      default: return false;
+    }
+  };
+  // A row is judged once per filter setting, so a post never vanishes the moment you open it.
+  let fVer = 0;
+  const applyFilters = () => {
+    const on = FILTER_KEYS.filter((k) => fstate(k) !== 'off');
+    let hidden = 0;
+    for (const row of document.querySelectorAll('.rs-row')) {
+      const post = row.rsPost;
+      if (!post) continue;
+      if (row.rsFv !== fVer) {
+        row.rsFv = fVer;
+        row.rsHide = on.some((k) => (fstate(k) === 'only' ? !matches(post, row, k) : matches(post, row, k)));
+        row.classList.toggle('rs-filtered', row.rsHide);
+      }
+      if (row.rsHide) hidden++;
+    }
+    const count = document.querySelector('#rs-filterline .rs-fl-count');
+    const txt = hidden ? `${hidden} hidden` : '';
+    if (count && count.textContent !== txt) count.textContent = txt;
+    document.querySelector('#rs-sorts .rs-funnel')?.classList.toggle('rs-fl-active', on.length > 0);
+    const clear = document.querySelector('#rs-filterline .rs-fl-clear');
+    if (clear) clear.hidden = !on.length;
+  };
+  const paintFilters = () => {
+    for (const chip of document.querySelectorAll('#rs-filterline .rs-chip')) {
+      const k = chip.dataset.f, s = fstate(k), [label, not, what] = fdef(k);
+      chip.dataset.state = s;
+      chip.textContent = s === 'only' ? `only ${label}` : s === 'hide' ? not : label;
+      chip.title = s === 'only' ? `Showing only ${what}. Click to hide them instead. Right-click to turn off.`
+        : s === 'hide' ? `Hiding ${what}. Click to turn off.`
+          : `Click to show only ${what}. Click again to hide them.`;
+    }
+  };
+  const refilter = () => { fVer++; seen = null; paintFilters(); applyFilters(); };
+  const setFilter = (k, s) => { saveCfg({ filters: { ...(cfg.filters || {}), [k]: s } }); refilter(); };
+  const filterLine = () => {
+    const bar = el('div', { id: 'rs-filterline', role: 'toolbar', 'aria-label': 'Filter posts' }, [el('span', { class: 'rs-fl-icon', html: FUNNEL })]);
+    for (const k of FILTER_KEYS) {
+      const chip = el('button', { type: 'button', class: 'rs-chip', 'data-f': k });
+      chip.onclick = () => setFilter(k, { off: 'only', only: 'hide', hide: 'off' }[fstate(k)]);
+      chip.oncontextmenu = (e) => { e.preventDefault(); setFilter(k, 'off'); };
+      bar.append(chip);
+    }
+    const clear = el('button', { type: 'button', class: 'rs-fl-clear', text: 'Clear', hidden: true });
+    clear.onclick = () => { saveCfg({ filters: {} }); refilter(); };
+    bar.append(el('span', { class: 'rs-fl-count', role: 'status' }), clear);
+    return bar;
+  };
+  const trackOpens = (e) => {
+    const a = e.target.closest?.('a');
+    const row = a?.closest('.rs-row');
+    if (row && !a.closest('.rs-by')) markSeen(row.dataset.rsId);
+  };
+  document.addEventListener('click', trackOpens, true);
+  document.addEventListener('auxclick', trackOpens, true);
 
   // ---------- expando: open the post's content right in the feed ----------
   const ytId = (url) => {
@@ -256,7 +392,6 @@
   };
 
   // ---------- dense rows ----------
-  let rank = 0;
   // Votes go straight to Reddit with the same request its own button sends. (Reddit's own buttons
   // do nothing while the original post is hidden, so pressing them is not enough.)
   const csrf = () => (document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/) || [])[1] || '';
@@ -305,6 +440,7 @@
   };
   const densify = () => {
     if (isCommentsPage()) return;
+    let rank = document.querySelectorAll('.rs-row').length; // restarts when Reddit swaps the whole feed
     for (const post of document.querySelectorAll('shreddit-post:not([data-rs])')) {
       post.setAttribute('data-rs', '1');
       const g = (k) => post.getAttribute(k) || '';
@@ -314,10 +450,13 @@
       const flair = post.querySelector('shreddit-post-flair')?.innerText.trim();
       const kind = kindOf(post);
       const row = el('div', { class: 'rs-row', 'data-rs-id': g('id') });
+      row.rsPost = post;
       const thumbKids = img ? [el('img', { src: img.currentSrc || img.src, alt: '', loading: 'lazy' })] : [el('span', { html: isSelf ? ICON.text : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 12l4-4M7 9l-1.5 1.5a2.5 2.5 0 0 0 3.5 3.5L10.5 12.5M13 11l1.5-1.5a2.5 2.5 0 0 0-3.5-3.5L9.5 7.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>' })];
       const thumb = el('a', { class: 'rs-thumb', href: isSelf ? perma : link, tabindex: '-1', 'aria-hidden': 'true' }, thumbKids);
       const titleLine = el('div', { class: 'rs-tline' }, [
         el('a', { class: 'rs-title', href: isSelf ? perma : link, text: g('post-title') }),
+        flag(post, 'nsfw') ? el('span', { class: 'rs-tag rs-tag-nsfw', text: 'nsfw' }) : null,
+        flag(post, 'spoiler') ? el('span', { class: 'rs-tag rs-tag-spoiler', text: 'spoiler' }) : null,
         flair ? el('span', { class: 'rs-flair', text: flair }) : null,
         el('span', { class: 'rs-domain', text: `(${g('domain')})` }),
       ]);
@@ -406,11 +545,11 @@
   const onRoute = () => {
     html.classList.toggle('rs-feed', !isCommentsPage());
     shortcutBar(); sortTabs(); tidy(); addGear();
-    if (!isCommentsPage()) { rank = 0; nav?.remove(); nav = null; comments.started = null; marks.new = []; marks.op = []; marks.mod = []; }
+    if (!isCommentsPage()) { nav?.remove(); nav = null; comments.started = null; marks.new = []; marks.op = []; marks.mod = []; }
   };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
-    densify(); comments(); tagRecent(); addGear();
+    densify(); sortTabs(); applyFilters(); comments(); tagRecent(); addGear();
   };
   loadCfg().then(() => {
     addSwitch(); applyEnabled(); leftSlide(); tick();

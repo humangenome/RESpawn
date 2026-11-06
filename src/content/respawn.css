@@ -13,7 +13,7 @@
 
 /* Off = Reddit as it is */
 html:not(.rs-on) .rs-row, html:not(.rs-on) #rs-shortcuts, html:not(.rs-on) #rs-sorts, html:not(.rs-on) #rs-nav,
-html:not(.rs-on) .rs-cacts, html:not(.rs-on) .rs-badge { display: none !important; }
+html:not(.rs-on) .rs-cacts, html:not(.rs-on) .rs-badge, html:not(.rs-on) #rs-filterline { display: none !important; }
 
 /* On/off switch: small and see-through, bottom-left */
 #rs-switch {
@@ -39,7 +39,7 @@ html:not(.rs-on) .rs-cacts, html:not(.rs-on) .rs-badge { display: none !importan
 #rs-sorts { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; font: 600 13px/1 var(--rs-font); }
 #rs-sorts a, #rs-sorts button { padding: 8px 14px; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); text-decoration: none; font: inherit; cursor: pointer; }
 #rs-sorts a:hover, #rs-sorts button:hover { background: var(--rs-hover); color: var(--rs-text); }
-#rs-sorts a.rs-cur { background: var(--rs-text); color: var(--rs-bg); }
+#rs-sorts .rs-cur, #rs-sorts .rs-cur:hover { background: var(--rs-text); color: var(--rs-bg); }
 #rs-sorts .rs-expand-all { margin-left: auto; border: 1px solid var(--rs-line); }
 html.rs-on.rs-feed shreddit-sort-dropdown[header-text="Sort by"] { display: none !important; }
 
@@ -189,3 +189,32 @@ html.rs-on.rs-hide-suggested feed-announcement, html.rs-on.rs-hide-suggested shr
 #rs-panel .rs-master > span { font-weight: 700 !important; }
 #rs-panel .rs-panel-sec { text-transform: uppercase !important; letter-spacing: .06em; }
 #rs-panel .rs-switch-input { box-sizing: border-box !important; width: 40px !important; min-width: 40px !important; height: 24px !important; padding: 0 !important; border: 0 !important; outline-offset: 2px; }
+
+/* Filter bar (RES's filterline): funnel next to the sort tabs, chips below */
+#rs-sorts .rs-funnel { display: inline-flex; align-items: center; justify-content: center; position: relative; width: 34px; height: 31px; padding: 0; }
+#rs-sorts .rs-funnel svg { width: 17px; height: 17px; }
+#rs-sorts .rs-funnel[aria-pressed="true"] { background: var(--rs-hover); color: var(--rs-text); }
+#rs-sorts .rs-funnel.rs-fl-active::after { content: ""; position: absolute; top: 5px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--rs-up); }
+#rs-filterline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 8px; padding: 6px 8px; border: 1px solid var(--rs-line); border-radius: 12px; font: 600 12px/1 var(--rs-font); color: var(--rs-weak); }
+html.rs-fl-hidden #rs-filterline { display: none !important; }
+#rs-filterline .rs-fl-icon { display: inline-flex; padding: 0 4px 0 2px; }
+#rs-filterline .rs-fl-icon svg { width: 16px; height: 16px; }
+#rs-filterline button { text-transform: none !important; letter-spacing: normal; font: inherit; cursor: pointer; white-space: nowrap; }
+.rs-chip { height: 28px; padding: 0 12px; border: 1px solid var(--rs-line); border-radius: 999px; background: none; color: var(--rs-weak); }
+.rs-chip:hover { background: var(--rs-hover); color: var(--rs-text); }
+.rs-chip[data-state="only"] { border-color: #1a7f4b; background: color-mix(in srgb, #1a7f4b 12%, transparent); color: #1a7f4b; }
+.rs-chip[data-state="hide"] { border-color: #c62828; background: color-mix(in srgb, #c62828 10%, transparent); color: #c62828; }
+#rs-filterline .rs-fl-count { margin-left: auto; padding: 0 4px; font-weight: 500; }
+#rs-filterline .rs-fl-clear { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--rs-hover); color: var(--rs-text); }
+#rs-filterline .rs-fl-clear:hover { background: var(--rs-strong-bg); }
+#rs-filterline .rs-fl-clear[hidden] { display: none; }
+html.rs-on .rs-row.rs-filtered { display: none !important; }
+.rs-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border: 1px solid currentColor; border-radius: 4px; font: 700 10px/1.4 var(--rs-font); letter-spacing: .03em; text-transform: uppercase; vertical-align: 2px; }
+.rs-tag-nsfw { color: #c62828; }
+.rs-tag-spoiler { color: var(--rs-weak); }
+#rs-panel .rs-num { box-sizing: border-box; margin: 0; width: 80px; height: 32px; padding: 0 8px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-text); font: 400 14px/1 var(--rs-font); text-align: right; }
+#rs-sortbar { flex: 1 1 auto; min-width: 0; margin-right: 8px; }
+#rs-sortbar #rs-sorts { margin: 2px 0 6px; }
+html.rs-on .rs-grow { flex: 1 1 auto !important; min-width: 0; }
+html.rs-on .rs-grow-row > :not(.rs-grow) { flex-grow: 0 !important; }
+#rs-sortbar.rs-after-tabs { margin-left: 16px; padding-left: 12px; border-left: 1px solid var(--rs-line); }
