@@ -131,3 +131,61 @@ html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 .rs-vote[data-vote="DOWN"] .rs-down .rs-fill { fill: currentColor; }
 .rs-vote[data-vote="DOWN"] .rs-score { color: #6a5cff; }
 .rs-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2147483001; padding: 10px 16px; border-radius: 10px; background: var(--rs-text); color: var(--rs-bg); font: 600 13px/1.3 var(--rs-font); box-shadow: 0 6px 24px rgba(0,0,0,.2); }
+
+/* Gear in Reddit's top bar */
+#rs-gear { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-right: 4px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--rs-text); cursor: pointer; }
+#rs-gear:hover { background: var(--rs-hover); }
+#rs-gear svg { width: 22px; height: 22px; }
+#rs-gear.rs-gear-float { position: fixed; top: 8px; right: 120px; z-index: 2147483000; }
+
+/* Settings panel */
+#rs-panel {
+  position: fixed; top: 64px; right: 16px; z-index: 2147483001; width: 340px; max-height: calc(100vh - 88px); overflow: auto;
+  padding: 14px 16px 12px; border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); color: var(--rs-text);
+  box-shadow: 0 12px 40px rgba(0,0,0,.18); font: 400 14px/1.4 var(--rs-font);
+}
+.rs-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.rs-panel-head b { font-size: 16px; }
+.rs-panel-x { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); cursor: pointer; }
+.rs-panel-x:hover { background: var(--rs-hover); color: var(--rs-text); }
+.rs-panel-x svg { width: 16px; height: 16px; }
+.rs-panel-sec { margin: 12px 0 2px; font: 700 11px/1 var(--rs-font); letter-spacing: .06em; text-transform: uppercase; color: var(--rs-weak); }
+.rs-set { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 38px; cursor: pointer; }
+.rs-master { padding-bottom: 6px; border-bottom: 1px solid var(--rs-line); font-weight: 700; }
+.rs-switch-input { appearance: none; flex: none; position: relative; width: 40px; height: 24px; margin: 0; border-radius: 999px; background: var(--rs-strong-bg); cursor: pointer; transition: background .15s; }
+.rs-switch-input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.rs-switch-input:checked { background: var(--rs-up); }
+.rs-switch-input:checked::after { transform: translateX(16px); }
+.rs-seg { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--rs-hover); }
+.rs-seg button { height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); font: 600 12px/1 var(--rs-font); cursor: pointer; white-space: nowrap; }
+.rs-seg button[aria-checked="true"] { background: var(--rs-bg); color: var(--rs-text); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.rs-shortcut-list { box-sizing: border-box; width: 100%; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--rs-line); border-radius: 10px; background: var(--rs-bg); color: var(--rs-text); font: 400 13px/1.4 var(--rs-font); resize: vertical; }
+.rs-panel-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+.rs-panel-foot a { color: var(--rs-weak); font-size: 13px; text-decoration: none; }
+.rs-panel-foot a:hover { color: var(--rs-text); text-decoration: underline; }
+.rs-done { height: 34px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--rs-up); color: #fff; font: 700 13px/1 var(--rs-font); cursor: pointer; }
+.rs-done:hover { filter: brightness(1.05); }
+
+/* Layout settings */
+html.rs-on.rs-no-shortcuts #rs-shortcuts { display: none !important; }
+html.rs-on.rs-hide-recent .rs-recent { display: none !important; }
+html.rs-on.rs-hide-suggested in-feed-community-recommendations, html.rs-on.rs-hide-suggested .rs-hide-games { display: none !important; }
+html.rs-on.rs-left-hide #left-sidebar-container { display: none !important; }
+html.rs-on.rs-left-hide .grid-container, html.rs-on.rs-left-slide .grid-container { grid-template-columns: 0 minmax(0, 1fr) !important; }
+html.rs-on.rs-left-slide #left-sidebar-container {
+  position: fixed !important; left: 0; top: calc(var(--shreddit-header-height, 56px) + 34px); bottom: 0; z-index: 30; width: 272px !important;
+  background: var(--rs-bg); border-right: 1px solid var(--rs-line); box-shadow: 8px 0 30px rgba(0,0,0,.12);
+  transform: translateX(-100%); transition: transform .18s ease; overflow-y: auto;
+}
+html.rs-on.rs-left-slide.rs-no-shortcuts #left-sidebar-container { top: var(--shreddit-header-height, 56px); }
+html.rs-on.rs-left-slide.rs-left-open #left-sidebar-container { transform: none; }
+#rs-left-edge { position: fixed; left: 0; top: 90px; bottom: 0; width: 10px; z-index: 29; display: none; }
+html.rs-on.rs-left-slide #rs-left-edge { display: block; }
+html.rs-on.rs-left-slide #rs-left-edge::after { content: ""; position: absolute; left: 0; top: 50%; width: 4px; height: 56px; margin-top: -28px; border-radius: 0 4px 4px 0; background: var(--rs-strong-bg); }
+html.rs-on.rs-hide-recent recent-posts, html.rs-on.rs-hide-recent aside:has(> recent-posts) { display: none !important; }
+html.rs-on.rs-hide-suggested feed-announcement, html.rs-on.rs-hide-suggested shreddit-async-loader:has(> feed-announcement) { display: none !important; }
+#rs-panel, #rs-panel * { text-transform: none !important; letter-spacing: normal; }
+#rs-panel .rs-set > span { font: 400 14px/1.4 var(--rs-font) !important; color: var(--rs-text); }
+#rs-panel .rs-master > span { font-weight: 700 !important; }
+#rs-panel .rs-panel-sec { text-transform: uppercase !important; letter-spacing: .06em; }
+#rs-panel .rs-switch-input { box-sizing: border-box !important; width: 40px !important; min-width: 40px !important; height: 24px !important; padding: 0 !important; border: 0 !important; outline-offset: 2px; }

@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], hideAds: true, hideBadges: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -54,6 +54,11 @@
     html.classList.toggle('rs-on', !!cfg.enabled);
     html.classList.toggle('rs-hide-ads', !!cfg.hideAds);
     html.classList.toggle('rs-hide-badges', !!cfg.hideBadges);
+    html.classList.toggle('rs-hide-recent', !!cfg.hideRecent);
+    html.classList.toggle('rs-hide-suggested', !!cfg.hideSuggested);
+    html.classList.toggle('rs-no-shortcuts', !cfg.showShortcuts);
+    html.classList.toggle('rs-left-slide', cfg.leftNav === 'slide');
+    html.classList.toggle('rs-left-hide', cfg.leftNav === 'hide');
     const sw = document.getElementById('rs-switch');
     if (sw) { sw.setAttribute('aria-pressed', String(!!cfg.enabled)); sw.querySelector('b').textContent = cfg.enabled ? 'On' : 'Off'; }
   };
@@ -64,10 +69,101 @@
     document.body.append(sw);
   };
 
+  // ---------- gear + settings panel ----------
+  const GEAR = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4zm7 4.1v-1.8l-2-.4a5.6 5.6 0 0 0-.6-1.4l1.2-1.7-1.3-1.3-1.7 1.2a5.6 5.6 0 0 0-1.4-.6l-.4-2H9.1l-.4 2a5.6 5.6 0 0 0-1.4.6L5.6 4.3 4.3 5.6l1.2 1.7a5.6 5.6 0 0 0-.6 1.4l-2 .4v1.8l2 .4c.1.5.3 1 .6 1.4l-1.2 1.7 1.3 1.3 1.7-1.2c.4.3.9.5 1.4.6l.4 2h1.8l.4-2c.5-.1 1-.3 1.4-.6l1.7 1.2 1.3-1.3-1.2-1.7c.3-.4.5-.9.6-1.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+  const addGear = () => {
+    if (document.getElementById('rs-gear')) return;
+    const user = document.querySelector('#expand-user-drawer-button');
+    const actions = user?.closest('.ps-lg') || user?.closest('nav');
+    const gear = el('button', { id: 'rs-gear', type: 'button', title: 'RESpawn settings', 'aria-label': 'RESpawn settings', html: GEAR });
+    gear.onclick = (e) => { e.stopPropagation(); togglePanel(); };
+    if (actions) {
+      let slot = user; while (slot.parentElement && slot.parentElement !== actions) slot = slot.parentElement;
+      actions.insertBefore(gear, slot);
+    } else { gear.classList.add('rs-gear-float'); document.body.append(gear); }
+  };
+  const SETTINGS = [
+    ['Layout', [
+      ['leftNav', 'Left sidebar', [['show', 'Show'], ['slide', 'Slide out'], ['hide', 'Hide']]],
+      ['showShortcuts', 'Shortcut bar'],
+      ['hideRecent', 'Hide "Recent posts"'],
+      ['hideSuggested', 'Hide suggestions and games'],
+      ['hideAds', 'Hide ads'],
+      ['hideBadges', 'Hide "Top 1%" badges'],
+    ]],
+  ];
+  let panel = null;
+  const closePanel = () => { panel?.remove(); panel = null; document.removeEventListener('click', outside, true); document.removeEventListener('keydown', esc, true); };
+  const outside = (e) => { if (panel && !panel.contains(e.target) && e.target.id !== 'rs-gear' && !e.target.closest?.('#rs-gear')) closePanel(); };
+  const esc = (e) => { if (e.key === 'Escape') closePanel(); };
+  const togglePanel = () => {
+    if (panel) return closePanel();
+    panel = el('div', { id: 'rs-panel', role: 'dialog', 'aria-label': 'RESpawn settings' });
+    const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close', html: ICON.close });
+    x.onclick = closePanel;
+    const master = el('label', { class: 'rs-set rs-master' }, [el('span', { text: 'RESpawn' }), toggle('enabled')]);
+    panel.append(el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Settings' }), x]), master);
+    for (const [title, items] of SETTINGS) {
+      panel.append(el('div', { class: 'rs-panel-sec', text: title }));
+      for (const [key, label, choices] of items) {
+        if (choices) {
+          const seg = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-label': label });
+          for (const [v, t] of choices) {
+            const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(cfg[key] === v), text: t });
+            b.onclick = () => { saveCfg({ [key]: v }); applyEnabled(); seg.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b))); };
+            seg.append(b);
+          }
+          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: label }), seg]));
+        } else panel.append(el('label', { class: 'rs-set' }, [el('span', { text: label }), toggle(key)]));
+      }
+    }
+    panel.append(el('div', { class: 'rs-panel-sec', text: 'Shortcuts' }));
+    const ta = el('textarea', { class: 'rs-shortcut-list', rows: '5', 'aria-label': 'Shortcut subreddits, one per line', spellcheck: 'false' });
+    ta.value = (cfg.shortcuts || []).join('\n');
+    ta.onchange = () => { saveCfg({ shortcuts: ta.value.split(/[\s,]+/).map((v) => v.replace(/^\/?r\//i, '').trim()).filter(Boolean) }); shortcutBar(); };
+    panel.append(ta);
+    const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
+    done.onclick = closePanel;
+    panel.append(el('div', { class: 'rs-panel-foot' }, [el('a', { href: 'https://github.com/humangenome/RESpawn', target: '_blank', rel: 'noopener', text: 'About RESpawn' }), done]));
+    document.body.append(panel);
+    setTimeout(() => { document.addEventListener('click', outside, true); document.addEventListener('keydown', esc, true); }, 0);
+  };
+  const toggle = (key) => {
+    const i = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
+    i.checked = !!cfg[key];
+    i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (key === 'showShortcuts') shortcutBar(); };
+    return i;
+  };
+
+  // ---------- left sidebar slide-out ----------
+  const leftSlide = () => {
+    if (document.getElementById('rs-left-edge')) return;
+    const edge = el('div', { id: 'rs-left-edge', 'aria-hidden': 'true' });
+    document.body.append(edge);
+    const nav = () => document.getElementById('left-sidebar-container');
+    let t;
+    const open = () => { clearTimeout(t); html.classList.add('rs-left-open'); };
+    const shut = () => { clearTimeout(t); t = setTimeout(() => html.classList.remove('rs-left-open'), 250); };
+    edge.addEventListener('mouseenter', open);
+    document.addEventListener('mouseover', (e) => { const n = nav(); if (!html.classList.contains('rs-left-slide') || !n) return; if (n.contains(e.target) || e.target === edge) open(); else if (html.classList.contains('rs-left-open')) shut(); });
+  };
+
+  // ---------- right side: "Recent posts" ----------
+  const tagRecent = () => {
+    const rail = document.getElementById('right-sidebar-container') || document;
+    for (const h of rail.querySelectorAll('h2, h3, span, div, p')) {
+      if (h.childElementCount > 2 || !/^\s*recent posts\s*$/i.test(h.textContent)) continue;
+      let box = h;
+      const top = document.getElementById('right-sidebar-contents');
+      while (box.parentElement && box.parentElement !== top && box.parentElement !== rail && box.parentElement.tagName !== 'ASIDE') box = box.parentElement;
+      box.classList.add('rs-recent');
+    }
+  };
+
   // ---------- shortcut bar ----------
   const shortcutBar = () => {
     let bar = document.getElementById('rs-shortcuts');
-    if (!cfg.shortcuts?.length) { bar?.remove(); return; }
+    if (!cfg.shortcuts?.length || !cfg.showShortcuts) { bar?.remove(); return; }
     if (!bar) {
       bar = el('nav', { id: 'rs-shortcuts', 'aria-label': 'My subreddits' });
       const header = document.querySelector('reddit-header-large, header');
@@ -309,15 +405,15 @@
   let lastUrl = '';
   const onRoute = () => {
     html.classList.toggle('rs-feed', !isCommentsPage());
-    shortcutBar(); sortTabs(); tidy();
+    shortcutBar(); sortTabs(); tidy(); addGear();
     if (!isCommentsPage()) { rank = 0; nav?.remove(); nav = null; comments.started = null; marks.new = []; marks.op = []; marks.mod = []; }
   };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
-    densify(); comments();
+    densify(); comments(); tagRecent(); addGear();
   };
   loadCfg().then(() => {
-    addSwitch(); applyEnabled(); tick();
+    addSwitch(); applyEnabled(); leftSlide(); tick();
     new MutationObserver(() => { clearTimeout(tick.t); tick.t = setTimeout(tick, 120); }).observe(document.body, { childList: true, subtree: true });
     setInterval(() => { if (location.href !== lastUrl) tick(); }, 800);
   });
