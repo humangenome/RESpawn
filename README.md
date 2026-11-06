@@ -1,0 +1,33 @@
+# RESpawn
+
+**Reddit Enhancement Suite features for New Reddit.**
+
+RESpawn keeps the new Reddit look and brings back the way old Reddit and Reddit Enhancement Suite (RES)
+worked: more posts on a screen, sort tabs in the open, one-click comments, save and hide, a subreddit
+shortcut bar, keyboard shortcuts, images that open in place, saved comments, remembered collapsed
+comments and new-comment counts.
+
+RES made Reddit better for over a decade, but it only works on old.reddit.com. RESpawn is a new
+extension for today's www.reddit.com, in Chrome and Firefox.
+
+> **Not made by the RES team, and not affiliated with or endorsed by Reddit.** RESpawn is an
+> independent project. It reuses ideas, and in places code, from RES under the same license (GPL-3.0).
+> See [NOTICE](NOTICE).
+
+## Status
+
+Early work. Nothing to install yet.
+
+- [Feature check](docs/feature-check.tsv): every one of RES's 82 features, sorted into what Reddit
+  already does, what RESpawn rebuilds and what no longer applies.
+
+## How it works
+
+- It works on the Reddit page you are already looking at, using your own signed-in browser.
+- It has no servers of its own, no tracking and no analytics. Your settings, tags and saved comments
+  stay in your browser.
+- Votes, saves and other actions press Reddit's own buttons.
+
+## License
+
+GPL-3.0. See [LICENSE](LICENSE).

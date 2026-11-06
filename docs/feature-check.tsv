@@ -1,0 +1,83 @@
+id	verdict	check	note
+RESTips	ours	-	Tips inside our own settings
+about	ours	-	About page in our settings
+accountSwitcher	later	-	Stores Reddit passwords inside the add-on. Left out for now
+announcements	ours	-	Our own news line
+autoHide	rebuild	build	Hide posts you have already opened; uses Reddit's own hide plus a local list
+backupAndRestore	ours	-	Save and load settings file
+betteReddit	rebuild	build	Bundle of small tweaks; keep the ones that still apply, drop old-Reddit ones
+commandLine	rebuild	build	Type commands to jump around and change settings
+commentDepth	rebuild	build	Open comment pages to a chosen depth
+commentHidePersistor	rebuild	live	Remember which comments you collapsed. Comments carry an ID and a collapsed flag
+commentNavigator	rebuild	live	Jump between comments by the poster, mods, new ones. Reddit has nothing like it
+commentPreview	native?	signed-in	New editor shows formatting as you type; confirm signed in
+commentQuickCollapse	native	live	Reddit collapses comments itself; double-click extra is tiny
+commentSortBy	native?	signed-in	Reddit has comment sort and a default-sort setting; confirm signed in
+commentStyle	rebuild	build	Readability styling for comment threads
+commentTools	rebuild	signed-in	Reddit's editor has a toolbar; rebuild the extras (saved replies, quick formatting)
+context	native?	build	Reddit links to the full thread from a single comment; confirm
+contribute	ours	-	Donate and contribute page
+customToggles	ours	-	Custom on/off switches
+dashboard	rebuild	build	Our own page: saved comments, tags, filters, widgets
+disableChat	rebuild	signed-in	Hide Reddit's chat
+easterEgg	drop	-	Joke feature
+filteReddit	rebuild	live	Hide posts by word, site, subreddit or adult content. Posts carry subreddit, site and title
+hideChildComments	rebuild	build	Collapse all replies at once
+hover	ours	-	Settings for pop-ups
+index	ours	-	Internal list of features
+keyboardNav	rebuild	live	Keyboard shortcuts (next post, open, vote). Reddit has none: tested j, k and ?
+localDate	native?	build	Reddit may show the full date on hover; confirm
+logoLink	rebuild	build	Choose where the Reddit logo takes you
+menu	ours	-	Our toolbar menu
+messageMenu	native?	signed-in	Reddit's inbox moved; confirm signed in
+modhelper	drop	-	Tips for moderators about RES itself
+multiredditNavbar	native?	signed-in	Reddit's left sidebar lists custom feeds; confirm signed in
+neverEndingComments	rebuild	live	Load more replies by itself. Post page had 38 "more replies" buttons to press
+neverEndingReddit	native	live	Reddit scrolls endlessly (52 posts loaded on scroll). Rebuild only the "pause every N pages" option
+newCommentCount	rebuild	live	Count comments posted since your last visit. Posts carry a comment count, comments a time
+nightMode	native	live	Reddit has Display Mode (dark) in its menu
+notifications	ours	-	Our pop-up messages
+oldRedditRedirect	drop	-	Sends you to old Reddit: the opposite of this project
+onboarding	ours	-	Welcome page
+orangered	native?	signed-in	Reddit shows unread messages itself; confirm signed in
+pageNavigator	rebuild	build	Back-to-top and page shortcuts
+penaltyBox	ours	-	Turns off features you never use
+presets	ours	-	Ready-made setting groups
+profileNavigator	native?	signed-in	Reddit's profile menu; confirm signed in
+profileRedirect	rebuild	build	Open profiles on the tab you prefer (posts, comments)
+quarantineHide	rebuild	build	Skip quarantine warning pages
+readComments	rebuild	build	Remember which comments you have read
+redditUserInfo	native	live	Reddit's own hover card on usernames
+requestPermissions	ours	-	Ask for browser permissions up front
+saveComments	rebuild	live	Save comments in your browser, not on Reddit. Reads the comment on the page
+search	ours	-	Search our settings
+searchHelper	native?	build	Reddit search has filters now; rebuild only what is missing
+selectedEntry	rebuild	build	Highlight the post or comment you are on (goes with keyboard shortcuts)
+settingsNavigation	ours	-	Moving around our settings
+showImages	rebuild	live	Reddit shows its own images and videos in the feed; rebuild links to outside sites opening in place, expand all, size, max videos playing
+showKarma	native?	signed-in	Reddit shows karma in its menu; confirm signed in
+showParent	rebuild	live	Hover to see the comment being replied to. Comments carry their parent's position
+singleClick	rebuild	live	Open link and comments together. Posts carry both addresses
+sourceSnudown	server	-	Show a comment's original text; needs Reddit's servers
+spamButton	drop	-	Reddit's own Report replaces it
+spoilerTags	native?	build	Reddit blurs spoilers; confirm
+styleTweaks	rebuild	build	Small look tweaks; keep the ones that apply
+stylesheet	rebuild	build	Your own style snippets (subreddit styles no longer exist)
+submitHelper	rebuild	signed-in	Warnings and help when posting
+submitIssue	ours	-	Report a problem
+subredditInfo	native?	build	Reddit's own hover card on subreddits; confirm
+subredditManager	rebuild	live	Shortcut bar of your subreddits across the top. The new design has none
+subredditStyleToggle	drop	-	Subreddit styles do not exist on the new design
+subredditTagger	rebuild	build	Add your own label before titles from chosen subreddits
+tableTools	rebuild	build	Sort tables inside posts
+temporaryDropdownLinks	drop	-	Old Reddit menus only
+troubleshooter	ours	-	Fix and clean settings
+userHighlight	rebuild	live	Colour the poster, mods, friends in threads. Comments carry author and mod flag
+userInfo	rebuild	live	Reddit has a hover card; rebuild the extras (your tag, votes you gave them)
+userTagger	rebuild	live	Tag or ignore users. Every post and comment carries its author
+userbarHider	drop	-	Old Reddit top bar only
+usernameHider	rebuild	build	Hide your own username on screen
+version	ours	-	Version checks
+voteEnhancements	rebuild	live	Colour scores, show upvote percentage. Posts carry score and upvote ratio
+wheelBrowse	rebuild	build	Scroll through galleries with the wheel
+xPostLinks	rebuild	build	Links to the original post on crossposts

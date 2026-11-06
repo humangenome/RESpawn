@@ -1,0 +1,17 @@
+RESpawn
+Copyright (C) 2026 RESpawn contributors
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, version 3 of the License.
+See LICENSE for the full text. It comes with ABSOLUTELY NO WARRANTY.
+
+Credit
+------
+RESpawn is built around the features of Reddit Enhancement Suite (RES),
+https://github.com/honestbleeps/Reddit-Enhancement-Suite, by Steve Sobel and the RES contributors,
+licensed under GPL-3.0. Where RESpawn reuses RES code, the file says so at the top, names the RES
+file it came from, and notes what was changed and when.
+
+RESpawn is not made by, affiliated with, or endorsed by the RES team.
+
+Reddit is a trademark of Reddit, Inc. RESpawn is not affiliated with or endorsed by Reddit, Inc.
