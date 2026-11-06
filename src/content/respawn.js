@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -26,7 +26,7 @@
     if (s < 86400) return `${Math.round(s / 3600)} hr`;
     return `${Math.round(s / 86400)} d`;
   };
-  const num = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
+  const num = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M` : n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
   const subOf = () => (location.pathname.match(/^\/r\/([^/]+)/) || [])[1];
   const isCommentsPage = () => !!document.querySelector('shreddit-post[view-context="CommentsPage"]');
 
@@ -61,6 +61,7 @@
     html.classList.toggle('rs-left-hide', cfg.leftNav === 'hide');
     html.classList.toggle('rs-fl-hidden', !cfg.filterline);
     document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
+    applySubStyle();
     const sw = document.getElementById('rs-switch');
     if (sw) { sw.setAttribute('aria-pressed', String(!!cfg.enabled)); sw.querySelector('b').textContent = cfg.enabled ? 'On' : 'Off'; }
   };
@@ -95,6 +96,9 @@
     ['Filter bar', [
       ['filterline', 'Show filter bar'],
       ['filterScore', 'Score filter: more than', 'number'],
+    ]],
+    ['Subreddit styles', [
+      ['subStyles', 'Show subreddit styles'],
     ]],
     ['Shortcut bar', [
       ['showShortcuts', 'Show shortcut bar'],
@@ -145,7 +149,7 @@
   const toggle = (key) => {
     const i = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
     i.checked = !!cfg[key];
-    i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (key === 'showShortcuts') shortcutBar(); };
+    i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (key === 'showShortcuts') shortcutBar(); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
     return i;
   };
 
@@ -177,7 +181,7 @@
   // ---------- shortcut bar (RES's subreddit manager) ----------
   // Shortcuts are kept as "sub" or { sub, name } (name = what the bar shows).
   const scList = () => (cfg.shortcuts || []).map((x) => (typeof x === 'string' ? { sub: x } : x)).filter((x) => x?.sub);
-  const scSave = (list) => { saveCfg({ shortcuts: list.map(({ sub, name }) => (name && name.toLowerCase() !== sub.toLowerCase() ? { sub, name } : sub)) }); shortcutBar(); scButton(true); };
+  const scSave = (list) => { saveCfg({ shortcuts: list.map(({ sub, name }) => (name && name.toLowerCase() !== sub.toLowerCase() ? { sub, name } : sub)) }); shortcutBar(); scButton(true); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
   const scIndex = (sub) => scList().findIndex((x) => x.sub.toLowerCase() === String(sub).toLowerCase());
   const scToggle = (sub) => {
     const l = scList(), i = scIndex(sub);
@@ -318,6 +322,101 @@
     b.textContent = on ? '− Shortcut' : '+ Shortcut';
     b.setAttribute('aria-pressed', String(on));
     b.title = on ? `Remove r/${sub} from your shortcut bar` : `Add r/${sub} to your shortcut bar`;
+  };
+
+  // ---------- subreddit styles (RES's "use subreddit style") ----------
+  // Reddit keeps each community's colors in one stylesheet; switching it off is instant and needs no reload.
+  const curSub = () => (document.querySelector('shreddit-subreddit-header[name]')?.getAttribute('name') || subOf() || '').toLowerCase();
+  const subStyleOn = (sub = curSub()) => { const o = (cfg.subStyleOverrides || {})[sub]; return o === undefined ? !!cfg.subStyles : !!o; };
+  const applySubStyle = () => {
+    const on = !cfg.enabled || subStyleOn();
+    const st = document.getElementById('community-styles-style-element');
+    if (st && st.disabled === on) st.disabled = !on;
+    html.classList.toggle('rs-sub-plain', !on);
+  };
+  const setSubStyle = (sub, on) => {
+    const o = { ...(cfg.subStyleOverrides || {}) };
+    if (on === !!cfg.subStyles) delete o[sub]; else o[sub] = on;
+    saveCfg({ subStyleOverrides: o }); applySubStyle();
+  };
+
+  // ---------- sidebar: our own card at the top of the right side ----------
+  const linkify = (text) => {
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    for (const m of text.matchAll(/https?:\/\/[^\s<>"')\]]+/g)) {
+      if (m.index > last) frag.append(text.slice(last, m.index));
+      const url = m[0].replace(/[.,;:!?*]+$/, '');
+      frag.append(el('a', { href: url, target: '_blank', rel: 'noopener noreferrer', text: url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') }));
+      last = m.index + url.length;
+    }
+    if (last < text.length) frag.append(text.slice(last));
+    return frag;
+  };
+  const joinButton = () => document.querySelector('shreddit-subreddit-header-buttons')?.shadowRoot?.querySelector('shreddit-join-button');
+  const paintCard = (card) => {
+    const sub = card.dataset.sub;
+    const jb = joinButton(), join = card.querySelector('.rs-ab-join');
+    if (jb) { const on = jb.hasAttribute('subscribed'); join.hidden = false; join.textContent = on ? 'Leave' : 'Join'; join.setAttribute('aria-pressed', String(on)); } else join.hidden = true;
+    const sc = card.querySelector('.rs-ab-sc'), inList = scIndex(sub) >= 0;
+    sc.textContent = inList ? '− Shortcut' : '+ Shortcut'; sc.setAttribute('aria-pressed', String(inList));
+    card.querySelector('.rs-ab-style input').checked = subStyleOn(sub.toLowerCase());
+  };
+  const sideCard = () => {
+    const hdr = document.querySelector('#right-sidebar-container shreddit-subreddit-header[name]');
+    let card = document.getElementById('rs-about');
+    if (!hdr) { card?.remove(); return; }
+    const sub = hdr.getAttribute('name');
+    if (card?.isConnected && card.dataset.sub === sub) return;
+    card?.remove();
+    const g = (k) => hdr.getAttribute(k) || '';
+    // The community icon: the picture Reddit marks as this community's icon (header, or the post's own header on
+    // post pages), else its style-folder icon, else your joined list.
+    const sid = g('subreddit-id');
+    const iconSrc = document.querySelector('.masthead img.shreddit-subreddit-icon__icon')?.getAttribute('src')
+      || (sid && document.querySelector(`shreddit-post[subreddit-id="${sid}"] img.shreddit-subreddit-icon__icon`)?.getAttribute('src'))
+      || (sid && document.querySelector(`img[src*="/${sid}/styles/communityIcon"]`)?.getAttribute('src'))
+      || joined().find((j) => j.name.toLowerCase() === sub.toLowerCase())?.icon || '';
+    const created = (hdr.querySelector('[slot="community-details"]')?.textContent.match(/Created\s+([A-Z][a-z]+ \d{1,2}, \d{4})/) || [])[1];
+    const visitors = +g('weekly-active-users') || 0, posts = +g('weekly-contributions') || 0;
+    card = el('section', { id: 'rs-about', 'data-sub': sub, 'aria-label': `About r/${sub}` });
+    const desc = el('p', { class: 'rs-ab-desc' }, [linkify(g('description'))]);
+    const more = el('button', { type: 'button', class: 'rs-ab-more', text: 'Show more', hidden: true });
+    more.onclick = () => { const open = desc.classList.toggle('rs-open'); more.textContent = open ? 'Show less' : 'Show more'; };
+    const join = el('button', { type: 'button', class: 'rs-ab-join rs-btn' });
+    join.onclick = () => {
+      const jb = joinButton();
+      if (!jb) return;
+      (jb.shadowRoot?.querySelector('button') || jb).click();
+      setTimeout(() => paintCard(card), 800); setTimeout(() => paintCard(card), 2500);
+    };
+    const sc = el('button', { type: 'button', class: 'rs-ab-sc rs-btn' });
+    sc.onclick = () => { scToggle(sub); paintCard(card); };
+    const style = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
+    style.onchange = () => setSubStyle(sub.toLowerCase(), style.checked);
+    card.append(
+      el('div', { class: 'rs-ab-head' }, [
+        iconSrc ? el('img', { src: iconSrc, alt: '' }) : el('span', { class: 'rs-ms-noicon', text: 'r/' }),
+        (() => {
+          const title = g('display-name').trim();
+          const same = !title || title.replace(/^r\//i, '').toLowerCase() === sub.toLowerCase();
+          return el('div', {}, [el('b', { text: same ? `r/${sub}` : title }), same ? null : el('a', { href: `/r/${sub}/`, text: `r/${sub}` })]);
+        })(),
+      ]),
+      g('description') ? desc : null, more,
+      el('div', { class: 'rs-ab-stats' }, [
+        visitors ? el('span', {}, [el('b', { text: num(visitors) }), ' weekly visitors']) : null,
+        posts ? el('span', {}, [el('b', { text: num(posts) }), ' weekly posts and comments']) : null,
+      ]),
+      created ? el('div', { class: 'rs-ab-created', text: `Created ${created}` }) : null,
+      el('div', { class: 'rs-ab-acts' }, [join, sc]),
+      el('label', { class: 'rs-ab-style' }, [el('span', { text: 'Use subreddit style' }), style]),
+    );
+    const top = document.getElementById('right-sidebar-contents') || hdr.closest('#right-sidebar-container');
+    top.prepend(card);
+    hdr.classList.add('rs-hide-about');
+    paintCard(card);
+    requestAnimationFrame(() => { more.hidden = desc.scrollHeight <= desc.clientHeight + 2; });
   };
 
   // ---------- "My subreddits" menu: your communities, most visited first ----------
@@ -805,7 +904,7 @@
   };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
-    densify(); sortTabs(); applyFilters(); scButton(); comments(); tagRecent(); addGear();
+    densify(); sortTabs(); applyFilters(); scButton(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear();
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };
   loadCfg().then(() => {

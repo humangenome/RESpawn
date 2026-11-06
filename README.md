@@ -4,7 +4,7 @@
 
 RESpawn keeps the new Reddit look and brings back the way old Reddit and Reddit Enhancement Suite (RES)
 worked: more posts on a screen, sort tabs in the open, RES's filter bar, one-click comments, save and
-hide, a subreddit shortcut bar, keyboard shortcuts, images that open in place, saved comments, remembered collapsed
+hide, a subreddit shortcut bar, a switch for subreddit styles, keyboard shortcuts, images that open in place, saved comments, remembered collapsed
 comments and new-comment counts.
 
 RES made Reddit better for over a decade, but it only works on old.reddit.com. RESpawn is a new
