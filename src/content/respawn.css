@@ -114,9 +114,9 @@ html:not(.rs-on) #rs-sc-btn { display: none !important; }
 html.rs-on.rs-feed shreddit-sort-dropdown[header-text="Sort by"] { display: none !important; }
 
 /* Feed: use the screen, drop clutter */
-html.rs-on.rs-feed #subgrid-container { max-width: none !important; width: auto !important; margin-inline: 24px !important; }
-html.rs-on.rs-feed .main-container { max-width: none !important; grid-template-columns: minmax(0, 1fr) 316px !important; }
-html.rs-on.rs-feed main#main-content { max-width: none !important; width: auto !important; }
+html.rs-on #subgrid-container { max-width: none !important; width: auto !important; margin-inline: 24px !important; }
+html.rs-on .main-container { max-width: none !important; grid-template-columns: minmax(0, 1fr) 316px !important; }
+html.rs-on main#main-content { max-width: none !important; width: auto !important; }
 html.rs-on .rs-hide-icon, html.rs-on .rs-hide-games,
 html.rs-on in-feed-community-recommendations, html.rs-on #mod-recruitment-banner { display: none !important; }
 html.rs-on .masthead { margin-top: 8px !important; }
@@ -322,3 +322,24 @@ html:not(.rs-on) #rs-about { display: none !important; }
 #rs-about .rs-switch-input { box-sizing: border-box !important; width: 40px !important; min-width: 40px !important; height: 24px !important; padding: 0 !important; border: 0 !important; }
 /* Reddit lifts the header row 36px to overlap the banner (and pulls what follows up with it); without the banner, push the row down by the same amount */
 html.rs-on.rs-sub-plain .masthead section.relative[class*="-top-"] { margin-top: 36px !important; }
+
+/* Post pages: the post's "..." sits next to its subreddit and time instead of far right */
+html.rs-on.rs-comments shreddit-post[view-context="CommentsPage"] > [slot="credit-bar"],
+html.rs-on.rs-comments shreddit-ad-post [slot="credit-bar"] { justify-content: flex-start !important; gap: 12px; }
+
+/* Post info box */
+html:not(.rs-on) #rs-postinfo { display: none !important; }
+#rs-postinfo { margin: 12px 0 0; padding: 12px 16px; border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); color: var(--rs-text); font: 400 13px/1.45 var(--rs-font); }
+#rs-postinfo, #rs-postinfo * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
+.rs-pi-when { color: var(--rs-weak); }
+.rs-pi-score { margin-top: 2px; font-size: 14px; }
+.rs-pi-score b { font-size: 20px; line-height: 1.2; }
+.rs-pi-score span { color: var(--rs-weak); }
+.rs-pi-short { display: flex; gap: 8px; margin-top: 8px; }
+.rs-pi-link { flex: 1; min-width: 0; height: 32px; margin: 0; padding: 0 10px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-hover); color: var(--rs-text); font: 400 13px/1 ui-monospace, Consolas, monospace; }
+#rs-postinfo + #rs-about { margin-top: 8px; }
+
+/* Old Reddit: the top bar scrolls away with the page (setting: keep it on screen) */
+html.rs-on:not(.rs-pin-header) reddit-header-large { position: absolute !important; }
+html.rs-on:not(.rs-pin-header) #rs-shortcuts { position: relative; top: 0; }
+html.rs-on.rs-left-slide:not(.rs-pin-header) #left-sidebar-container { top: 0 !important; z-index: 1000 !important; }

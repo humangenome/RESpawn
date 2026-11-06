@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -60,6 +60,7 @@
     html.classList.toggle('rs-left-slide', cfg.leftNav === 'slide');
     html.classList.toggle('rs-left-hide', cfg.leftNav === 'hide');
     html.classList.toggle('rs-fl-hidden', !cfg.filterline);
+    html.classList.toggle('rs-pin-header', !!cfg.pinHeader);
     document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
     applySubStyle();
     const sw = document.getElementById('rs-switch');
@@ -88,6 +89,7 @@
   const SETTINGS = [
     ['Layout', [
       ['leftNav', 'Left sidebar', [['show', 'Show'], ['slide', 'Slide out'], ['hide', 'Hide']]],
+      ['pinHeader', 'Keep top bar on screen when scrolling'],
       ['hideRecent', 'Hide "Recent posts"'],
       ['hideSuggested', 'Hide suggestions and games'],
       ['hideAds', 'Hide ads'],
@@ -231,11 +233,10 @@
   const shortcutBar = () => {
     let bar = document.getElementById('rs-shortcuts');
     if (!cfg.showShortcuts) { bar?.remove(); return; }
-    if (!bar) {
-      bar = el('nav', { id: 'rs-shortcuts', 'aria-label': 'Shortcut bar' });
-      const header = document.querySelector('reddit-header-large, header');
-      (header?.parentElement || document.body).insertBefore(bar, header ? header.nextSibling : document.body.firstChild);
-    }
+    if (!bar) bar = el('nav', { id: 'rs-shortcuts', 'aria-label': 'Shortcut bar' });
+    const header = document.querySelector('reddit-header-large');
+    if (header && bar.previousElementSibling !== header) header.after(bar);
+    else if (!header && !bar.isConnected) document.body.prepend(bar);
     const mine = el('button', { type: 'button', class: 'rs-mine', 'aria-haspopup': 'true', 'aria-expanded': 'false' }, [document.createTextNode('My subreddits'), el('span', { html: ARROW.d })]);
     mine.onclick = (e) => { e.stopPropagation(); toggleMySubs(mine); };
     bar.replaceChildren(mine);
@@ -413,7 +414,8 @@
       el('label', { class: 'rs-ab-style' }, [el('span', { text: 'Use subreddit style' }), style]),
     );
     const top = document.getElementById('right-sidebar-contents') || hdr.closest('#right-sidebar-container');
-    top.prepend(card);
+    const info = document.getElementById('rs-postinfo');
+    if (info?.isConnected) info.after(card); else top.prepend(card);
     hdr.classList.add('rs-hide-about');
     paintCard(card);
     requestAnimationFrame(() => { more.hidden = desc.scrollHeight <= desc.clientHeight + 2; });
@@ -796,7 +798,8 @@
   const densify = () => {
     if (isCommentsPage()) return;
     let rank = document.querySelectorAll('.rs-row').length; // restarts when Reddit swaps the whole feed
-    for (const post of document.querySelectorAll('shreddit-post:not([data-rs])')) {
+    for (const post of document.querySelectorAll('shreddit-post')) {
+      if (post.rsRow?.isConnected) continue; // already has its row (a post Reddit brings back after Back gets a new one)
       post.setAttribute('data-rs', '1');
       const g = (k) => post.getAttribute(k) || '';
       const link = g('content-href'), perma = g('permalink');
@@ -830,6 +833,7 @@
       ]);
       const main = el('div', { class: 'rs-main' }, [titleLine, meta, acts]);
       row.append(el('div', { class: 'rs-rank', text: String(++rank) }), voteBox(post), thumb, main);
+      post.rsRow = row;
       (post.closest('article') || post).before(row);
     }
   };
@@ -851,6 +855,45 @@
     }
   };
 
+  // ---------- post info box (old Reddit's "this post was submitted on ...") ----------
+  const postInfo = () => {
+    const post = document.querySelector('shreddit-post[view-context="CommentsPage"]');
+    let box = document.getElementById('rs-postinfo');
+    const rail = document.getElementById('right-sidebar-contents') || document.getElementById('right-sidebar-container');
+    if (!post || !rail) { box?.remove(); return; }
+    if (box?.isConnected && box.dataset.id === post.id) return;
+    box?.remove();
+    const g = (k) => post.getAttribute(k) || '';
+    const when = new Date(g('created-timestamp'));
+    const score = +g('score') || 0, ratio = parseFloat(g('upvote-ratio'));
+    const short = `https://redd.it/${post.id.replace(/^t3_/, '')}`;
+    const link = el('input', { type: 'text', class: 'rs-pi-link', readonly: true, 'aria-label': 'Short link', value: short });
+    link.onfocus = () => link.select();
+    const copy = el('button', { type: 'button', class: 'rs-btn', text: 'Copy' });
+    copy.onclick = async () => { try { await navigator.clipboard.writeText(short); toast('Short link copied.'); } catch { link.select(); toast('Press Ctrl+C to copy the link.'); } };
+    box = el('section', { id: 'rs-postinfo', 'data-id': post.id, 'aria-label': 'About this post' }, [
+      el('div', { class: 'rs-pi-when', text: `Submitted ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} at ${when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` }),
+      el('div', { class: 'rs-pi-score' }, [el('b', { text: score.toLocaleString() }), ` point${score === 1 ? '' : 's'}`, Number.isFinite(ratio) ? el('span', { text: ` (${Math.round((ratio <= 1 ? ratio * 100 : ratio))}% upvoted)` }) : null]),
+      el('div', { class: 'rs-pi-short' }, [link, copy]),
+    ]);
+    rail.prepend(box);
+  };
+
+  // ---------- remembered collapsed comments (RES) ----------
+  // Reddit folds a comment by closing the <details> inside it. Remember which ones you folded and fold them again next time.
+  const collapsedMap = () => readJSON('rs-collapsed');
+  document.addEventListener('toggle', (e) => {
+    const d = e.target;
+    if (d?.tagName !== 'DETAILS' || d.parentElement?.tagName !== 'SHREDDIT-COMMENT' || !cfg.enabled) return;
+    const id = d.parentElement.getAttribute('thingid');
+    if (!id) return;
+    const m = collapsedMap();
+    if (d.open) delete m[id]; else m[id] = Date.now();
+    const ids = Object.keys(m);
+    if (ids.length > 5000) for (const old of ids.sort((a, b) => m[a] - m[b]).slice(0, ids.length - 4000)) delete m[old];
+    try { localStorage.setItem('rs-collapsed', JSON.stringify(m)); } catch { /* storage full */ }
+  }, true);
+
   // ---------- comment pages ----------
   const marks = { new: [], op: [], mod: [] };
   const comments = () => {
@@ -866,10 +909,12 @@
       localStorage.setItem(key, String(Date.now()));
       addNavigator();
     }
+    const folded = collapsedMap();
     for (const c of document.querySelectorAll('shreddit-comment:not([data-rs])')) {
       const meta = c.querySelector('[slot="commentMeta"]');
       if (!meta) continue;
       c.setAttribute('data-rs', '1');
+      if (folded[c.getAttribute('thingid')]) { const d = c.querySelector(':scope > details'); if (d?.open) d.open = false; }
       if (c.getAttribute('author') === op) { c.setAttribute('rs-op', ''); marks.op.push(c); }
       if (comments.last && Date.parse(c.getAttribute('created')) > comments.last) { c.setAttribute('rs-new', ''); meta.append(el('span', { class: 'rs-badge rs-is-new', text: 'new' })); marks.new.push(c); }
       if (c.getAttribute('is-mod-distinguished') === 'true') marks.mod.push(c);
@@ -897,14 +942,19 @@
 
   // ---------- run ----------
   let lastUrl = '';
-  const onRoute = () => {
-    html.classList.toggle('rs-feed', !isCommentsPage());
-    countVisit(); shortcutBar(); sortTabs(); tidy(); addGear(); closeMySubs();
-    if (!isCommentsPage()) { nav?.remove(); nav = null; comments.started = null; marks.new = []; marks.op = []; marks.mod = []; }
-  };
+  // Reddit often changes pages without reloading, and swaps the page parts in a moment later; so everything below
+  // checks the page as it is on every pass instead of trusting the moment the address changed.
+  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
-    densify(); sortTabs(); applyFilters(); scButton(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear();
+    const onComments = isCommentsPage();
+    html.classList.toggle('rs-feed', !onComments);
+    html.classList.toggle('rs-comments', onComments);
+    if (!onComments && nav) { nav.remove(); nav = null; comments.started = null; marks.new = []; marks.op = []; marks.mod = []; }
+    const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
+    if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
+    densify(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear();
+    if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };
   loadCfg().then(() => {
