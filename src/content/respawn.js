@@ -36,6 +36,8 @@
     image: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M5 14l3.5-4 2.5 3 2-2 2 3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linejoin="round"/></svg>',
     gallery: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M3 6v9a2 2 0 0 0 2 2h9" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>',
     close: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+    up: '<svg viewBox="0 0 20 20" aria-hidden="true"><path class="rs-fill" d="M10 3.2 3.6 10.1h3.9V16.8h5V10.1h3.9z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+    down: '<svg viewBox="0 0 20 20" aria-hidden="true"><path class="rs-fill" d="M10 16.8 3.6 9.9h3.9V3.2h5v6.7h3.9z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   };
 
   // ---------- settings ----------
@@ -159,9 +161,51 @@
 
   // ---------- dense rows ----------
   let rank = 0;
-  const pressVote = (post, dir) => {
-    const btn = [...(post.shadowRoot?.querySelectorAll('button') || [])].find((x) => x.hasAttribute(dir) || (x.getAttribute('aria-label') || '').toLowerCase().includes(dir));
-    btn?.click();
+  // Votes go straight to Reddit with the same request its own button sends. (Reddit's own buttons
+  // do nothing while the original post is hidden, so pressing them is not enough.)
+  const csrf = () => (document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/) || [])[1] || '';
+  const voteStateOf = (post) => {
+    const up = post.shadowRoot?.querySelector('button[upvote]'), down = post.shadowRoot?.querySelector('button[downvote]');
+    return up?.getAttribute('aria-pressed') === 'true' ? 'UP' : down?.getAttribute('aria-pressed') === 'true' ? 'DOWN' : 'NONE';
+  };
+  const sendVote = async (postId, voteState) => {
+    const r = await fetch('/svc/shreddit/graphql', {
+      method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ operation: 'UpdatePostVoteState', variables: { input: { postId, voteState } }, csrf_token: csrf() }),
+    });
+    if (!r.ok) throw new Error(`vote ${r.status}`);
+    const j = await r.json().catch(() => ({}));
+    if (j?.errors?.length) throw new Error('vote refused');
+  };
+  const toast = (msg) => {
+    const t = el('div', { class: 'rs-toast', role: 'status', text: msg });
+    document.body.append(t); setTimeout(() => t.remove(), 3500);
+  };
+  const voteBox = (post) => {
+    const base = +post.getAttribute('score') || 0;
+    let state = voteStateOf(post);
+    const start = state === 'UP' ? base - 1 : state === 'DOWN' ? base + 1 : base; // score without my vote
+    const up = el('button', { type: 'button', class: 'rs-up', title: 'Upvote', 'aria-label': 'Upvote', html: ICON.up });
+    const down = el('button', { type: 'button', class: 'rs-down', title: 'Downvote', 'aria-label': 'Downvote', html: ICON.down });
+    const score = el('div', { class: 'rs-score' });
+    const box = el('div', { class: 'rs-vote' }, [up, score, down]);
+    const paint = () => {
+      box.dataset.vote = state;
+      up.setAttribute('aria-pressed', String(state === 'UP'));
+      down.setAttribute('aria-pressed', String(state === 'DOWN'));
+      score.textContent = num(start + (state === 'UP' ? 1 : state === 'DOWN' ? -1 : 0));
+    };
+    const click = async (dir) => {
+      if (!document.cookie.includes('csrf_token')) { toast('Log in to Reddit to vote.'); return; }
+      const before = state;
+      state = state === dir ? 'NONE' : dir;
+      paint();
+      try { await sendVote(post.id, state); } catch { state = before; paint(); toast('Reddit did not take that vote. Try again.'); }
+    };
+    up.onclick = () => click('UP');
+    down.onclick = () => click('DOWN');
+    paint();
+    return box;
   };
   const densify = () => {
     if (isCommentsPage()) return;
@@ -176,10 +220,6 @@
       const row = el('div', { class: 'rs-row', 'data-rs-id': g('id') });
       const thumbKids = img ? [el('img', { src: img.currentSrc || img.src, alt: '', loading: 'lazy' })] : [el('span', { html: isSelf ? ICON.text : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 12l4-4M7 9l-1.5 1.5a2.5 2.5 0 0 0 3.5 3.5L10.5 12.5M13 11l1.5-1.5a2.5 2.5 0 0 0-3.5-3.5L9.5 7.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>' })];
       const thumb = el('a', { class: 'rs-thumb', href: isSelf ? perma : link, tabindex: '-1', 'aria-hidden': 'true' }, thumbKids);
-      const up = el('button', { type: 'button', title: 'Upvote', text: '▲' });
-      const down = el('button', { type: 'button', title: 'Downvote', text: '▼' });
-      up.onclick = () => pressVote(post, 'upvote');
-      down.onclick = () => pressVote(post, 'downvote');
       const titleLine = el('div', { class: 'rs-tline' }, [
         el('a', { class: 'rs-title', href: isSelf ? perma : link, text: g('post-title') }),
         flair ? el('span', { class: 'rs-flair', text: flair }) : null,
@@ -199,7 +239,7 @@
         isSelf ? null : el('a', { href: link, target: '_blank', rel: 'noopener', title: 'Open link and comments', text: '[l+c]' }),
       ]);
       const main = el('div', { class: 'rs-main' }, [titleLine, meta, acts]);
-      row.append(el('div', { class: 'rs-rank', text: String(++rank) }), el('div', { class: 'rs-vote' }, [up, el('div', { class: 'rs-score', text: num(+g('score') || 0) }), down]), thumb, main);
+      row.append(el('div', { class: 'rs-rank', text: String(++rank) }), voteBox(post), thumb, main);
       (post.closest('article') || post).before(row);
     }
   };
