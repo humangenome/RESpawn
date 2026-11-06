@@ -211,7 +211,10 @@
     const p = document.querySelector('#left-sidebar-container faceplate-partial[src*="left-nav"]');
     if (!p || p.dataset.rsLoaded) return null;
     p.dataset.rsLoaded = '1';
-    try { p.setAttribute('loading', 'programmatic'); return Promise.resolve(p.load()).catch(() => {}); } catch { return null; }
+    // Changing its "loading" setting to eager makes Reddit's loader fetch right away. (Calling its load() directly
+    // only works from inside Reddit's own page, not from an add-on.)
+    p.setAttribute('loading', 'eager');
+    return new Promise((res) => setTimeout(res, 600));
   };
   // Your joined communities: Reddit puts the whole list (with icons) in its left menu. Keep a copy for pages without it.
   const joined = () => {
