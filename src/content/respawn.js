@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -87,7 +87,6 @@
   const SETTINGS = [
     ['Layout', [
       ['leftNav', 'Left sidebar', [['show', 'Show'], ['slide', 'Slide out'], ['hide', 'Hide']]],
-      ['showShortcuts', 'Shortcut bar'],
       ['hideRecent', 'Hide "Recent posts"'],
       ['hideSuggested', 'Hide suggestions and games'],
       ['hideAds', 'Hide ads'],
@@ -96,6 +95,11 @@
     ['Filter bar', [
       ['filterline', 'Show filter bar'],
       ['filterScore', 'Score filter: more than', 'number'],
+    ]],
+    ['Shortcut bar', [
+      ['showShortcuts', 'Show shortcut bar'],
+      ['scMode', 'Bar shows', [['mine', 'My list'], ['visits', 'Most visited']]],
+      ['editShortcuts', 'Your shortcuts', 'button'],
     ]],
   ];
   let panel = null;
@@ -112,7 +116,11 @@
     for (const [title, items] of SETTINGS) {
       panel.append(el('div', { class: 'rs-panel-sec', text: title }));
       for (const [key, label, choices] of items) {
-        if (choices === 'number') {
+        if (choices === 'button') {
+          const b = el('button', { type: 'button', class: 'rs-btn', text: 'Edit' });
+          b.onclick = () => { closePanel(); openScEditor(); };
+          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: `${label} (${scList().length})` }), b]));
+        } else if (choices === 'number') {
           const n = el('input', { type: 'number', class: 'rs-num', step: '1', 'aria-label': label });
           n.value = String(cfg[key] ?? 0);
           n.onchange = () => { saveCfg({ [key]: Math.max(-99999, Math.min(99999, parseInt(n.value, 10) || 0)) }); n.value = String(cfg[key]); refilter(); };
@@ -121,18 +129,13 @@
           const seg = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-label': label });
           for (const [v, t] of choices) {
             const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(cfg[key] === v), text: t });
-            b.onclick = () => { saveCfg({ [key]: v }); applyEnabled(); seg.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b))); };
+            b.onclick = () => { saveCfg({ [key]: v }); applyEnabled(); if (key === 'scMode') shortcutBar(); seg.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b))); };
             seg.append(b);
           }
           panel.append(el('div', { class: 'rs-set' }, [el('span', { text: label }), seg]));
         } else panel.append(el('label', { class: 'rs-set' }, [el('span', { text: label }), toggle(key)]));
       }
     }
-    panel.append(el('div', { class: 'rs-panel-sec', text: 'Shortcuts' }));
-    const ta = el('textarea', { class: 'rs-shortcut-list', rows: '5', 'aria-label': 'Shortcut subreddits, one per line', spellcheck: 'false' });
-    ta.value = (cfg.shortcuts || []).join('\n');
-    ta.onchange = () => { saveCfg({ shortcuts: ta.value.split(/[\s,]+/).map((v) => v.replace(/^\/?r\//i, '').trim()).filter(Boolean) }); shortcutBar(); };
-    panel.append(ta);
     const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
     done.onclick = closePanel;
     panel.append(el('div', { class: 'rs-panel-foot' }, [el('a', { href: 'https://github.com/humangenome/RESpawn', target: '_blank', rel: 'noopener', text: 'About RESpawn' }), done]));
@@ -171,21 +174,256 @@
     }
   };
 
-  // ---------- shortcut bar ----------
+  // ---------- shortcut bar (RES's subreddit manager) ----------
+  // Shortcuts are kept as "sub" or { sub, name } (name = what the bar shows).
+  const scList = () => (cfg.shortcuts || []).map((x) => (typeof x === 'string' ? { sub: x } : x)).filter((x) => x?.sub);
+  const scSave = (list) => { saveCfg({ shortcuts: list.map(({ sub, name }) => (name && name.toLowerCase() !== sub.toLowerCase() ? { sub, name } : sub)) }); shortcutBar(); scButton(true); };
+  const scIndex = (sub) => scList().findIndex((x) => x.sub.toLowerCase() === String(sub).toLowerCase());
+  const scToggle = (sub) => {
+    const l = scList(), i = scIndex(sub);
+    if (i >= 0) l.splice(i, 1); else l.push({ sub });
+    scSave(l);
+    toast(i >= 0 ? `Removed r/${sub} from your shortcuts.` : `Added r/${sub} to your shortcuts.`);
+  };
+  const cleanSub = (v) => String(v || '').trim().replace(/^(https?:\/\/[^/]+)?\/?r\//i, '').replace(/\/.*$/, '');
+  const validSub = (v) => /^[A-Za-z0-9_]{2,21}$/.test(v);
+  // Subreddit visits, counted in this browser, for "Most visited".
+  const readJSON = (k) => { try { return JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch { return {}; } };
+  const subVisits = () => readJSON('rs-subvisits');
+  const countVisit = () => {
+    const s = subOf();
+    if (!s || s.includes('+') || /^(popular|all|mod|friends)$/i.test(s)) return;
+    const v = subVisits(), k = s.toLowerCase();
+    if (countVisit.last === k) return; // a sort change inside the same subreddit is not a new visit
+    countVisit.last = k;
+    v[k] = { name: v[k]?.name || s, n: (v[k]?.n || 0) + 1, t: Date.now() };
+    try { localStorage.setItem('rs-subvisits', JSON.stringify(v)); } catch { /* storage full */ }
+  };
+  // Your joined communities: Reddit puts the whole list (with icons) in its left menu. Keep a copy for pages without it.
+  const joined = () => {
+    const c = document.querySelector('left-nav-communities-controller[initialstatejson]');
+    if (c) {
+      try {
+        const list = JSON.parse(c.getAttribute('initialstatejson')).map((x) => ({ name: String(x.prefixedName || '').replace(/^r\//, ''), icon: x.styles?.icon64 || x.styles?.legacyIcon?.url || '' }))
+          .filter((x) => x.name && !/^u\//.test(x.name) && validSub(x.name));
+        localStorage.setItem('rs-joined', JSON.stringify(list));
+        return list;
+      } catch { /* fall back to the copy */ }
+    }
+    try { return JSON.parse(localStorage.getItem('rs-joined') || '[]'); } catch { return []; }
+  };
+  const mostVisited = (limit = 40) => Object.values(subVisits()).sort((a, b) => b.n - a.n || b.t - a.t).slice(0, limit).map((v) => ({ sub: v.name }));
+  const loggedIn = () => document.querySelector('shreddit-app')?.getAttribute('user-logged-in') === 'true';
+
+  const ARROW = { l: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>', r: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>', d: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 8l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' };
   const shortcutBar = () => {
     let bar = document.getElementById('rs-shortcuts');
-    if (!cfg.shortcuts?.length || !cfg.showShortcuts) { bar?.remove(); return; }
+    if (!cfg.showShortcuts) { bar?.remove(); return; }
     if (!bar) {
-      bar = el('nav', { id: 'rs-shortcuts', 'aria-label': 'My subreddits' });
+      bar = el('nav', { id: 'rs-shortcuts', 'aria-label': 'Shortcut bar' });
       const header = document.querySelector('reddit-header-large, header');
       (header?.parentElement || document.body).insertBefore(bar, header ? header.nextSibling : document.body.firstChild);
     }
-    bar.replaceChildren(el('a', { class: 'rs-mine', href: '/subreddits/mine/', text: 'My subreddits' }));
+    const mine = el('button', { type: 'button', class: 'rs-mine', 'aria-haspopup': 'true', 'aria-expanded': 'false' }, [document.createTextNode('My subreddits'), el('span', { html: ARROW.d })]);
+    mine.onclick = (e) => { e.stopPropagation(); toggleMySubs(mine); };
+    bar.replaceChildren(mine);
+    bar.classList.remove('rs-dragging'); // a finished drag rebuilds the bar
     const path = location.pathname;
-    for (const [label, href, on] of [['HOME', '/', path === '/' || /^\/(best|hot|new|top|rising)\/?$/.test(path)], ['POPULAR', '/r/popular/', /^\/r\/popular/i.test(path)], ['ALL', '/r/all/', /^\/r\/all/i.test(path)]]) bar.append(el('a', { href, class: on ? 'rs-cur' : null, text: label }));
-    bar.append(el('span', { class: 'rs-sep', 'aria-hidden': 'true', text: '|' }));
-    const sub = (subOf() || '').toLowerCase();
-    for (const s of cfg.shortcuts) bar.append(el('a', { href: `/r/${s}/`, class: sub === s.toLowerCase() ? 'rs-cur' : null, text: s.toUpperCase() }));
+    const fixed = [['HOME', '/', path === '/' || /^\/(best|hot|new|top|rising)\/?$/.test(path)], ['POPULAR', '/r/popular/', /^\/r\/popular/i.test(path)], ['ALL', '/r/all/', /^\/r\/all/i.test(path)]];
+    if (loggedIn()) fixed.push(['SAVED', '/user/me/saved/', /^\/user\/[^/]+\/saved/i.test(path)]);
+    for (const [label, href, on] of fixed) bar.append(el('a', { href, class: on ? 'rs-fixed rs-cur' : 'rs-fixed', text: label }));
+    bar.append(el('span', { class: 'rs-sep', 'aria-hidden': 'true' }));
+    const auto = cfg.scMode === 'visits';
+    const items = auto ? mostVisited() : scList();
+    const list = el('div', { class: 'rs-sc-list' });
+    const cur = (subOf() || '').toLowerCase();
+    items.forEach(({ sub, name }, i) => {
+      const a = el('a', { href: `/r/${sub}/`, class: cur === sub.toLowerCase() ? 'rs-cur' : null, title: `r/${sub}`, text: (name || sub).toUpperCase(), 'data-i': String(i), draggable: auto ? null : 'true' });
+      list.append(a);
+    });
+    if (!items.length) list.append(el('span', { class: 'rs-sc-hint', text: auto ? 'Visit a few subreddits and your most visited show up here.' : 'Add shortcuts with "+ Shortcut" on any subreddit, or from My subreddits.' }));
+    const left = el('button', { type: 'button', class: 'rs-sc-arrow', 'aria-label': 'Scroll shortcuts left', html: ARROW.l });
+    const right = el('button', { type: 'button', class: 'rs-sc-arrow', 'aria-label': 'Scroll shortcuts right', html: ARROW.r });
+    left.onclick = () => list.scrollBy({ left: -list.clientWidth * 0.7, behavior: 'smooth' });
+    right.onclick = () => list.scrollBy({ left: list.clientWidth * 0.7, behavior: 'smooth' });
+    const edit = el('button', { type: 'button', class: 'rs-sc-edit', text: 'EDIT' });
+    edit.onclick = (e) => { e.stopPropagation(); openScEditor(); };
+    const trash = el('div', { class: 'rs-sc-trash', text: 'Drop here to remove' });
+    bar.append(left, list, right, trash, edit);
+    const arrows = () => { const over = list.scrollWidth > list.clientWidth + 2; left.hidden = !over || list.scrollLeft < 2; right.hidden = !over || list.scrollLeft + list.clientWidth >= list.scrollWidth - 2; };
+    list.addEventListener('scroll', arrows, { passive: true });
+    list.addEventListener('wheel', (e) => { if (list.scrollWidth > list.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { list.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+    requestAnimationFrame(() => { list.querySelector('.rs-cur')?.scrollIntoView({ inline: 'nearest', block: 'nearest' }); arrows(); });
+    if (!auto) dragShortcuts(bar, list, trash);
+  };
+  // Drag a shortcut left or right to move it; drop it on the bin to remove it.
+  const dragShortcuts = (bar, list, trash) => {
+    let from = -1;
+    const clear = () => list.querySelectorAll('.rs-drop-before, .rs-drop-after').forEach((a) => a.classList.remove('rs-drop-before', 'rs-drop-after'));
+    list.addEventListener('dragstart', (e) => {
+      const a = e.target.closest?.('a[data-i]');
+      if (!a) return;
+      from = +a.dataset.i;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', a.title);
+      bar.classList.add('rs-dragging');
+    });
+    list.addEventListener('dragover', (e) => {
+      const a = e.target.closest?.('a[data-i]');
+      if (from < 0 || !a) return;
+      e.preventDefault();
+      clear();
+      const r = a.getBoundingClientRect();
+      a.classList.add(e.clientX < r.left + r.width / 2 ? 'rs-drop-before' : 'rs-drop-after');
+    });
+    list.addEventListener('drop', (e) => {
+      const a = e.target.closest?.('a[data-i]');
+      if (from < 0 || !a) return;
+      e.preventDefault();
+      let to = +a.dataset.i + (a.classList.contains('rs-drop-after') ? 1 : 0);
+      const l = scList(); const [moved] = l.splice(from, 1);
+      if (to > from) to--;
+      l.splice(to, 0, moved);
+      from = -1; scSave(l);
+    });
+    trash.addEventListener('dragover', (e) => { if (from >= 0) { e.preventDefault(); trash.classList.add('rs-over'); } });
+    trash.addEventListener('dragleave', () => trash.classList.remove('rs-over'));
+    trash.addEventListener('drop', (e) => { if (from < 0) return; e.preventDefault(); const l = scList(); const [gone] = l.splice(from, 1); from = -1; scSave(l); toast(`Removed r/${gone.sub} from your shortcuts.`); });
+    list.addEventListener('dragend', () => { from = -1; clear(); bar.classList.remove('rs-dragging'); trash.classList.remove('rs-over'); });
+  };
+
+  // "+ Shortcut" button next to Join on every subreddit page.
+  const scButton = (repaint) => {
+    const hb = document.querySelector('shreddit-subreddit-header-buttons[name]');
+    let b = document.getElementById('rs-sc-btn');
+    if (!hb) { b?.remove(); return; }
+    const sub = hb.getAttribute('name');
+    if (!b || !b.isConnected || b.dataset.sub !== sub) {
+      b?.remove();
+      b = el('button', { id: 'rs-sc-btn', type: 'button', 'data-sub': sub });
+      b.onclick = () => scToggle(sub);
+      hb.before(b);
+      repaint = true;
+    }
+    if (!repaint) return;
+    const on = scIndex(sub) >= 0;
+    b.textContent = on ? '− Shortcut' : '+ Shortcut';
+    b.setAttribute('aria-pressed', String(on));
+    b.title = on ? `Remove r/${sub} from your shortcut bar` : `Add r/${sub} to your shortcut bar`;
+  };
+
+  // ---------- "My subreddits" menu: your communities, most visited first ----------
+  let mySubs = null;
+  const closeMySubs = () => { mySubs?.remove(); mySubs = null; document.querySelector('#rs-shortcuts .rs-mine')?.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', mySubsOutside, true); document.removeEventListener('keydown', mySubsEsc, true); };
+  const mySubsOutside = (e) => { if (mySubs && !mySubs.contains(e.target) && !e.target.closest?.('.rs-mine')) closeMySubs(); };
+  const mySubsEsc = (e) => { if (e.key === 'Escape') closeMySubs(); };
+  const toggleMySubs = (btn) => {
+    if (mySubs) return closeMySubs();
+    const visits = subVisits();
+    const byName = new Map();
+    for (const j of joined()) byName.set(j.name.toLowerCase(), { name: j.name, icon: j.icon, n: 0, t: 0 });
+    for (const [k, v] of Object.entries(visits)) { const x = byName.get(k) || { name: v.name, icon: '', n: 0, t: 0 }; x.n = v.n; x.t = v.t; byName.set(k, x); }
+    const all = [...byName.values()];
+    mySubs = el('div', { id: 'rs-mysubs', role: 'dialog', 'aria-label': 'My subreddits' });
+    const search = el('input', { type: 'search', class: 'rs-ms-search', placeholder: 'Find a subreddit', 'aria-label': 'Find a subreddit', spellcheck: 'false' });
+    const seg = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-label': 'Sort' });
+    const rows = el('div', { class: 'rs-ms-rows' });
+    const draw = () => {
+      const q = search.value.trim().toLowerCase().replace(/^r\//, '');
+      const list = all.filter((x) => !q || x.name.toLowerCase().includes(q))
+        .sort(cfg.mySubsSort === 'az' ? (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) : (a, b) => b.n - a.n || b.t - a.t || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      rows.replaceChildren();
+      for (const x of list) {
+        const on = scIndex(x.name) >= 0;
+        const icon = x.icon ? el('img', { src: x.icon, alt: '', loading: 'lazy' }) : el('span', { class: 'rs-ms-noicon', text: 'r/' });
+        const add = el('button', { type: 'button', class: 'rs-ms-add', 'aria-pressed': String(on), title: on ? 'Remove from shortcut bar' : 'Add to shortcut bar', text: on ? '− Shortcut' : '+ Shortcut' });
+        add.onclick = (e) => { e.preventDefault(); e.stopPropagation(); scToggle(x.name); draw(); };
+        rows.append(el('a', { class: 'rs-ms-row', href: `/r/${x.name}/` }, [icon, el('span', { class: 'rs-ms-name', text: `r/${x.name}` }), el('span', { class: 'rs-ms-n', text: x.n ? `${x.n} visit${x.n === 1 ? '' : 's'}` : '' }), add]));
+      }
+      if (!list.length) rows.append(el('div', { class: 'rs-ms-empty', text: q ? 'No match.' : 'Your communities show up here once Reddit lists them.' }));
+    };
+    for (const [v, t] of [['visits', 'Most visited'], ['az', 'A–Z']]) {
+      const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(cfg.mySubsSort === v), text: t });
+      b.onclick = () => { saveCfg({ mySubsSort: v }); seg.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b))); draw(); };
+      seg.append(b);
+    }
+    search.oninput = draw;
+    search.onkeydown = (e) => { if (e.key === 'Enter') { const first = rows.querySelector('.rs-ms-row'); if (first) location.assign(first.href); } };
+    mySubs.append(el('div', { class: 'rs-ms-head' }, [search, seg]), rows);
+    draw();
+    const r = btn.getBoundingClientRect();
+    mySubs.style.left = `${Math.max(8, Math.round(r.left))}px`;
+    mySubs.style.top = `${Math.round(r.bottom + 6)}px`;
+    document.body.append(mySubs);
+    btn.setAttribute('aria-expanded', 'true');
+    search.focus();
+    setTimeout(() => { document.addEventListener('click', mySubsOutside, true); document.addEventListener('keydown', mySubsEsc, true); }, 0);
+  };
+
+  // ---------- shortcut editor ----------
+  let editor = null;
+  const closeScEditor = () => { editor?.remove(); editor = null; document.removeEventListener('keydown', editorEsc, true); };
+  const editorEsc = (e) => { if (e.key === 'Escape' && !e.target.closest?.('input')) closeScEditor(); };
+  const openScEditor = () => {
+    closeMySubs();
+    if (editor) return closeScEditor();
+    editor = el('div', { id: 'rs-sc-editor', class: 'rs-modal', role: 'dialog', 'aria-label': 'Edit shortcuts' });
+    const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close', html: ICON.close });
+    x.onclick = closeScEditor;
+    const rows = el('div', { class: 'rs-ed-rows' });
+    const addIn = el('input', { type: 'text', class: 'rs-ed-add', placeholder: 'Add a subreddit, e.g. movies', 'aria-label': 'Add a subreddit', spellcheck: 'false' });
+    const addBtn = el('button', { type: 'button', class: 'rs-btn', text: 'Add' });
+    const msg = el('div', { class: 'rs-ed-msg', role: 'status' });
+    const add = () => {
+      const v = cleanSub(addIn.value);
+      if (!validSub(v)) { msg.textContent = 'Type a subreddit name, like movies.'; return; }
+      if (scIndex(v) >= 0) { msg.textContent = `r/${v} is already on your bar.`; return; }
+      scSave([...scList(), { sub: v }]); addIn.value = ''; msg.textContent = ''; draw();
+    };
+    addBtn.onclick = add;
+    addIn.onkeydown = (e) => { if (e.key === 'Enter') add(); };
+    let from = -1;
+    const draw = () => {
+      rows.replaceChildren();
+      scList().forEach(({ sub, name }, i) => {
+        const nameIn = el('input', { type: 'text', class: 'rs-ed-name', placeholder: sub.toUpperCase(), 'aria-label': `Name shown for r/${sub}`, spellcheck: 'false' });
+        nameIn.value = name || '';
+        nameIn.onchange = () => { const l = scList(); l[i] = { sub, name: nameIn.value.trim() }; scSave(l); };
+        const del = el('button', { type: 'button', class: 'rs-ed-del', 'aria-label': `Remove r/${sub}`, html: ICON.close });
+        del.onclick = () => { const l = scList(); l.splice(i, 1); scSave(l); draw(); };
+        const row = el('div', { class: 'rs-ed-row', draggable: 'true', 'data-i': String(i) }, [el('span', { class: 'rs-ed-grip', 'aria-hidden': 'true', text: '⋮⋮' }), el('span', { class: 'rs-ed-sub', text: `r/${sub}` }), nameIn, del]);
+        row.addEventListener('dragstart', (e) => { if (e.target.closest('input')) { e.preventDefault(); return; } from = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', sub); row.classList.add('rs-moving'); });
+        row.addEventListener('dragover', (e) => { if (from < 0) return; e.preventDefault(); const r = row.getBoundingClientRect(); rows.querySelectorAll('.rs-ed-row').forEach((o) => o.classList.remove('rs-drop-before', 'rs-drop-after')); row.classList.add(e.clientY < r.top + r.height / 2 ? 'rs-drop-before' : 'rs-drop-after'); });
+        row.addEventListener('drop', (e) => {
+          if (from < 0) return;
+          e.preventDefault();
+          let to = i + (row.classList.contains('rs-drop-after') ? 1 : 0);
+          const l = scList(); const [m] = l.splice(from, 1); if (to > from) to--; l.splice(to, 0, m);
+          from = -1; scSave(l); draw();
+        });
+        row.addEventListener('dragend', () => { from = -1; draw(); });
+        rows.append(row);
+      });
+      if (!scList().length) rows.append(el('div', { class: 'rs-ms-empty', text: 'No shortcuts yet.' }));
+      count.textContent = `${scList().length} shortcut${scList().length === 1 ? '' : 's'}`;
+    };
+    const count = el('span', { class: 'rs-ed-count' });
+    const az = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', text: 'Sort A–Z' });
+    az.onclick = () => { scSave(scList().sort((a, b) => (a.name || a.sub).localeCompare(b.name || b.sub, undefined, { sensitivity: 'base' }))); draw(); };
+    const top = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', text: 'Add my most visited' });
+    top.onclick = () => { const l = scList(); for (const v of mostVisited(15)) if (!l.some((x) => x.sub.toLowerCase() === v.sub.toLowerCase())) l.push(v); scSave(l); draw(); };
+    const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
+    done.onclick = closeScEditor;
+    editor.append(
+      el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Shortcuts' }), x]),
+      el('p', { class: 'rs-ed-tip', text: 'Drag to reorder. The name box changes what the bar shows.' }),
+      el('div', { class: 'rs-ed-addrow' }, [addIn, addBtn]), msg, el('div', { class: 'rs-ed-scroll' }, [rows]),
+      el('div', { class: 'rs-panel-foot' }, [el('div', { class: 'rs-ed-tools' }, [count, az, top]), done]),
+    );
+    draw();
+    document.body.append(editor);
+    addIn.focus();
+    setTimeout(() => document.addEventListener('keydown', editorEsc, true), 0);
   };
 
   // ---------- sort tabs ----------
@@ -544,12 +782,12 @@
   let lastUrl = '';
   const onRoute = () => {
     html.classList.toggle('rs-feed', !isCommentsPage());
-    shortcutBar(); sortTabs(); tidy(); addGear();
+    countVisit(); shortcutBar(); sortTabs(); tidy(); addGear(); closeMySubs();
     if (!isCommentsPage()) { nav?.remove(); nav = null; comments.started = null; marks.new = []; marks.op = []; marks.mod = []; }
   };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
-    densify(); sortTabs(); applyFilters(); comments(); tagRecent(); addGear();
+    densify(); sortTabs(); applyFilters(); scButton(); comments(); tagRecent(); addGear();
   };
   loadCfg().then(() => {
     addSwitch(); applyEnabled(); leftSlide(); tick();
