@@ -243,10 +243,10 @@ html.rs-on.rs-left-hide .grid-container, html.rs-on.rs-left-slide .grid-containe
 html.rs-on.rs-left-slide #left-sidebar-container {
   position: fixed !important; left: 0; top: calc(var(--shreddit-header-height, 56px) + 34px); bottom: 0; z-index: 30; width: 272px !important;
   background: var(--rs-bg); border-right: 1px solid var(--rs-line); box-shadow: 8px 0 30px rgba(0,0,0,.12);
-  transform: translateX(-100%); transition: transform .18s ease; overflow-y: auto;
+  transform: translateX(-100%) !important; transition: transform .18s ease; overflow-y: auto;
 }
 html.rs-on.rs-left-slide.rs-no-shortcuts #left-sidebar-container { top: var(--shreddit-header-height, 56px); }
-html.rs-on.rs-left-slide.rs-left-open #left-sidebar-container { transform: none; }
+html.rs-on.rs-left-slide.rs-left-open #left-sidebar-container { transform: none !important; }
 #rs-left-edge { position: fixed; left: 0; top: 90px; bottom: 0; width: 10px; z-index: 29; display: none; }
 html.rs-on.rs-left-slide #rs-left-edge { display: block; }
 html.rs-on.rs-left-slide #rs-left-edge::after { content: ""; position: absolute; left: 0; top: 50%; width: 4px; height: 56px; margin-top: -28px; border-radius: 0 4px 4px 0; background: var(--rs-strong-bg); }
@@ -286,3 +286,7 @@ html.rs-on .rs-row.rs-filtered { display: none !important; }
 html.rs-on .rs-grow { flex: 1 1 auto !important; min-width: 0; }
 html.rs-on .rs-grow-row > :not(.rs-grow) { flex-grow: 0 !important; }
 #rs-sortbar.rs-after-tabs { margin-left: 16px; padding-left: 12px; border-left: 1px solid var(--rs-line); }
+/* A collapsed Reddit menu slides its panel left and fades its contents out; the slide-out shows them */
+html.rs-on.rs-left-slide #flex-left-nav-contents[hidden] { display: block !important; }
+html.rs-on.rs-left-slide #flex-left-nav-container { transform: none !important; }
+html.rs-on.rs-left-slide #flex-left-nav-contents { opacity: 1 !important; }

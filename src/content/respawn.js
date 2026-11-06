@@ -199,6 +199,14 @@
     v[k] = { name: v[k]?.name || s, n: (v[k]?.n || 0) + 1, t: Date.now() };
     try { localStorage.setItem('rs-subvisits', JSON.stringify(v)); } catch { /* storage full */ }
   };
+  // Reddit's left menu loads only once it is open on screen. When you keep it collapsed (or RESpawn slides it
+  // away) its contents never arrive, so ask Reddit's own loader for them. This does not change your setting.
+  const ensureNav = () => {
+    const p = document.querySelector('#left-sidebar-container faceplate-partial[src*="left-nav"]');
+    if (!p || p.dataset.rsLoaded) return null;
+    p.dataset.rsLoaded = '1';
+    try { p.setAttribute('loading', 'programmatic'); return Promise.resolve(p.load()).catch(() => {}); } catch { return null; }
+  };
   // Your joined communities: Reddit puts the whole list (with icons) in its left menu. Keep a copy for pages without it.
   const joined = () => {
     const c = document.querySelector('left-nav-communities-controller[initialstatejson]');
@@ -319,11 +327,15 @@
   const mySubsEsc = (e) => { if (e.key === 'Escape') closeMySubs(); };
   const toggleMySubs = (btn) => {
     if (mySubs) return closeMySubs();
-    const visits = subVisits();
-    const byName = new Map();
-    for (const j of joined()) byName.set(j.name.toLowerCase(), { name: j.name, icon: j.icon, n: 0, t: 0 });
-    for (const [k, v] of Object.entries(visits)) { const x = byName.get(k) || { name: v.name, icon: '', n: 0, t: 0 }; x.n = v.n; x.t = v.t; byName.set(k, x); }
-    const all = [...byName.values()];
+    let all = [];
+    const collect = () => {
+      const byName = new Map();
+      for (const j of joined()) byName.set(j.name.toLowerCase(), { name: j.name, icon: j.icon, n: 0, t: 0 });
+      for (const [k, v] of Object.entries(subVisits())) { const x = byName.get(k) || { name: v.name, icon: '', n: 0, t: 0 }; x.n = v.n; x.t = v.t; byName.set(k, x); }
+      all = [...byName.values()];
+    };
+    collect();
+    const pending = !document.querySelector('left-nav-communities-controller[initialstatejson]') && ensureNav();
     mySubs = el('div', { id: 'rs-mysubs', role: 'dialog', 'aria-label': 'My subreddits' });
     const search = el('input', { type: 'search', class: 'rs-ms-search', placeholder: 'Find a subreddit', 'aria-label': 'Find a subreddit', spellcheck: 'false' });
     const seg = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-label': 'Sort' });
@@ -351,6 +363,12 @@
     search.onkeydown = (e) => { if (e.key === 'Enter') { const first = rows.querySelector('.rs-ms-row'); if (first) location.assign(first.href); } };
     mySubs.append(el('div', { class: 'rs-ms-head' }, [search, seg]), rows);
     draw();
+    if (pending) {
+      const box = mySubs;
+      let tries = 0;
+      const wait = () => { if (box !== mySubs) return; if (document.querySelector('left-nav-communities-controller[initialstatejson]') || ++tries > 20) { collect(); draw(); } else setTimeout(wait, 150); };
+      pending.then(wait);
+    }
     const r = btn.getBoundingClientRect();
     mySubs.style.left = `${Math.max(8, Math.round(r.left))}px`;
     mySubs.style.top = `${Math.round(r.bottom + 6)}px`;
@@ -788,6 +806,7 @@
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     densify(); sortTabs(); applyFilters(); scButton(); comments(); tagRecent(); addGear();
+    if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };
   loadCfg().then(() => {
     addSwitch(); applyEnabled(); leftSlide(); tick();
