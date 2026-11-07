@@ -311,6 +311,7 @@ html.rs-on .rs-row.rs-filtered { display: none !important; }
 #rs-sortbar #rs-sorts { margin: 2px 0 6px; }
 html.rs-on .rs-grow { flex: 1 1 auto !important; min-width: 0; }
 html.rs-on .rs-grow-row > :not(.rs-grow) { flex-grow: 0 !important; }
+html.rs-on .rs-nospace { display: none !important; }
 #rs-sortbar.rs-after-tabs { margin-left: 16px; padding-left: 12px; border-left: 1px solid var(--rs-line); }
 /* A collapsed Reddit menu slides its panel left and fades its contents out; the slide-out shows them */
 html.rs-on.rs-left-slide #flex-left-nav-contents[hidden] { display: block !important; }

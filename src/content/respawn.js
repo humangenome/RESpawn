@@ -864,6 +864,8 @@
     let row = wrap.parentElement;
     for (let i = 0; row && i < 4 && row.getBoundingClientRect().width < feedW * 0.9; row = row.parentElement, i++) row.classList.add('rs-grow');
     if (row && row !== document.body) { row.classList.add('rs-grow-row'); row.after(filterLine()); } else wrap.after(filterLine());
+    // Some pages (custom feeds) keep an invisible placeholder at the start of that row: drop the empty space it leaves.
+    if (row && row !== document.body) for (const k of row.children) if (!k.contains(wrap) && getComputedStyle(k).visibility === 'hidden') k.classList.add('rs-nospace');
     // On home the bar sits after Reddit's "For You / Following" tabs: give it a divider.
     const feedL = (document.querySelector('shreddit-feed') || document.querySelector('main'))?.getBoundingClientRect().left || 0;
     wrap.classList.toggle('rs-after-tabs', wrap.getBoundingClientRect().left - feedL > 40);
