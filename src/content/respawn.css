@@ -15,16 +15,6 @@
 html:not(.rs-on) .rs-row, html:not(.rs-on) #rs-shortcuts, html:not(.rs-on) #rs-sorts, html:not(.rs-on) #rs-nav,
 html:not(.rs-on) .rs-cacts, html:not(.rs-on) .rs-badge, html:not(.rs-on) #rs-filterline, html:not(.rs-on) #rs-mysubs { display: none !important; }
 
-/* On/off switch: small and see-through, bottom-left */
-#rs-switch {
-  position: fixed; left: 12px; bottom: 12px; z-index: 2147483000; height: 30px; padding: 0 12px;
-  border: 1px solid var(--rs-line); border-radius: 999px; background: color-mix(in srgb, var(--rs-bg) 70%, transparent);
-  color: var(--rs-weak); font: 600 12px/1 var(--rs-font); opacity: .6; cursor: pointer; backdrop-filter: blur(6px);
-}
-#rs-switch:hover, #rs-switch:focus-visible { opacity: 1; color: var(--rs-text); }
-#rs-switch b { margin-left: 4px; color: var(--rs-up); }
-#rs-switch[aria-pressed="false"] b { color: var(--rs-weak); }
-
 /* Shortcut bar under Reddit's header (RES's subreddit manager) */
 #rs-shortcuts {
   position: sticky; top: var(--shreddit-header-height, 56px); z-index: 5; display: flex; align-items: center; gap: 2px;
@@ -214,6 +204,10 @@ html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 /* Gear in Reddit's top bar */
 #rs-gear { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-right: 4px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--rs-text); cursor: pointer; }
 #rs-gear:hover { background: var(--rs-hover); }
+#rs-gear { position: relative; }
+/* RESpawn off: the gear stays, struck through, so it can be turned back on from the same place */
+#rs-gear.rs-gear-off { color: var(--rs-weak); }
+#rs-gear.rs-gear-off::after { content: ""; position: absolute; left: 50%; top: 50%; width: 28px; height: 2px; margin: -1px 0 0 -14px; border-radius: 2px; background: currentColor; box-shadow: 0 0 0 2px var(--rs-bg); transform: rotate(-45deg); }
 #rs-gear svg { width: 22px; height: 22px; }
 #rs-gear.rs-gear-float { position: fixed; top: 8px; right: 120px; z-index: 2147483000; }
 

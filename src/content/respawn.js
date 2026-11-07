@@ -63,14 +63,15 @@
     html.classList.toggle('rs-pin-header', !!cfg.pinHeader);
     document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
     applySubStyle();
-    const sw = document.getElementById('rs-switch');
-    if (sw) { sw.setAttribute('aria-pressed', String(!!cfg.enabled)); sw.querySelector('b').textContent = cfg.enabled ? 'On' : 'Off'; }
+    paintGear();
   };
-  const addSwitch = () => {
-    if (document.getElementById('rs-switch')) return;
-    const sw = el('button', { id: 'rs-switch', type: 'button', title: 'Turn RESpawn on or off' }, [document.createTextNode('RESpawn '), el('b')]);
-    sw.onclick = () => { saveCfg({ enabled: !cfg.enabled }); applyEnabled(); };
-    document.body.append(sw);
+  // On/off lives at the top of the gear's settings panel (the gear stays in Reddit's top bar while RESpawn is off).
+  const paintGear = () => {
+    const g = document.getElementById('rs-gear');
+    if (!g) return;
+    g.classList.toggle('rs-gear-off', !cfg.enabled);
+    const t = cfg.enabled ? 'RESpawn settings' : 'RESpawn is off. Click to turn it back on.';
+    g.title = t; g.setAttribute('aria-label', t);
   };
 
   // ---------- gear + settings panel ----------
@@ -85,6 +86,7 @@
       let slot = user; while (slot.parentElement && slot.parentElement !== actions) slot = slot.parentElement;
       actions.insertBefore(gear, slot);
     } else { gear.classList.add('rs-gear-float'); document.body.append(gear); }
+    paintGear();
   };
   const SETTINGS = [
     ['Layout', [
@@ -121,7 +123,7 @@
     panel = el('div', { id: 'rs-panel', role: 'dialog', 'aria-label': 'RESpawn settings' });
     const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close', html: ICON.close });
     x.onclick = closePanel;
-    const master = el('label', { class: 'rs-set rs-master' }, [el('span', { text: 'RESpawn' }), toggle('enabled')]);
+    const master = el('label', { class: 'rs-set rs-master' }, [el('span', { text: 'RESpawn on' }), toggle('enabled')]);
     panel.append(el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Settings' }), x]), master);
     for (const [title, items] of SETTINGS) {
       panel.append(el('div', { class: 'rs-panel-sec', text: title }));
@@ -1310,7 +1312,7 @@
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };
   loadCfg().then(() => {
-    addSwitch(); applyEnabled(); leftSlide(); tick();
+    applyEnabled(); leftSlide(); tick();
     new MutationObserver(() => { clearTimeout(tick.t); tick.t = setTimeout(tick, 120); }).observe(document.body, { childList: true, subtree: true });
     setInterval(() => { if (location.href !== lastUrl) tick(); }, 800);
   });
