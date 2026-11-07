@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -110,6 +110,9 @@
       ['linkFriends', 'FRIENDS link'],
       ['linkMod', 'MOD and MODQUEUE links (moderators)'],
       ['editShortcuts', 'Your shortcuts', 'button'],
+    ]],
+    ['Hover cards', [
+      ['hoverCards', 'Show when you point at a name'],
     ]],
     ['Keyboard', [
       ['keys', 'Keyboard shortcuts'],
@@ -1456,11 +1459,118 @@
     if (row) select(row, false);
   };
 
+  // ---------- hover cards (RES's user and subreddit info) ----------
+  // Point at a user or subreddit name in a post row for a moment and a small card shows who or what it is. Reddit's own
+  // cards are gone from those rows (RESpawn draws them), so these stand in. One lookup per name, only after you pause on it.
+  const HC_DELAY = 450, HC_LINGER = 250;
+  const hcCache = new Map();
+  let hc = null, hcLink = null, hcT = 0;
+  const hcTarget = (a) => {
+    if (!a?.closest?.('.rs-row .rs-meta')) return null;
+    const h = a.getAttribute('href') || '';
+    let m = h.match(/^\/user\/([A-Za-z0-9_-]{3,20})\/?$/);
+    if (m) return { kind: 'user', name: m[1] };
+    m = h.match(/^\/r\/([A-Za-z0-9_]{2,21})\/?$/);
+    return m ? { kind: 'sub', name: m[1] } : null;
+  };
+  const hcData = ({ kind, name }) => {
+    const key = `${kind}:${name.toLowerCase()}`;
+    if (!hcCache.has(key)) {
+      hcCache.set(key, fetch(kind === 'user' ? `/user/${encodeURIComponent(name)}/about.json` : `/r/${encodeURIComponent(name)}/about.json`, { credentials: 'include' })
+        .then(async (r) => (r.ok ? (await r.json())?.data || { gone: 404 } : { gone: r.status }))
+        .catch(() => { hcCache.delete(key); return { gone: 0 }; }));
+    }
+    return hcCache.get(key);
+  };
+  const unamp = (u) => String(u || '').replace(/&amp;/g, '&');
+  const imgUrl = (u) => { const x = unamp(u); return /^https:\/\/([a-z0-9-]+\.)*(redd\.it|redditmedia\.com|redditstatic\.com)\//i.test(x) ? x : ''; };
+  const dateOf = (sec) => new Date(sec * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const yearsOf = (sec) => { const y = Math.floor((Date.now() / 1000 - sec) / 31557600); return y < 1 ? 'under a year' : `${y} yr${y === 1 ? '' : 's'}`; };
+  const closeHover = () => { clearTimeout(hcT); hc?.remove(); hc = null; hcLink = null; };
+  const placeHover = (card, a) => {
+    const r = a.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
+    const below = r.bottom + 8 + h < innerHeight || r.top - 8 - h < 0;
+    card.style.left = `${Math.max(8, Math.min(Math.round(r.left), innerWidth - w - 16))}px`;
+    card.style.top = `${Math.round(below ? r.bottom + 8 : r.top - 8 - h)}px`;
+  };
+  const userCard = (d, name) => {
+    if (d.gone !== undefined) return [el('p', { class: 'rs-hc-note', text: d.gone === 403 && !loggedIn() ? 'Log in to Reddit to see who this is.' : d.gone === 404 ? `u/${name} was deleted or does not exist.` : 'Reddit did not answer. Try again in a moment.' })];
+    if (d.is_suspended) return [el('div', { class: 'rs-hc-head' }, [el('b', { text: `u/${d.name || name}` })]), el('p', { class: 'rs-hc-note', text: 'This account is suspended.' })];
+    const icon = imgUrl(d.icon_img);
+    const about = String(d.subreddit?.public_description || '').trim();
+    const flags = [d.is_employee ? 'Reddit admin' : '', d.is_mod ? 'Moderator' : '', d.is_gold ? 'Premium' : ''].filter(Boolean);
+    return [
+      el('div', { class: 'rs-hc-head' }, [
+        icon ? el('img', { class: 'rs-hc-icon rs-hc-round', src: icon, alt: '' }) : el('span', { class: 'rs-hc-icon rs-hc-round rs-ms-noicon', text: 'u/' }),
+        el('div', {}, [el('b', { text: `u/${d.name || name}` }), el('span', { class: 'rs-hc-sub', text: `Redditor for ${yearsOf(d.created_utc)}, since ${dateOf(d.created_utc)}` })]),
+      ]),
+      el('div', { class: 'rs-hc-stats' }, [
+        el('span', {}, [el('b', { text: num(d.link_karma || 0) }), ' post karma']),
+        el('span', {}, [el('b', { text: num(d.comment_karma || 0) }), ' comment karma']),
+      ]),
+      flags.length ? el('div', { class: 'rs-hc-flags' }, flags.map((f) => el('span', { class: 'rs-hc-flag', text: f }))) : null,
+      about ? el('p', { class: 'rs-hc-about', text: about }) : null,
+      el('div', { class: 'rs-hc-links' }, [
+        el('a', { href: `/user/${d.name || name}/`, text: 'Profile' }),
+        el('a', { href: `/user/${d.name || name}/submitted/`, text: 'Posts' }),
+        el('a', { href: `/user/${d.name || name}/comments/`, text: 'Comments' }),
+      ]),
+    ];
+  };
+  const subCard = (d, name) => {
+    if (d.gone !== undefined) return [el('p', { class: 'rs-hc-note', text: d.gone === 403 && !loggedIn() ? 'Log in to Reddit to see this subreddit.' : d.gone === 403 ? `r/${name} is private.` : d.gone === 404 ? `r/${name} does not exist.` : 'Reddit did not answer. Try again in a moment.' })];
+    const sub = d.display_name || name;
+    const icon = imgUrl(d.community_icon) || imgUrl(d.icon_img);
+    const title = String(d.title || '').trim();
+    const about = String(d.public_description || '').trim();
+    const sc = el('button', { type: 'button', class: 'rs-btn' });
+    const paint = () => { const on = scIndex(sub) >= 0; sc.textContent = on ? '− Shortcut' : '+ Shortcut'; sc.setAttribute('aria-pressed', String(on)); };
+    sc.onclick = () => { scToggle(sub); paint(); };
+    paint();
+    return [
+      el('div', { class: 'rs-hc-head' }, [
+        icon ? el('img', { class: 'rs-hc-icon rs-hc-round', src: icon, alt: '' }) : el('span', { class: 'rs-hc-icon rs-hc-round rs-ms-noicon', text: 'r/' }),
+        el('div', {}, [el('b', {}, [`r/${sub}`, d.over18 ? el('span', { class: 'rs-tag rs-tag-nsfw', text: 'nsfw' }) : null]), title && title.toLowerCase() !== sub.toLowerCase() ? el('span', { class: 'rs-hc-sub', text: title }) : null]),
+      ]),
+      el('div', { class: 'rs-hc-stats' }, [
+        el('span', {}, [el('b', { text: num(d.subscribers || 0) }), ' members']),
+        d.created_utc ? el('span', { text: `Created ${dateOf(d.created_utc)}` }) : null,
+      ]),
+      about ? el('p', { class: 'rs-hc-about', text: about }) : null,
+      el('div', { class: 'rs-hc-links' }, [el('a', { href: `/r/${sub}/`, text: d.user_is_subscriber ? 'Open (joined)' : 'Open' }), sc]),
+    ];
+  };
+  const openHover = async (a, t) => {
+    closeHover();
+    hcLink = a;
+    const card = el('div', { id: 'rs-hover', role: 'tooltip', 'aria-busy': 'true' }, [el('p', { class: 'rs-hc-note', text: 'Loading…' })]);
+    hc = card;
+    document.body.append(card); placeHover(card, a);
+    const d = await hcData(t);
+    if (hc !== card) return;
+    card.replaceChildren(...(t.kind === 'user' ? userCard(d, t.name) : subCard(d, t.name)).filter(Boolean));
+    card.removeAttribute('aria-busy');
+    placeHover(card, a);
+  };
+  document.addEventListener('mouseover', (e) => {
+    if (!cfg.enabled || !cfg.hoverCards) return;
+    if (hc && hc.contains(e.target)) { clearTimeout(hcT); return; }
+    const a = e.target.closest?.('a[href]');
+    const t = a && hcTarget(a);
+    if (t) {
+      if (a === hcLink) { clearTimeout(hcT); return; }
+      clearTimeout(hcT);
+      hcT = setTimeout(() => openHover(a, t), HC_DELAY);
+    } else if (hc) { clearTimeout(hcT); hcT = setTimeout(closeHover, HC_LINGER); } else clearTimeout(hcT);
+  });
+  document.addEventListener('mousedown', (e) => { if (hc && !hc.contains(e.target)) closeHover(); }, true);
+  window.addEventListener('scroll', () => { if (hc) closeHover(); }, { passive: true });
+
   // ---------- run ----------
   let lastUrl = '';
   // Reddit often changes pages without reloading, and swaps the page parts in a moment later; so everything below
   // checks the page as it is on every pass instead of trusting the moment the address changed.
-  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); };
+  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); closeHover(); };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     const onComments = isCommentsPage();
