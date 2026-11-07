@@ -186,10 +186,21 @@
   };
 
   // ---------- shortcut bar (RES's subreddit manager) ----------
-  // Shortcuts are kept as "sub" or { sub, name } (name = what the bar shows).
-  const scList = () => (cfg.shortcuts || []).map((x) => (typeof x === 'string' ? { sub: x } : x)).filter((x) => x?.sub);
-  const scSave = (list) => { saveCfg({ shortcuts: list.map(({ sub, name }) => (name && name.toLowerCase() !== sub.toLowerCase() ? { sub, name } : sub)) }); shortcutBar(); scButton(true); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
-  const scIndex = (sub) => scList().findIndex((x) => x.sub.toLowerCase() === String(sub).toLowerCase());
+  // Shortcuts are kept as "sub", { sub, name } (name = what the bar shows) or { feed, name } for a Reddit custom feed
+  // (a group of subreddits: the new-design version of old Reddit's r/a+b+c links).
+  const scList = () => (cfg.shortcuts || []).map((x) => (typeof x === 'string' ? { sub: x } : x)).filter((x) => x?.sub || x?.feed);
+  const scSave = (list) => { saveCfg({ shortcuts: list.map(({ sub, feed, name }) => (feed ? { feed, name } : name && name.toLowerCase() !== sub.toLowerCase() ? { sub, name } : sub)) }); shortcutBar(); scButton(true); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
+  const scIndex = (sub) => scList().findIndex((x) => x.sub && x.sub.toLowerCase() === String(sub).toLowerCase());
+  const scFeedIndex = (path) => scList().findIndex((x) => x.feed && x.feed.toLowerCase() === String(path).toLowerCase());
+  const scHref = (x) => x.feed || `/r/${x.sub}/`;
+  const scName = (x) => x.name || x.sub || x.feed.replace(/\/$/, '').split('/').pop();
+  const scWhat = (x) => (x.feed ? `the ${scName(x)} feed` : `r/${x.sub}`);
+  const scFeedToggle = (f) => {
+    const l = scList(), i = scFeedIndex(f.path);
+    if (i >= 0) l.splice(i, 1); else l.push({ feed: f.path, name: f.name });
+    scSave(l);
+    toast(i >= 0 ? `Removed ${f.name} from your shortcuts.` : `Added ${f.name} to your shortcuts.`);
+  };
   const scToggle = (sub) => {
     const l = scList(), i = scIndex(sub);
     if (i >= 0) l.splice(i, 1); else l.push({ sub });
@@ -226,13 +237,25 @@
     const c = document.querySelector('left-nav-communities-controller[initialstatejson]');
     if (c) {
       try {
-        const list = JSON.parse(c.getAttribute('initialstatejson')).map((x) => ({ name: String(x.prefixedName || '').replace(/^r\//, ''), icon: x.styles?.icon64 || x.styles?.legacyIcon?.url || '' }))
+        const list = JSON.parse(c.getAttribute('initialstatejson')).map((x) => ({ name: String(x.prefixedName || '').replace(/^r\//, ''), id: x.id || '', icon: x.styles?.icon64 || x.styles?.legacyIcon?.url || '' }))
           .filter((x) => x.name && !/^u\//.test(x.name) && validSub(x.name));
         localStorage.setItem('rs-joined', JSON.stringify(list));
         return list;
       } catch { /* fall back to the copy */ }
     }
     try { return JSON.parse(localStorage.getItem('rs-joined') || '[]'); } catch { return []; }
+  };
+  // Your Reddit custom feeds, from the same left menu.
+  const myFeeds = () => {
+    const c = document.querySelector('left-nav-multireddits-controller[initialstatejson]');
+    if (c) {
+      try {
+        const list = JSON.parse(c.getAttribute('initialstatejson')).map((x) => ({ path: x.path, name: x.displayName || '', icon: x.icon || '' })).filter((x) => /^\/user\/[^/]+\/m\/[^/]+\/$/i.test(x.path || ''));
+        localStorage.setItem('rs-feeds', JSON.stringify(list));
+        return list;
+      } catch { /* fall back to the copy */ }
+    }
+    try { return JSON.parse(localStorage.getItem('rs-feeds') || '[]'); } catch { return []; }
   };
   const mostVisited = (limit = 40) => Object.values(subVisits()).sort((a, b) => b.n - a.n || b.t - a.t).slice(0, limit).map((v) => ({ sub: v.name }));
   const loggedIn = () => document.querySelector('shreddit-app')?.getAttribute('user-logged-in') === 'true';
@@ -257,9 +280,10 @@
     const auto = cfg.scMode === 'visits';
     const items = auto ? mostVisited() : scList();
     const list = el('div', { class: 'rs-sc-list' });
-    const cur = (subOf() || '').toLowerCase();
-    items.forEach(({ sub, name }, i) => {
-      const a = el('a', { href: `/r/${sub}/`, class: cur === sub.toLowerCase() ? 'rs-cur' : null, title: `r/${sub}`, text: (name || sub).toUpperCase(), 'data-i': String(i), draggable: auto ? null : 'true' });
+    const cur = (subOf() || '').toLowerCase(), here = location.pathname.toLowerCase();
+    items.forEach((x, i) => {
+      const on = x.feed ? here.startsWith(x.feed.toLowerCase()) : cur === x.sub.toLowerCase();
+      const a = el('a', { href: scHref(x), class: [on ? 'rs-cur' : '', x.feed ? 'rs-sc-feed' : ''].join(' ').trim() || null, title: x.feed ? `${scName(x)} (custom feed)` : `r/${x.sub}`, text: scName(x).toUpperCase(), 'data-i': String(i), draggable: auto ? null : 'true' });
       list.append(a);
     });
     if (!items.length) list.append(el('span', { class: 'rs-sc-hint', text: auto ? 'Visit a few subreddits and your most visited show up here.' : 'Add shortcuts with "+ Shortcut" on any subreddit, or from My subreddits.' }));
@@ -309,7 +333,7 @@
     });
     trash.addEventListener('dragover', (e) => { if (from >= 0) { e.preventDefault(); trash.classList.add('rs-over'); } });
     trash.addEventListener('dragleave', () => trash.classList.remove('rs-over'));
-    trash.addEventListener('drop', (e) => { if (from < 0) return; e.preventDefault(); const l = scList(); const [gone] = l.splice(from, 1); from = -1; scSave(l); toast(`Removed r/${gone.sub} from your shortcuts.`); });
+    trash.addEventListener('drop', (e) => { if (from < 0) return; e.preventDefault(); const l = scList(); const [gone] = l.splice(from, 1); from = -1; scSave(l); toast(`Removed ${scWhat(gone)} from your shortcuts.`); });
     list.addEventListener('dragend', () => { from = -1; clear(); bar.classList.remove('rs-dragging'); trash.classList.remove('rs-over'); });
   };
 
@@ -454,6 +478,18 @@
       const list = all.filter((x) => !q || x.name.toLowerCase().includes(q))
         .sort(cfg.mySubsSort === 'az' ? (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) : (a, b) => b.n - a.n || b.t - a.t || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
       rows.replaceChildren();
+      const feeds = myFeeds().filter((f) => !q || f.name.toLowerCase().includes(q));
+      if (feeds.length) {
+        rows.append(el('div', { class: 'rs-ms-sec', text: 'Custom feeds' }));
+        for (const f of feeds) {
+          const on = scFeedIndex(f.path) >= 0;
+          const icon = f.icon ? el('img', { src: f.icon, alt: '', loading: 'lazy' }) : el('span', { class: 'rs-ms-noicon', text: 'm/' });
+          const add = el('button', { type: 'button', class: 'rs-ms-add', 'aria-pressed': String(on), title: on ? 'Remove from shortcut bar' : 'Add to shortcut bar', text: on ? '− Shortcut' : '+ Shortcut' });
+          add.onclick = (e) => { e.preventDefault(); e.stopPropagation(); scFeedToggle(f); draw(); };
+          rows.append(el('a', { class: 'rs-ms-row', href: f.path }, [icon, el('span', { class: 'rs-ms-name', text: f.name }), el('span', { class: 'rs-ms-n' }), add]));
+        }
+        if (list.length) rows.append(el('div', { class: 'rs-ms-sec', text: 'Communities' }));
+      }
       for (const x of list) {
         const on = scIndex(x.name) >= 0;
         const icon = x.icon ? el('img', { src: x.icon, alt: '', loading: 'lazy' }) : el('span', { class: 'rs-ms-noicon', text: 'r/' });
@@ -461,7 +497,7 @@
         add.onclick = (e) => { e.preventDefault(); e.stopPropagation(); scToggle(x.name); draw(); };
         rows.append(el('a', { class: 'rs-ms-row', href: `/r/${x.name}/` }, [icon, el('span', { class: 'rs-ms-name', text: `r/${x.name}` }), el('span', { class: 'rs-ms-n', text: x.n ? `${x.n} visit${x.n === 1 ? '' : 's'}` : '' }), add]));
       }
-      if (!list.length) rows.append(el('div', { class: 'rs-ms-empty', text: q ? 'No match.' : 'Your communities show up here once Reddit lists them.' }));
+      if (!list.length && !feeds.length) rows.append(el('div', { class: 'rs-ms-empty', text: q ? 'No match.' : 'Your communities show up here once Reddit lists them.' }));
     };
     for (const [v, t] of [['visits', 'Most visited'], ['az', 'A–Z']]) {
       const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(cfg.mySubsSort === v), text: t });
@@ -470,7 +506,9 @@
     }
     search.oninput = draw;
     search.onkeydown = (e) => { if (e.key === 'Enter') { const first = rows.querySelector('.rs-ms-row'); if (first) location.assign(first.href); } };
-    mySubs.append(el('div', { class: 'rs-ms-head' }, [search, seg]), rows);
+    const newGroup = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet rs-ms-group', text: 'New group' });
+    newGroup.onclick = (e) => { e.stopPropagation(); closeMySubs(); openScEditor({ group: true }); };
+    mySubs.append(el('div', { class: 'rs-ms-head' }, [search, seg]), rows, el('div', { class: 'rs-ms-foot' }, [newGroup]));
     draw();
     if (pending) {
       const box = mySubs;
@@ -491,7 +529,39 @@
   let editor = null;
   const closeScEditor = () => { editor?.remove(); editor = null; document.removeEventListener('keydown', editorEsc, true); };
   const editorEsc = (e) => { if (e.key === 'Escape' && !e.target.closest?.('input')) closeScEditor(); };
-  const openScEditor = () => {
+  // Groups: several subreddits under one shortcut. Old Reddit did this with r/a+b+c links, which Reddit now shows only
+  // in the old design, so a group is made as a private Reddit custom feed (Reddit's own grouping, up to 100 subreddits).
+  const parseSubs = (t) => {
+    const out = new Map();
+    for (const tok of String(t).split(/[\s,;]+/)) {
+      const m = tok.match(/\/r\/([^/?#\s]+)/i);
+      for (const n of (m ? m[1] : tok.replace(/^\/?r\//i, '')).split('+')) if (validSub(n) && !out.has(n.toLowerCase())) out.set(n.toLowerCase(), n);
+    }
+    return [...out.values()];
+  };
+  const subId = async (name) => {
+    const j = joined().find((x) => x.id && x.name.toLowerCase() === name.toLowerCase());
+    if (j) return { id: j.id, name: j.name };
+    await new Promise((r) => setTimeout(r, 120)); // one lookup at a time, gently
+    const r = await fetch(`/r/${encodeURIComponent(name)}/about.json`, { credentials: 'include' });
+    if (!r.ok) return null;
+    const d = (await r.json().catch(() => null))?.data;
+    return /^t5_/.test(d?.name || '') ? { id: d.name, name: d.display_name || name } : null;
+  };
+  const makeGroup = async (name, names, say) => {
+    const found = [], missing = [];
+    for (const [i, n] of names.entries()) {
+      say(`Checking ${i + 1} of ${names.length}…`);
+      try { const x = await subId(n); if (x) found.push(x); else missing.push(n); } catch { missing.push(n); }
+    }
+    if (!found.length) throw new Error(`Could not find ${missing.map((m) => `r/${m}`).join(', ')}.`);
+    say('Making the group…');
+    const d = await gql('CustomFeedCreate', { displayName: name, descriptionMd: '', visibility: 'PRIVATE', subredditIds: found.map((x) => x.id) });
+    const path = d?.multireddit?.path;
+    if (!path) throw new Error('Reddit did not make the group. Try again.');
+    return { path, found, missing };
+  };
+  const openScEditor = (opts = {}) => {
     closeMySubs();
     if (editor) return closeScEditor();
     editor = el('div', { id: 'rs-sc-editor', class: 'rs-modal', role: 'dialog', 'aria-label': 'Edit shortcuts' });
@@ -512,14 +582,16 @@
     let from = -1;
     const draw = () => {
       rows.replaceChildren();
-      scList().forEach(({ sub, name }, i) => {
-        const nameIn = el('input', { type: 'text', class: 'rs-ed-name', placeholder: sub.toUpperCase(), 'aria-label': `Name shown for r/${sub}`, spellcheck: 'false' });
+      scList().forEach((x, i) => {
+        const { sub, feed, name } = x;
+        const nameIn = el('input', { type: 'text', class: 'rs-ed-name', placeholder: scName(x).toUpperCase(), 'aria-label': `Name shown for ${scWhat(x)}`, spellcheck: 'false' });
         nameIn.value = name || '';
-        nameIn.onchange = () => { const l = scList(); l[i] = { sub, name: nameIn.value.trim() }; scSave(l); };
-        const del = el('button', { type: 'button', class: 'rs-ed-del', 'aria-label': `Remove r/${sub}`, html: ICON.close });
+        if (feed) nameIn.placeholder = scName({ feed }).toUpperCase();
+        nameIn.onchange = () => { const l = scList(); const v = nameIn.value.trim(); l[i] = feed ? { feed, name: v || scName({ feed }) } : { sub, name: v }; scSave(l); };
+        const del = el('button', { type: 'button', class: 'rs-ed-del', 'aria-label': `Remove ${scWhat(x)}`, html: ICON.close });
         del.onclick = () => { const l = scList(); l.splice(i, 1); scSave(l); draw(); };
-        const row = el('div', { class: 'rs-ed-row', draggable: 'true', 'data-i': String(i) }, [el('span', { class: 'rs-ed-grip', 'aria-hidden': 'true', text: '⋮⋮' }), el('span', { class: 'rs-ed-sub', text: `r/${sub}` }), nameIn, del]);
-        row.addEventListener('dragstart', (e) => { if (e.target.closest('input')) { e.preventDefault(); return; } from = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', sub); row.classList.add('rs-moving'); });
+        const row = el('div', { class: 'rs-ed-row', draggable: 'true', 'data-i': String(i) }, [el('span', { class: 'rs-ed-grip', 'aria-hidden': 'true', text: '⋮⋮' }), feed ? el('a', { class: 'rs-ed-sub rs-ed-feed', href: feed, title: 'Open this custom feed on Reddit to change its subreddits', text: 'Custom feed ↗' }) : el('span', { class: 'rs-ed-sub', text: `r/${sub}` }), nameIn, del]);
+        row.addEventListener('dragstart', (e) => { if (e.target.closest('input, a')) { e.preventDefault(); return; } from = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', scName(x)); row.classList.add('rs-moving'); });
         row.addEventListener('dragover', (e) => { if (from < 0) return; e.preventDefault(); const r = row.getBoundingClientRect(); rows.querySelectorAll('.rs-ed-row').forEach((o) => o.classList.remove('rs-drop-before', 'rs-drop-after')); row.classList.add(e.clientY < r.top + r.height / 2 ? 'rs-drop-before' : 'rs-drop-after'); });
         row.addEventListener('drop', (e) => {
           if (from < 0) return;
@@ -536,20 +608,47 @@
     };
     const count = el('span', { class: 'rs-ed-count' });
     const az = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', text: 'Sort A–Z' });
-    az.onclick = () => { scSave(scList().sort((a, b) => (a.name || a.sub).localeCompare(b.name || b.sub, undefined, { sensitivity: 'base' }))); draw(); };
+    az.onclick = () => { scSave(scList().sort((a, b) => scName(a).localeCompare(scName(b), undefined, { sensitivity: 'base' }))); draw(); };
     const top = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', text: 'Add my most visited' });
-    top.onclick = () => { const l = scList(); for (const v of mostVisited(15)) if (!l.some((x) => x.sub.toLowerCase() === v.sub.toLowerCase())) l.push(v); scSave(l); draw(); };
+    top.onclick = () => { const l = scList(); for (const v of mostVisited(15)) if (!l.some((x) => x.sub && x.sub.toLowerCase() === v.sub.toLowerCase())) l.push(v); scSave(l); draw(); };
     const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
     done.onclick = closeScEditor;
+    const groupBtn = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', 'aria-expanded': 'false', text: 'New group' });
+    const gName = el('input', { type: 'text', class: 'rs-ed-add', placeholder: 'Group name, e.g. AI', 'aria-label': 'Group name', maxlength: '50', spellcheck: 'false' });
+    const gSubs = el('textarea', { class: 'rs-ed-subs', rows: '3', placeholder: 'movies, television  or paste an old r/a+b link', 'aria-label': 'Subreddits in the group', spellcheck: 'false' });
+    const gGo = el('button', { type: 'button', class: 'rs-done', text: 'Make group' });
+    const gMsg = el('div', { class: 'rs-ed-gmsg', role: 'status' });
+    const group = el('div', { class: 'rs-ed-group', role: 'group', 'aria-label': 'New group' }, [el('p', { class: 'rs-ed-tip', text: 'Saved on Reddit as a private custom feed.' }), gName, gSubs, el('div', { class: 'rs-ed-gfoot' }, [gMsg, gGo])]);
+    const showGroup = (on) => { group.hidden = !on; groupBtn.setAttribute('aria-expanded', String(on)); if (on) gName.focus(); };
+    groupBtn.onclick = () => showGroup(group.hidden);
+    gGo.onclick = async () => {
+      if (needLogin('make groups')) return;
+      const name = gName.value.trim(), names = parseSubs(gSubs.value);
+      if (!name) { gMsg.textContent = 'Give the group a name.'; gName.focus(); return; }
+      if (names.length < 2) { gMsg.textContent = 'Add at least two subreddits.'; gSubs.focus(); return; }
+      if (names.length > 100) { gMsg.textContent = `Reddit allows 100 subreddits in a group. That list has ${names.length}.`; return; }
+      gGo.disabled = true;
+      try {
+        const { path, found, missing } = await makeGroup(name, names, (t) => { gMsg.textContent = t; });
+        scSave([...scList(), { feed: path, name }]);
+        try { localStorage.setItem('rs-feeds', JSON.stringify([...myFeeds().filter((f) => f.path !== path), { path, name, icon: '' }])); } catch { /* storage full */ }
+        gMsg.textContent = `Made ${name} with ${found.length} subreddits.${missing.length ? ` Not found: ${missing.map((m) => `r/${m}`).join(', ')}.` : ''}`;
+        gName.value = ''; gSubs.value = ''; draw();
+      } catch (e) {
+        gMsg.textContent = e.reddit ? `Reddit said: ${e.reddit}` : /refused|Failed to fetch|^CustomFeed/.test(e.message) ? 'Reddit did not take that. Try again.' : e.message;
+      }
+      gGo.disabled = false;
+    };
+    showGroup(!!opts.group);
     editor.append(
       el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Shortcuts' }), x]),
       el('p', { class: 'rs-ed-tip', text: 'Drag to reorder. The name box changes what the bar shows.' }),
-      el('div', { class: 'rs-ed-addrow' }, [addIn, addBtn]), msg, el('div', { class: 'rs-ed-scroll' }, [rows]),
+      el('div', { class: 'rs-ed-addrow' }, [addIn, addBtn, groupBtn]), group, msg, el('div', { class: 'rs-ed-scroll' }, [rows]),
       el('div', { class: 'rs-panel-foot' }, [el('div', { class: 'rs-ed-tools' }, [count, az, top]), done]),
     );
     draw();
     document.body.append(editor);
-    addIn.focus();
+    if (opts.group) gName.focus(); else addIn.focus();
     setTimeout(() => document.addEventListener('keydown', editorEsc, true), 0);
   };
 
@@ -773,7 +872,11 @@
     if (!r.ok) throw new Error(`${operation} ${r.status}`);
     const j = await r.json().catch(() => ({}));
     const d = j?.data ? Object.values(j.data)[0] : null;
-    if (j?.errors?.length || d?.ok === false || d?.errors?.length) throw new Error(`${operation} refused`);
+    if (j?.errors?.length || d?.ok === false || d?.errors?.length) {
+      const err = new Error(`${operation} refused`);
+      err.reddit = String(j?.errors?.[0]?.message || d?.errors?.[0]?.message || '').slice(0, 160);
+      throw err;
+    }
     return d;
   };
   const sendVote = (postId, voteState) => gql('UpdatePostVoteState', { postId, voteState });

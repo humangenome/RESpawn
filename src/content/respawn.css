@@ -373,3 +373,18 @@ html:not(.rs-on) #rs-keyhelp { display: none !important; }
 #rs-keyhelp dd { margin: 0; font-size: 13px; line-height: 1.3; }
 #rs-keyhelp kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border: 1px solid var(--rs-line); border-bottom-width: 2px; border-radius: 6px; background: var(--rs-bg); color: var(--rs-text); font: 600 12px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: center; }
 @media (max-width: 720px) { #rs-keyhelp .rs-kh-cols { grid-template-columns: 1fr; } }
+
+/* Groups (custom feeds) */
+.rs-ed-group { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 2px; padding: 10px 12px 12px; border: 1px solid var(--rs-line); border-radius: 12px; background: var(--rs-hover); }
+.rs-ed-group[hidden] { display: none; }
+.rs-ed-group .rs-ed-add { flex: none; }
+.rs-ed-group .rs-ed-tip { margin: 0; }
+.rs-ed-subs { min-height: 64px; margin: 0; padding: 8px 10px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-text); font: 400 14px/1.35 var(--rs-font); resize: vertical; }
+.rs-ed-gfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rs-ed-gmsg { min-width: 0; color: var(--rs-weak); font-size: 12px; line-height: 1.35; }
+.rs-ed-gfoot .rs-done { flex: none; }
+.rs-ed-gfoot .rs-done:disabled { opacity: .6; cursor: default; }
+a.rs-ed-feed { color: var(--rs-weak); font-weight: 600; text-decoration: none; }
+a.rs-ed-feed:hover { color: var(--rs-text); text-decoration: underline; }
+#rs-mysubs .rs-ms-sec { padding: 10px 12px 4px; font: 700 11px/1 var(--rs-font); letter-spacing: .06em; text-transform: uppercase !important; color: var(--rs-weak); }
+.rs-ms-foot { display: flex; justify-content: flex-end; padding: 8px 10px; border-top: 1px solid var(--rs-line); }
