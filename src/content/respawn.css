@@ -8,7 +8,29 @@
   --rs-bg: var(--color-neutral-background, #fff);
   --rs-link: var(--color-primary, #0a449b);
   --rs-up: #d93a00;
+  --rs-down: #6a5cff;
+  --rs-visited: #6b4fa1;
+  --rs-good: #1a7f4b;
+  --rs-bad: #c62828;
   --rs-font: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
+}
+/* Reddit's dark theme (picked in Reddit, or the computer is in dark mode and Reddit is left on automatic).
+   Reddit's own colors come through the variables above; these are ours. */
+:root.theme-dark {
+  --rs-up: #ff5c1f;
+  --rs-down: #8f85ff;
+  --rs-visited: #b9a3e3;
+  --rs-good: #4cc38a;
+  --rs-bad: #ff6b6b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.theme-light) {
+    --rs-up: #ff5c1f;
+    --rs-down: #8f85ff;
+    --rs-visited: #b9a3e3;
+    --rs-good: #4cc38a;
+    --rs-bad: #ff6b6b;
+  }
 }
 
 /* Off = Reddit as it is */
@@ -37,10 +59,10 @@ html:not(.rs-on) .rs-cacts, html:not(.rs-on) .rs-badge, html:not(.rs-on) #rs-fil
 #rs-shortcuts .rs-sc-arrow svg { width: 16px; height: 16px; }
 #rs-shortcuts .rs-sc-arrow[hidden] { display: none; }
 #rs-shortcuts .rs-sc-edit { margin-left: 4px; border-left: 1px solid var(--rs-line); border-radius: 0 999px 999px 0; padding-left: 12px; }
-#rs-shortcuts .rs-sc-trash { display: none; flex: none; align-items: center; height: 26px; padding: 0 12px; border: 1px dashed #c62828; border-radius: 999px; color: #c62828; letter-spacing: 0; }
+#rs-shortcuts .rs-sc-trash { display: none; flex: none; align-items: center; height: 26px; padding: 0 12px; border: 1px dashed var(--rs-bad); border-radius: 999px; color: var(--rs-bad); letter-spacing: 0; }
 #rs-shortcuts.rs-dragging .rs-sc-trash { display: inline-flex; }
 #rs-shortcuts.rs-dragging .rs-sc-edit { display: none; }
-#rs-shortcuts .rs-sc-trash.rs-over { background: color-mix(in srgb, #c62828 12%, transparent); }
+#rs-shortcuts .rs-sc-trash.rs-over { background: color-mix(in srgb, var(--rs-bad) 12%, transparent); }
 
 /* "+ Shortcut" next to Join */
 #rs-sc-btn { flex: none; height: 40px; padding: 0 16px; border: 1px solid var(--rs-weak); border-radius: 999px; background: none; color: var(--rs-text); font: 600 14px/1 var(--rs-font); text-transform: none; cursor: pointer; white-space: nowrap; }
@@ -75,7 +97,7 @@ html:not(.rs-on) #rs-sc-btn { display: none !important; }
 .rs-ed-addrow { display: flex; gap: 8px; }
 .rs-ed-add, .rs-ed-name { min-width: 0; height: 34px; margin: 0; padding: 0 10px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-text); font: 400 14px/1 var(--rs-font); }
 .rs-ed-add { flex: 1; }
-.rs-ed-msg { min-height: 18px; margin: 4px 0; color: #c62828; font-size: 12px; }
+.rs-ed-msg { min-height: 18px; margin: 4px 0; color: var(--rs-bad); font-size: 12px; }
 .rs-ed-scroll { flex: 1 1 auto; min-height: 120px; overflow-y: auto; margin: 0 -16px; padding: 0 16px; border-top: 1px solid var(--rs-line); border-bottom: 1px solid var(--rs-line); }
 .rs-ed-rows .rs-ed-row:last-child { border-bottom: 0; }
 .rs-ed-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 150px 28px; align-items: center; gap: 8px; padding: 5px 2px; border-bottom: 1px solid var(--rs-line); background: var(--rs-bg); cursor: grab; }
@@ -86,7 +108,7 @@ html:not(.rs-on) #rs-sc-btn { display: none !important; }
 .rs-ed-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .rs-ed-name { width: 150px; height: 30px; font-size: 13px; }
 .rs-ed-del { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); cursor: pointer; }
-.rs-ed-del:hover { background: var(--rs-hover); color: #c62828; }
+.rs-ed-del:hover { background: var(--rs-hover); color: var(--rs-bad); }
 .rs-ed-del svg { width: 14px; height: 14px; }
 .rs-ed-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rs-ed-count { color: var(--rs-weak); font-size: 13px; margin-right: 4px; }
@@ -135,7 +157,7 @@ html.rs-on.rs-hide-ads shreddit-comments-page-ad, html.rs-on.rs-hide-ads shreddi
 .rs-main { min-width: 0; }
 .rs-tline { line-height: 1.3; }
 .rs-title { font: 600 16px/1.3 var(--rs-font); color: var(--rs-text); text-decoration: none; }
-.rs-title:visited { color: #6b4fa1; }
+.rs-title:visited { color: var(--rs-visited); }
 .rs-flair { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font: 600 11px/1.5 var(--rs-font); background: var(--rs-hover); color: var(--rs-text); vertical-align: 1px; }
 .rs-domain { margin-left: 6px; font-size: 12px; color: var(--rs-weak); white-space: nowrap; }
 .rs-meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 12px; color: var(--rs-weak); }
@@ -174,7 +196,7 @@ html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-containe
 html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"] img { max-height: 440px !important; width: auto !important; }
 html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 .rs-badge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font: 700 11px/1.4 var(--rs-font); }
-.rs-badge.rs-is-new { background: #fff1ea; color: var(--rs-up); }
+.rs-badge.rs-is-new { background: color-mix(in srgb, var(--rs-up) 14%, transparent); color: var(--rs-up); }
 .rs-cacts { display: inline-flex; align-items: center; margin-left: 4px; }
 .rs-cacts a { padding: 2px 5px; border-radius: 6px; font: 700 12px/1.2 var(--rs-font); color: var(--rs-weak); text-decoration: none; }
 .rs-cacts a:hover { background: var(--rs-hover); color: var(--rs-text); }
@@ -191,14 +213,14 @@ html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 .rs-vote button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 22px; padding: 0; }
 .rs-vote button svg { width: 18px; height: 18px; }
 .rs-vote button .rs-fill { fill: none; }
-.rs-vote .rs-up:hover { color: #d93a00; background: #fff1ea; }
-.rs-vote .rs-down:hover { color: #6a5cff; background: #efedff; }
-.rs-vote[data-vote="UP"] .rs-up { color: #d93a00; }
+.rs-vote .rs-up:hover { color: var(--rs-up); background: color-mix(in srgb, var(--rs-up) 12%, transparent); }
+.rs-vote .rs-down:hover { color: var(--rs-down); background: color-mix(in srgb, var(--rs-down) 12%, transparent); }
+.rs-vote[data-vote="UP"] .rs-up { color: var(--rs-up); }
 .rs-vote[data-vote="UP"] .rs-up .rs-fill { fill: currentColor; }
-.rs-vote[data-vote="UP"] .rs-score { color: #d93a00; }
-.rs-vote[data-vote="DOWN"] .rs-down { color: #6a5cff; }
+.rs-vote[data-vote="UP"] .rs-score { color: var(--rs-up); }
+.rs-vote[data-vote="DOWN"] .rs-down { color: var(--rs-down); }
 .rs-vote[data-vote="DOWN"] .rs-down .rs-fill { fill: currentColor; }
-.rs-vote[data-vote="DOWN"] .rs-score { color: #6a5cff; }
+.rs-vote[data-vote="DOWN"] .rs-score { color: var(--rs-down); }
 .rs-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2147483001; padding: 10px 16px; border-radius: 10px; background: var(--rs-text); color: var(--rs-bg); font: 600 13px/1.3 var(--rs-font); box-shadow: 0 6px 24px rgba(0,0,0,.2); }
 
 /* Gear in Reddit's top bar */
@@ -274,15 +296,15 @@ html.rs-fl-hidden #rs-filterline { display: none !important; }
 #rs-filterline button { text-transform: none !important; letter-spacing: normal; font: inherit; cursor: pointer; white-space: nowrap; }
 .rs-chip { height: 28px; padding: 0 12px; border: 1px solid var(--rs-line); border-radius: 999px; background: none; color: var(--rs-weak); }
 .rs-chip:hover { background: var(--rs-hover); color: var(--rs-text); }
-.rs-chip[data-state="only"] { border-color: #1a7f4b; background: color-mix(in srgb, #1a7f4b 12%, transparent); color: #1a7f4b; }
-.rs-chip[data-state="hide"] { border-color: #c62828; background: color-mix(in srgb, #c62828 10%, transparent); color: #c62828; }
+.rs-chip[data-state="only"] { border-color: var(--rs-good); background: color-mix(in srgb, var(--rs-good) 12%, transparent); color: var(--rs-good); }
+.rs-chip[data-state="hide"] { border-color: var(--rs-bad); background: color-mix(in srgb, var(--rs-bad) 10%, transparent); color: var(--rs-bad); }
 #rs-filterline .rs-fl-count { margin-left: auto; padding: 0 4px; font-weight: 500; }
 #rs-filterline .rs-fl-clear { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--rs-hover); color: var(--rs-text); }
 #rs-filterline .rs-fl-clear:hover { background: var(--rs-strong-bg); }
 #rs-filterline .rs-fl-clear[hidden] { display: none; }
 html.rs-on .rs-row.rs-filtered { display: none !important; }
 .rs-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border: 1px solid currentColor; border-radius: 4px; font: 700 10px/1.4 var(--rs-font); letter-spacing: .03em; text-transform: uppercase; vertical-align: 2px; }
-.rs-tag-nsfw { color: #c62828; }
+.rs-tag-nsfw { color: var(--rs-bad); }
 .rs-tag-spoiler { color: var(--rs-weak); }
 #rs-panel .rs-num { box-sizing: border-box; margin: 0; width: 80px; height: 32px; padding: 0 8px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-text); font: 400 14px/1 var(--rs-font); text-align: right; }
 #rs-sortbar { flex: 1 1 auto; min-width: 0; margin-right: 8px; }
