@@ -357,3 +357,19 @@ html:not(.rs-on) #rs-postinfo { display: none !important; }
 html.rs-on:not(.rs-pin-header) reddit-header-large { position: absolute !important; }
 html.rs-on:not(.rs-pin-header) #rs-shortcuts { position: relative; top: 0; }
 html.rs-on.rs-left-slide:not(.rs-pin-header) #left-sidebar-container { top: 0 !important; z-index: 1000 !important; }
+
+/* Keyboard: the picked post or comment */
+html.rs-on .rs-row.rs-sel { background: var(--rs-hover); box-shadow: inset 3px 0 0 var(--rs-text); border-radius: 0 8px 8px 0; }
+html.rs-on shreddit-comment [slot="commentMeta"].rs-sel, html.rs-on shreddit-comment [slot="comment"].rs-sel { background-color: var(--rs-hover); box-shadow: inset 3px 0 0 var(--rs-text); border-radius: 0 6px 6px 0; }
+html.rs-on shreddit-post.rs-sel { outline: 2px solid var(--rs-strong-bg); outline-offset: 6px; border-radius: 12px; }
+html.rs-on shreddit-comment > details:focus, html.rs-on shreddit-comment > details:focus-visible { outline: none; }
+html:not(.rs-on) #rs-keyhelp { display: none !important; }
+#rs-keyhelp { width: 680px; }
+#rs-keyhelp, #rs-keyhelp * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
+#rs-keyhelp .rs-kh-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; overflow-y: auto; padding: 4px 0 10px; }
+#rs-keyhelp h3 { margin: 8px 0 8px; font: 700 11px/1 var(--rs-font); letter-spacing: .06em !important; text-transform: uppercase !important; color: var(--rs-weak); }
+#rs-keyhelp dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 12px; align-items: center; margin: 0; }
+#rs-keyhelp dt { white-space: nowrap; color: var(--rs-weak); font-size: 12px; }
+#rs-keyhelp dd { margin: 0; font-size: 13px; line-height: 1.3; }
+#rs-keyhelp kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border: 1px solid var(--rs-line); border-bottom-width: 2px; border-radius: 6px; background: var(--rs-bg); color: var(--rs-text); font: 600 12px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: center; }
+@media (max-width: 720px) { #rs-keyhelp .rs-kh-cols { grid-template-columns: 1fr; } }

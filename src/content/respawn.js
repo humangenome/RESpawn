@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -107,6 +107,10 @@
       ['scMode', 'Bar shows', [['mine', 'My list'], ['visits', 'Most visited']]],
       ['editShortcuts', 'Your shortcuts', 'button'],
     ]],
+    ['Keyboard', [
+      ['keys', 'Keyboard shortcuts'],
+      ['keyHelp', 'List of keys (or press ?)', 'button'],
+    ]],
   ];
   let panel = null;
   const closePanel = () => { panel?.remove(); panel = null; document.removeEventListener('click', outside, true); document.removeEventListener('keydown', esc, true); };
@@ -123,9 +127,10 @@
       panel.append(el('div', { class: 'rs-panel-sec', text: title }));
       for (const [key, label, choices] of items) {
         if (choices === 'button') {
-          const b = el('button', { type: 'button', class: 'rs-btn', text: 'Edit' });
-          b.onclick = () => { closePanel(); openScEditor(); };
-          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: `${label} (${scList().length})` }), b]));
+          const keysList = key === 'keyHelp';
+          const b = el('button', { type: 'button', class: 'rs-btn', text: keysList ? 'Show' : 'Edit' });
+          b.onclick = () => { closePanel(); if (keysList) openKeyHelp(); else openScEditor(); };
+          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: keysList ? label : `${label} (${scList().length})` }), b]));
         } else if (choices === 'number') {
           const n = el('input', { type: 'number', class: 'rs-num', step: '1', 'aria-label': label });
           n.value = String(cfg[key] ?? 0);
@@ -1008,6 +1013,182 @@
     nav.querySelector('.rs-count').textContent = `${L.length ? Math.max(navI + 1, 0) : 0} / ${L.length}`;
   };
 
+  // ---------- keyboard (RES's keys) ----------
+  // In a feed the keys move through our rows; on a post page through the post and every comment you can see.
+  // Reddit has its own keys, but in a feed they go to the cards RESpawn hides, so RESpawn answers the keys it uses.
+  const KEYS = {
+    feed: [['j / k', 'Next / previous post'], ['J / K', 'Last / first post'], ['a / z', 'Upvote / downvote'], ['Enter', 'Open the link (Shift: new tab)'],
+      ['c', 'Open comments (Shift: new tab)'], ['x', 'Expand or close'], ['X', 'Expand all or close all'], ['s', 'Save or unsave'], ['h', 'Hide'],
+      ['l', 'Copy the link'], ['r', 'Go to the subreddit'], ['u', 'Go to the poster']],
+    comments: [['j / k', 'Next / previous comment'], ['J / K', 'Next / previous at the same level'], ['p', 'Parent comment'], ['t', 'Top of this thread'],
+      ['Enter or f', 'Fold or unfold'], ['a / z', 'Upvote / downvote'], ['r', 'Reply'], ['s', 'Save or unsave'], ['l', 'Copy the link'], ['u', 'Go to the poster'], ['?', 'This list']],
+  };
+  let keyHelp = null;
+  const closeKeyHelp = () => { keyHelp?.remove(); keyHelp = null; };
+  const openKeyHelp = () => {
+    if (keyHelp) return closeKeyHelp();
+    keyHelp = el('div', { id: 'rs-keyhelp', class: 'rs-modal', role: 'dialog', 'aria-label': 'Keyboard shortcuts' });
+    const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close', html: ICON.close });
+    x.onclick = closeKeyHelp;
+    const keyCell = (k) => el('dt', {}, k.split(' ').map((p) => (p === '/' || p === 'or' ? ` ${p} ` : el('kbd', { text: p }))));
+    const list = (title, rows) => el('section', {}, [el('h3', { text: title }), el('dl', {}, rows.flatMap(([k, t]) => [keyCell(k), el('dd', { text: t })]))]);
+    const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
+    done.onclick = closeKeyHelp;
+    keyHelp.append(el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Keyboard shortcuts' }), x]),
+      el('div', { class: 'rs-kh-cols' }, [list('In a feed', KEYS.feed), list('On a post', KEYS.comments)]),
+      el('div', { class: 'rs-panel-foot' }, [el('span'), done]));
+    document.body.append(keyHelp);
+    done.focus();
+  };
+
+  let sel = null;
+  const lastSel = new Map(); // page address -> post you were on, so Back lands on it again
+  const shown = (e) => !!(e && e.isConnected && e.getClientRects().length);
+  const ownParts = (c) => [...c.querySelectorAll('[slot="commentMeta"], [slot="comment"]')].filter((x) => x.closest('shreddit-comment') === c);
+  const isComment = (x) => x?.tagName === 'SHREDDIT-COMMENT';
+  const items = () => {
+    if (!isCommentsPage()) return [...document.querySelectorAll('.rs-row')].filter(shown);
+    const post = document.querySelector('shreddit-post[view-context="CommentsPage"]');
+    return [post, ...[...document.querySelectorAll('shreddit-comment')].filter((c) => shown(ownParts(c)[0]))].filter(Boolean);
+  };
+  const topGap = () => {
+    let g = 0;
+    for (const x of document.querySelectorAll('reddit-header-large, reddit-header-large header, #rs-shortcuts')) {
+      const p = getComputedStyle(x).position;
+      if (p === 'fixed' || p === 'sticky') g = Math.max(g, x.getBoundingClientRect().bottom);
+    }
+    return g;
+  };
+  const partsOf = (x) => (isComment(x) ? ownParts(x) : [x]);
+  const topOf = (x) => (partsOf(x)[0] || x).getBoundingClientRect().top;
+  const select = (it, scroll = true) => {
+    for (const x of document.querySelectorAll('.rs-sel')) x.classList.remove('rs-sel');
+    sel = it || null;
+    if (!sel) return;
+    const parts = partsOf(sel);
+    parts.forEach((x) => x.classList.add('rs-sel'));
+    if (scroll && parts.length) {
+      const top = parts[0].getBoundingClientRect().top, bottom = parts[parts.length - 1].getBoundingClientRect().bottom, g = topGap() + 8;
+      if (top < g || bottom > innerHeight - 8) window.scrollBy({ top: top - g, behavior: 'instant' });
+    }
+    if (isComment(sel)) sel.querySelector(':scope > details')?.focus({ preventScroll: true }); // Reddit's own keys follow focus
+    else if (document.activeElement && document.activeElement !== document.body && !document.activeElement.closest?.('#rs-keyhelp')) document.activeElement.blur?.();
+    if (sel.classList.contains('rs-row')) lastSel.set(location.href, sel.dataset.rsId);
+  };
+  const move = (d) => {
+    const L = items();
+    if (!L.length) return;
+    const i = L.indexOf(sel);
+    if (i >= 0) return select(L[Math.max(0, Math.min(L.length - 1, i + d))]);
+    const g = topGap();
+    const first = L.findIndex((x) => topOf(x) >= g - 4); // nothing picked yet: start with what's on screen
+    select(L[first < 0 ? L.length - 1 : first]);
+  };
+  const moveLevel = (d) => {
+    const L = items(), i = L.indexOf(sel);
+    if (i < 0 || !isComment(sel)) return move(d);
+    const dp = +sel.getAttribute('depth') || 0;
+    for (let k = i + d; k >= 1 && k < L.length; k += d) if ((+L[k].getAttribute('depth') || 0) <= dp) return select(L[k]);
+  };
+  const parentOf = (c) => document.querySelector(`shreddit-comment[thingid="${c.getAttribute('parentid')}"]`);
+  const toParent = () => { if (isComment(sel) && +sel.getAttribute('depth') > 0) { const p = parentOf(sel); if (p) select(p); } };
+  const toTop = () => { let c = sel; while (isComment(c) && +c.getAttribute('depth') > 0 && parentOf(c)) c = parentOf(c); if (c && c !== sel) select(c); };
+  const fold = () => {
+    if (!isComment(sel)) return;
+    const d = sel.querySelector(':scope > details');
+    if (d) { d.open = !d.open; select(sel); }
+  };
+  const ownButton = (c, css) => [...c.querySelectorAll(css)].find((x) => x.closest('shreddit-comment') === c);
+  const voteSel = (dir) => {
+    if (!sel) return;
+    if (sel.classList.contains('rs-row')) return sel.querySelector(dir === 'up' ? '.rs-up' : '.rs-down')?.click();
+    const root = isComment(sel) ? ownButton(sel, 'shreddit-comment-action-row')?.shadowRoot : sel.shadowRoot;
+    const b = root?.querySelector(dir === 'up' ? 'button[upvote]' : 'button[downvote]');
+    if (b) b.click(); else toast('Reddit has not finished loading that one. Try again.');
+  };
+  const postOf = (x) => (x?.classList.contains('rs-row') ? x.rsPost : x?.tagName === 'SHREDDIT-POST' ? x : null);
+  const linkOf = (x) => new URL(isComment(x) ? x.getAttribute('permalink') : postOf(x)?.getAttribute('permalink') || location.pathname, location.origin).href;
+  const go = (path, newTab) => { if (newTab) window.open(new URL(path, location.origin).href, '_blank', 'noopener'); else location.assign(path); };
+  const openIn = (a, newTab) => { if (!a) return; if (newTab) window.open(a.href, '_blank', 'noopener'); else a.click(); };
+  // s on a post page. Reddit's own s saves the post even when a comment is picked, so RESpawn answers it.
+  // Reddit doesn't mark saved comments on the page, so a comment counts as unsaved until you save it here.
+  const savedComments = new Set();
+  const saveSel = async () => {
+    if (!sel || needLogin('save')) return;
+    try {
+      if (isComment(sel)) {
+        const id = sel.getAttribute('thingid'), on = !savedComments.has(id);
+        await gql('UpdateCommentSaveState', { commentId: id, saveState: on ? 'SAVED' : 'NONE' });
+        if (on) savedComments.add(id); else savedComments.delete(id);
+        toast(on ? 'Comment saved. Press s again to unsave.' : 'Comment removed from saved.');
+      } else if (sel.tagName === 'SHREDDIT-POST') {
+        const menu = sel.querySelector('shreddit-post-overflow-menu'), on = !menu?.hasAttribute('is-post-saved');
+        await gql('UpdatePostSaveState', { postId: sel.id, saveState: on ? 'SAVED' : 'NONE' });
+        menu?.toggleAttribute('is-post-saved', on);
+        toast(on ? 'Post saved.' : 'Post removed from saved.');
+      }
+    } catch { toast('Reddit did not take that. Try again.'); }
+  };
+  const hideSel = async () => {
+    const L = items(), i = L.indexOf(sel), row = sel;
+    await row.querySelector('.rs-hide')?.onclick?.();
+    if (row.classList.contains('rs-gone')) select(L[i + 1] || L[i - 1]);
+  };
+  const KEYMAP = {
+    feed: {
+      j: () => move(1), k: () => move(-1), J: () => { const L = items(); select(L[L.length - 1]); }, K: () => select(items()[0]),
+      a: () => voteSel('up'), z: () => voteSel('down'),
+      Enter: (e) => openIn(sel?.querySelector('.rs-title'), e.shiftKey),
+      c: () => openIn(sel?.querySelector('.rs-acts a'), false), C: () => openIn(sel?.querySelector('.rs-acts a'), true),
+      x: () => sel?.querySelector('.rs-x')?.click(), X: () => document.querySelector('.rs-expand-all')?.click(),
+      s: () => sel?.querySelector('.rs-save')?.click(), h: () => sel && hideSel(),
+      l: async () => sel && toast((await copyText(linkOf(sel))) ? 'Link copied.' : 'Could not copy the link.'),
+      r: () => { const p = postOf(sel); if (p) go(`/${p.getAttribute('subreddit-prefixed-name')}/`); },
+      u: () => { const p = postOf(sel); if (p?.getAttribute('author')) go(`/user/${p.getAttribute('author')}/`); },
+    },
+    comments: {
+      j: () => move(1), k: () => move(-1), J: () => moveLevel(1), K: () => moveLevel(-1), p: toParent, t: toTop, Enter: fold, f: fold,
+      a: () => voteSel('up'), z: () => voteSel('down'),
+      r: () => { if (isComment(sel)) ownButton(sel, '[slot="comment-reply"] button')?.click(); },
+      s: saveSel,
+      l: async () => sel && toast((await copyText(linkOf(sel))) ? 'Link copied.' : 'Could not copy the link.'),
+      u: () => { const a = sel?.getAttribute('author'); if (a) go(`/user/${a}/`); },
+      // Reddit's own h and x act on the post whatever is picked, so they do nothing here
+      h: () => {}, x: () => {},
+    },
+  };
+  const REPEATS = new Set(['j', 'k', 'J', 'K']);
+  const skipKey = (e) => {
+    const path = e.composedPath(), t = path[0];
+    if (!t?.closest) return false;
+    if (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.closest('[contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return true;
+    if ((e.key === 'Enter' || e.key === ' ') && t.closest('button, a, summary, [role="button"], [role="menuitem"]')) return true;
+    return path.some((n) => n.getAttribute && n.id !== 'rs-keyhelp' && (n.tagName === 'DIALOG' || n.getAttribute('aria-modal') === 'true' || (n.getAttribute('role') === 'dialog' && n.id !== 'rs-panel')));
+  };
+  window.addEventListener('keydown', (e) => {
+    if (!cfg.enabled || !cfg.keys || e.ctrlKey || e.metaKey || e.altKey || e.isComposing || panel || editor) return;
+    if (keyHelp && (e.key === 'Escape' || e.key === '?')) { e.preventDefault(); e.stopImmediatePropagation(); closeKeyHelp(); return; }
+    if (skipKey(e)) return;
+    const fn = e.key === '?' ? openKeyHelp : KEYMAP[isCommentsPage() ? 'comments' : 'feed'][e.key];
+    if (!fn) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.repeat && !REPEATS.has(e.key)) return;
+    fn(e);
+  }, true);
+  // Clicking a post or comment picks it, like RES
+  document.addEventListener('click', (e) => {
+    if (!cfg.enabled || !cfg.keys) return;
+    const t = e.target;
+    const it = t.closest?.('.rs-row') || (isCommentsPage() && (t.closest?.('shreddit-comment') || t.closest?.('shreddit-post[view-context="CommentsPage"]')));
+    if (it && it !== sel) select(it, false);
+  }, true);
+  const restoreSel = () => {
+    if (!cfg.keys || isCommentsPage() || sel?.isConnected) return;
+    const id = lastSel.get(location.href);
+    const row = id && document.querySelector(`.rs-row[data-rs-id="${id}"]`);
+    if (row) select(row, false);
+  };
+
   // ---------- run ----------
   let lastUrl = '';
   // Reddit often changes pages without reloading, and swaps the page parts in a moment later; so everything below
@@ -1021,7 +1202,7 @@
     if (!onComments && nav) { nav.remove(); nav = null; comments.started = null; marks.new = []; marks.op = []; marks.mod = []; }
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
-    densify(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear();
+    densify(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };
