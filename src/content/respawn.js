@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -107,6 +107,8 @@
     ['Shortcut bar', [
       ['showShortcuts', 'Show shortcut bar'],
       ['scMode', 'Bar shows', [['mine', 'My list'], ['visits', 'Most visited']]],
+      ['linkFriends', 'FRIENDS link'],
+      ['linkMod', 'MOD and MODQUEUE links (moderators)'],
       ['editShortcuts', 'Your shortcuts', 'button'],
     ]],
     ['Keyboard', [
@@ -158,7 +160,7 @@
   const toggle = (key) => {
     const i = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
     i.checked = !!cfg[key];
-    i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (key === 'showShortcuts') shortcutBar(); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
+    i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (['showShortcuts', 'linkFriends', 'linkMod'].includes(key)) shortcutBar(); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
     return i;
   };
 
@@ -276,8 +278,14 @@
     bar.classList.remove('rs-dragging'); // a finished drag rebuilds the bar
     const path = location.pathname;
     const fixed = [['HOME', '/', path === '/' || /^\/(best|hot|new|top|rising)\/?$/.test(path)], ['POPULAR', '/r/popular/', /^\/r\/popular/i.test(path)], ['ALL', '/r/all/', /^\/r\/all/i.test(path)]];
-    if (loggedIn()) fixed.push(['SAVED', '/user/me/saved/', /^\/user\/[^/]+\/saved/i.test(path)]);
-    for (const [label, href, on] of fixed) bar.append(el('a', { href, class: on ? 'rs-fixed rs-cur' : 'rs-fixed', text: label }));
+    const link = ([label, href, on]) => el('a', { href, class: on ? 'rs-fixed rs-cur' : 'rs-fixed', text: label });
+    for (const f of fixed) bar.append(link(f));
+    if (loggedIn()) {
+      if (cfg.linkFriends) bar.append(specialLink('friends'));
+      bar.dataset.mods = String(modded().length);
+      if (cfg.linkMod && modded().length) bar.append(specialLink('mod'), link(['MODQUEUE', '/mod/queue', /^\/mod\/queue/i.test(path)]));
+      bar.append(link(['SAVED', '/user/me/saved/', /^\/user\/[^/]+\/saved/i.test(path)]));
+    }
     bar.append(el('span', { class: 'rs-sep', 'aria-hidden': 'true' }));
     const auto = cfg.scMode === 'visits';
     const items = auto ? mostVisited() : scList();
@@ -461,6 +469,7 @@
   const mySubsOutside = (e) => { if (mySubs && !mySubs.contains(e.target) && !e.target.closest?.('.rs-mine')) closeMySubs(); };
   const mySubsEsc = (e) => { if (e.key === 'Escape') closeMySubs(); };
   const toggleMySubs = (btn) => {
+    closeFeedAsk();
     if (mySubs) return closeMySubs();
     let all = [];
     const collect = () => {
@@ -525,6 +534,158 @@
     btn.setAttribute('aria-expanded', 'true');
     search.focus();
     setTimeout(() => { document.addEventListener('click', mySubsOutside, true); document.addEventListener('keydown', mySubsEsc, true); }, 0);
+  };
+
+  // ---------- FRIENDS and MOD: old Reddit's r/friends and r/mod, rebuilt for the new design ----------
+  // Reddit shows r/friends and r/mod only in the old design (even its own "r/Mod" menu link opens old Reddit). So each
+  // becomes a private custom feed on your account: made when you first click it (after you say yes), kept up to date after.
+  const navLoaded = () => !!document.querySelector('left-nav-communities-controller[initialstatejson]');
+  const modded = () => {
+    const c = document.querySelector('left-nav-moderation-controller[initialstatejson]');
+    if (c || navLoaded()) {
+      const raw = c ? c.getAttribute('initialstatejson') : '[]';
+      if (raw === modded.raw) return modded.list;
+      try {
+        const list = JSON.parse(raw).map((x) => ({ name: String(x.prefixedName || '').replace(/^r\//, ''), id: x.id || '' })).filter((x) => x.name && /^t5_/.test(x.id));
+        localStorage.setItem('rs-modded', JSON.stringify(list));
+        modded.raw = raw; modded.list = list;
+        return list;
+      } catch { /* fall back to the copy */ }
+    }
+    try { return JSON.parse(localStorage.getItem('rs-modded') || '[]'); } catch { return []; }
+  };
+  // People you follow: Reddit lists their profiles with your communities, as u/name.
+  const followed = () => {
+    const c = document.querySelector('left-nav-communities-controller[initialstatejson]');
+    if (!c) return null;
+    try { return JSON.parse(c.getAttribute('initialstatejson')).filter((x) => /^u\//.test(x.prefixedName || '') && /^t5_/.test(x.id || '')).map((x) => ({ name: `u_${x.prefixedName.slice(2)}`, id: x.id })); } catch { return null; }
+  };
+  const profileId = async (user) => {
+    const ids = readJSON('rs-profileids'), k = user.toLowerCase();
+    if (ids[k]) return ids[k];
+    await new Promise((r) => setTimeout(r, 120)); // one lookup at a time, gently
+    const r = await fetch(`/user/${encodeURIComponent(user)}/about.json`, { credentials: 'include' });
+    const id = r.ok ? (await r.json().catch(() => null))?.data?.subreddit?.name : null;
+    if (!/^t5_/.test(id || '')) return null;
+    ids[k] = id;
+    try { localStorage.setItem('rs-profileids', JSON.stringify(ids)); } catch { /* storage full */ }
+    return id;
+  };
+  // Your friends list plus the people you follow. "complete" = both lists were read, so a person missing from them
+  // really left (only then does the feed drop anyone).
+  const friendsList = async (say) => {
+    const out = new Map(), fol = followed();
+    for (const f of fol || []) out.set(f.name.toLowerCase(), f);
+    const r = await fetch('/prefs/friends.json', { credentials: 'include' });
+    const j = r.ok ? await r.json().catch(() => null) : null;
+    const names = ((Array.isArray(j) ? j[0] : j)?.data?.children || []).map((c) => c?.name).filter((n) => /^[A-Za-z0-9_-]{3,20}$/.test(n || ''));
+    let i = 0;
+    for (const n of names) {
+      say?.(`Checking ${++i} of ${names.length}…`);
+      if (out.has(`u_${n}`.toLowerCase())) continue;
+      const id = await profileId(n).catch(() => null);
+      if (id) out.set(`u_${n}`.toLowerCase(), { name: `u_${n}`, id });
+    }
+    return { list: [...out.values()], complete: !!j && !!fol };
+  };
+  const SPECIAL = {
+    friends: { label: 'FRIENDS', title: 'Friends feed', name: 'Friends', tip: 'Posts from your friends and the people you follow, in the new look.', empty: 'Your friends list is empty and you follow nobody yet.', want: friendsList },
+    mod: { label: 'MOD', title: 'Mod feed', name: 'Mod', tip: 'Posts from the communities you moderate, in the new look.', empty: 'You do not moderate any communities.', want: async () => ({ list: modded(), complete: navLoaded() }) },
+  };
+  const specialFeed = (k) => (cfg.feeds || {})[k];
+  const setSpecial = (k, v) => { const f = { ...(cfg.feeds || {}) }; if (v) f[k] = v; else delete f[k]; saveCfg({ feeds: f }); };
+  const feedMembers = async (path) => {
+    const r = await fetch(`/api/multi${path.replace(/\/$/, '')}.json`, { credentials: 'include' });
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error(`feed ${r.status}`);
+    return ((await r.json()).data?.subreddits || []).map((x) => x.name).filter(Boolean);
+  };
+  // Keep a feed in step: add who is new, drop who left. At most every 10 minutes per feed.
+  const syncing = {};
+  const syncSpecial = async (k) => {
+    const f = specialFeed(k);
+    if (!f || syncing[k] || Date.now() - (syncing[`${k}At`] || 0) < 10 * 60e3 || !csrf()) return;
+    syncing[k] = true; syncing[`${k}At`] = Date.now();
+    try {
+      const have = await feedMembers(f.path);
+      if (have === null) { setSpecial(k, null); shortcutBar(); return; } // deleted on Reddit: offer to make it again
+      const { list, complete } = await SPECIAL[k].want();
+      const haveSet = new Set(have.map((n) => n.toLowerCase())), wantSet = new Set(list.map((x) => x.name.toLowerCase()));
+      const add = list.filter((x) => !haveSet.has(x.name.toLowerCase()));
+      const ids = { ...(f.ids || {}) };
+      for (const x of list) ids[x.name.toLowerCase()] = x.id;
+      if (complete) {
+        const drop = [];
+        for (const n of have.filter((h) => !wantSet.has(h.toLowerCase()))) { const id = ids[n.toLowerCase()] || (await subId(n).catch(() => null))?.id; if (id) drop.push(id); }
+        if (drop.length) await gql('CustomFeedRemoveSubreddits', { label: f.path, subredditIds: drop }, true);
+      }
+      const room = 100 - (complete ? have.filter((h) => wantSet.has(h.toLowerCase())).length : have.length); // Reddit's limit
+      if (add.length && room > 0) await gql('CustomFeedAddSubreddits', { label: f.path, subredditIds: add.slice(0, room).map((x) => x.id) }, true);
+      setSpecial(k, { ...f, ids });
+    } catch { /* try again next time */ } finally { syncing[k] = false; }
+  };
+  let feedAsk = null;
+  const closeFeedAsk = () => { feedAsk?.remove(); feedAsk = null; document.removeEventListener('click', feedAskOutside, true); document.removeEventListener('keydown', feedAskEsc, true); };
+  const feedAskOutside = (e) => { if (feedAsk && !feedAsk.contains(e.target) && !e.target.closest?.('.rs-special')) closeFeedAsk(); };
+  const feedAskEsc = (e) => { if (e.key === 'Escape') closeFeedAsk(); };
+  const askSpecial = (k, btn) => {
+    const again = feedAsk?.dataset.k === k;
+    closeFeedAsk(); closeMySubs();
+    if (again) return;
+    const S = SPECIAL[k];
+    feedAsk = el('div', { id: 'rs-feedask', role: 'dialog', 'aria-label': S.title, 'data-k': k });
+    const msg = el('p', { class: 'rs-fa-msg', role: 'status' });
+    const no = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', text: 'Not now' });
+    const make = el('button', { type: 'button', class: 'rs-done', text: 'Make it' });
+    no.onclick = closeFeedAsk;
+    make.onclick = async () => {
+      if (needLogin('make this feed')) return;
+      const busy = (on) => { make.disabled = on; no.disabled = on; };
+      const say = (t) => { msg.textContent = t; };
+      busy(true);
+      try {
+        say('Getting the list…');
+        const { list } = await S.want(say);
+        if (!list.length) { say(S.empty); busy(false); return; }
+        const use = list.slice(0, 100);
+        say('Making the feed…');
+        const d = await gql('CustomFeedCreate', { displayName: S.name, descriptionMd: 'Kept up to date by RESpawn.', visibility: 'PRIVATE', subredditIds: use.map((x) => x.id) });
+        const path = d?.multireddit?.path;
+        if (!path) throw new Error('no feed');
+        setSpecial(k, { path, ids: Object.fromEntries(use.map((x) => [x.name.toLowerCase(), x.id])) });
+        say(list.length > 100 ? `Made it with the first 100 of ${list.length}. Opening…` : 'Made it. Opening…');
+        location.assign(path);
+      } catch (err) { say(err.reddit ? `Reddit said: ${err.reddit}` : 'Reddit did not take that. Try again.'); busy(false); }
+    };
+    feedAsk.append(
+      el('b', { class: 'rs-fa-title', text: S.title }),
+      el('p', { class: 'rs-fa-tip', text: `${S.tip} Saved on Reddit as a private custom feed named ${S.name}, kept up to date.` }),
+      msg, el('div', { class: 'rs-fa-foot' }, [no, make]),
+    );
+    const r = btn.getBoundingClientRect();
+    feedAsk.style.left = `${Math.max(8, Math.min(Math.round(r.left), innerWidth - 360))}px`;
+    feedAsk.style.top = `${Math.round(r.bottom + 6)}px`;
+    document.body.append(feedAsk);
+    btn.setAttribute('aria-expanded', 'true');
+    make.focus();
+    setTimeout(() => { document.addEventListener('click', feedAskOutside, true); document.addEventListener('keydown', feedAskEsc, true); }, 0);
+  };
+  const specialLink = (k) => {
+    const S = SPECIAL[k], f = specialFeed(k);
+    if (!f) {
+      const b = el('button', { type: 'button', class: 'rs-fixed rs-special', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', text: S.label });
+      b.onclick = (e) => { e.stopPropagation(); askSpecial(k, b); };
+      return b;
+    }
+    const on = location.pathname.toLowerCase().startsWith(f.path.toLowerCase());
+    // Deleted on Reddit? Your feed list no longer has it: check once and offer to make it again.
+    const listed = document.querySelector('left-nav-multireddits-controller[initialstatejson]') ? myFeeds().some((x) => x.path.toLowerCase() === f.path.toLowerCase()) : true;
+    if (!listed && !syncing[`${k}Checked`]) { syncing[`${k}Checked`] = true; syncing[`${k}At`] = 0; }
+    if (on || !listed) syncSpecial(k);
+    const a = el('a', { href: f.path, class: `rs-fixed rs-special${on ? ' rs-cur' : ''}`, title: `${S.title} (private custom feed)`, text: S.label });
+    a.addEventListener('click', () => syncSpecial(k));
+    a.addEventListener('auxclick', () => syncSpecial(k));
+    return a;
   };
 
   // ---------- shortcut editor ----------
@@ -866,10 +1027,11 @@
     return up?.getAttribute('aria-pressed') === 'true' ? 'UP' : down?.getAttribute('aria-pressed') === 'true' ? 'DOWN' : 'NONE';
   };
   // The same small requests Reddit's own buttons send (checked by watching its vote, Save and Hide).
-  const gql = async (operation, input) => {
+  // Most take their values under "input"; a few (adding to or removing from a custom feed) take them as they are.
+  const gql = async (operation, input, plain = false) => {
     const r = await fetch('/svc/shreddit/graphql', {
       method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ operation, variables: { input }, csrf_token: csrf() }),
+      body: JSON.stringify({ operation, variables: plain ? input : { input }, csrf_token: csrf() }),
     });
     if (!r.ok) throw new Error(`${operation} ${r.status}`);
     const j = await r.json().catch(() => ({}));
@@ -1298,7 +1460,7 @@
   let lastUrl = '';
   // Reddit often changes pages without reloading, and swaps the page parts in a moment later; so everything below
   // checks the page as it is on every pass instead of trusting the moment the address changed.
-  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); };
+  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     const onComments = isCommentsPage();
@@ -1307,6 +1469,7 @@
     if (!onComments && nav) { nav.remove(); nav = null; comments.started = null; marks.new = []; marks.op = []; marks.mod = []; }
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
+    else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
     densify(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
