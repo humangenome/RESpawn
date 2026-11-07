@@ -126,7 +126,8 @@ html.rs-on .masthead h1 { font-size: 24px !important; }
 /* Feed: our rows replace the cards */
 html.rs-on.rs-feed article:has(shreddit-post[data-rs]), html.rs-on.rs-feed shreddit-post[data-rs] { display: none !important; }
 html.rs-on.rs-feed shreddit-feed hr { display: none !important; }
-html.rs-on.rs-hide-ads shreddit-ad-post, html.rs-on.rs-hide-ads article:has(shreddit-ad-post) { display: none !important; }
+html.rs-on.rs-hide-ads shreddit-ad-post, html.rs-on.rs-hide-ads article:has(shreddit-ad-post),
+html.rs-on.rs-hide-ads shreddit-comments-page-ad, html.rs-on.rs-hide-ads shreddit-comment-tree-ad, html.rs-on.rs-hide-ads shreddit-sidebar-ad { display: none !important; }
 
 .rs-row {
   display: grid; grid-template-columns: 28px 44px 70px minmax(0, 1fr); column-gap: 10px; align-items: start;
@@ -156,6 +157,13 @@ html.rs-on.rs-hide-ads shreddit-ad-post, html.rs-on.rs-hide-ads article:has(shre
 .rs-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 3px 0 0 -6px; }
 .rs-acts > * { display: inline-flex; align-items: center; height: 22px; padding: 0 6px; border: 0; border-radius: 6px; background: none; font: 700 12px/1 var(--rs-font); color: var(--rs-weak); text-decoration: none; cursor: pointer; }
 .rs-acts > *:hover { background: var(--rs-strong-bg); color: var(--rs-text); }
+.rs-acts > button:disabled { opacity: .55; cursor: default; }
+/* A hidden post leaves a slim line with Undo in its place */
+html.rs-on .rs-row.rs-gone { display: none !important; }
+html:not(.rs-on) .rs-hidden-note { display: none !important; }
+.rs-hidden-note { display: flex; align-items: center; gap: 10px; margin: 2px 0; padding: 8px 12px; border: 1px dashed var(--rs-line); border-radius: 10px; font: 600 13px/1.3 var(--rs-font); color: var(--rs-weak); }
+.rs-hidden-note button { padding: 3px 10px; border: 1px solid var(--rs-line); border-radius: 999px; background: none; font: 700 12px/1.3 var(--rs-font); color: var(--rs-text); cursor: pointer; }
+.rs-hidden-note button:hover { background: var(--rs-strong-bg); }
 
 /* The opened content */
 .rs-box { grid-column: 4 / 5; margin: 8px 0 4px; max-width: 900px; }
@@ -180,6 +188,8 @@ html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 .rs-cacts { display: inline-flex; align-items: center; margin-left: 4px; }
 .rs-cacts a { padding: 2px 5px; border-radius: 6px; font: 700 12px/1.2 var(--rs-font); color: var(--rs-weak); text-decoration: none; }
 .rs-cacts a:hover { background: var(--rs-hover); color: var(--rs-text); }
+/* "parent" flashes the comment it jumps to */
+.rs-flash { background-color: color-mix(in srgb, var(--rs-up) 16%, transparent) !important; border-radius: 6px; }
 #rs-nav {
   position: fixed; right: 24px; bottom: 24px; z-index: 20; display: flex; align-items: center; gap: 6px; padding: 8px 10px;
   border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); box-shadow: 0 6px 24px rgba(0,0,0,.12); font: 600 12px/1 var(--rs-font);
@@ -325,7 +335,11 @@ html.rs-on.rs-sub-plain .masthead section.relative[class*="-top-"] { margin-top:
 
 /* Post pages: the post's "..." sits next to its subreddit and time instead of far right */
 html.rs-on.rs-comments shreddit-post[view-context="CommentsPage"] > [slot="credit-bar"],
-html.rs-on.rs-comments shreddit-ad-post [slot="credit-bar"] { justify-content: flex-start !important; gap: 12px; }
+html.rs-on.rs-comments shreddit-comments-page-ad > [slot="credit-bar"],
+html.rs-on.rs-comments shreddit-comment-tree-ad [slot="credit-bar"] { justify-content: flex-start !important; gap: 12px; }
+/* the ad's name block stretches to fill the row, which is what pushed its "..." to the far edge */
+html.rs-on.rs-comments shreddit-comments-page-ad > [slot="credit-bar"] > .flex-1,
+html.rs-on.rs-comments shreddit-comment-tree-ad [slot="credit-bar"] > .flex-1 { flex: 0 1 auto !important; }
 
 /* Post info box */
 html:not(.rs-on) #rs-postinfo { display: none !important; }

@@ -26,7 +26,7 @@ Early work. Nothing to install yet.
 - It works on the Reddit page you are already looking at, using your own signed-in browser.
 - It has no servers of its own, no tracking and no analytics. Your settings, tags and saved comments
   stay in your browser.
-- Votes, saves and other actions press Reddit's own buttons.
+- Votes, saves and hides send the same requests Reddit's own buttons send, from your browser, as you.
 
 ## License
 

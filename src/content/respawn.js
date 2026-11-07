@@ -759,18 +759,69 @@
     const up = post.shadowRoot?.querySelector('button[upvote]'), down = post.shadowRoot?.querySelector('button[downvote]');
     return up?.getAttribute('aria-pressed') === 'true' ? 'UP' : down?.getAttribute('aria-pressed') === 'true' ? 'DOWN' : 'NONE';
   };
-  const sendVote = async (postId, voteState) => {
+  // The same small requests Reddit's own buttons send (checked by watching its vote, Save and Hide).
+  const gql = async (operation, input) => {
     const r = await fetch('/svc/shreddit/graphql', {
       method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ operation: 'UpdatePostVoteState', variables: { input: { postId, voteState } }, csrf_token: csrf() }),
+      body: JSON.stringify({ operation, variables: { input }, csrf_token: csrf() }),
     });
-    if (!r.ok) throw new Error(`vote ${r.status}`);
+    if (!r.ok) throw new Error(`${operation} ${r.status}`);
     const j = await r.json().catch(() => ({}));
-    if (j?.errors?.length) throw new Error('vote refused');
+    const d = j?.data ? Object.values(j.data)[0] : null;
+    if (j?.errors?.length || d?.ok === false || d?.errors?.length) throw new Error(`${operation} refused`);
+    return d;
   };
+  const sendVote = (postId, voteState) => gql('UpdatePostVoteState', { postId, voteState });
   const toast = (msg) => {
+    document.querySelectorAll('.rs-toast').forEach((t) => t.remove());
     const t = el('div', { class: 'rs-toast', role: 'status', text: msg });
     document.body.append(t); setTimeout(() => t.remove(), 3500);
+  };
+  const copyText = async (text) => {
+    try { await navigator.clipboard.writeText(text); return true; } catch { /* no clipboard access: fall back */ }
+    const ta = el('textarea', { readonly: true, style: 'position:fixed;left:-9999px;top:0' });
+    ta.value = text; document.body.append(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch { /* nothing else to try */ }
+    ta.remove(); return ok;
+  };
+  const needLogin = (what) => { if (loggedIn() && csrf()) return false; toast(`Log in to Reddit to ${what}.`); return true; };
+
+  // share / save / hide under each row, like old Reddit
+  const shareBtn = (perma) => {
+    const b = el('button', { type: 'button', text: 'share', title: 'Copy the link to this post' });
+    b.onclick = async () => toast((await copyText(new URL(perma, location.origin).href)) ? 'Link copied.' : 'Could not copy the link.');
+    return b;
+  };
+  const saveBtn = (post) => {
+    const menu = () => post.querySelector('shreddit-post-overflow-menu'); // Reddit marks saved posts on its own "..." menu
+    let saved = !!menu()?.hasAttribute('is-post-saved');
+    const b = el('button', { type: 'button', class: 'rs-save' });
+    const paint = () => { b.textContent = saved ? 'unsave' : 'save'; b.title = saved ? 'Remove from your saved posts' : 'Save this post'; };
+    b.onclick = async () => {
+      if (needLogin('save posts')) return;
+      saved = !saved; paint(); b.disabled = true;
+      try { await gql('UpdatePostSaveState', { postId: post.id, saveState: saved ? 'SAVED' : 'NONE' }); menu()?.toggleAttribute('is-post-saved', saved); }
+      catch { saved = !saved; paint(); toast('Reddit did not take that. Try again.'); }
+      b.disabled = false;
+    };
+    paint(); return b;
+  };
+  const hideBtn = (post, row) => {
+    const b = el('button', { type: 'button', class: 'rs-hide', text: 'hide', title: 'Hide this post' });
+    b.onclick = async () => {
+      if (needLogin('hide posts')) return;
+      b.disabled = true;
+      try { await gql('UpdatePostHideState', { postId: post.id, hideState: 'HIDDEN' }); } catch { b.disabled = false; toast('Reddit did not take that. Try again.'); return; }
+      const undo = el('button', { type: 'button', text: 'Undo' });
+      const note = el('div', { class: 'rs-hidden-note', role: 'status' }, [el('span', { text: 'Post hidden.' }), undo]);
+      row.classList.add('rs-gone'); row.after(note); undo.focus();
+      undo.onclick = async () => {
+        undo.disabled = true;
+        try { await gql('UpdatePostHideState', { postId: post.id, hideState: 'NONE' }); } catch { undo.disabled = false; toast('Reddit did not take that. Try again.'); return; }
+        row.classList.remove('rs-gone'); note.remove(); b.disabled = false; b.focus();
+      };
+    };
+    return b;
   };
   const voteBox = (post) => {
     const base = +post.getAttribute('score') || 0;
@@ -831,7 +882,7 @@
       const n = +g('comment-count') || 0;
       const acts = el('div', { class: 'rs-acts' }, [
         el('a', { href: perma, text: `${num(n)} comment${n === 1 ? '' : 's'}` }),
-        el('button', { type: 'button', text: 'share' }), el('button', { type: 'button', text: 'save' }), el('button', { type: 'button', text: 'hide' }),
+        shareBtn(perma), saveBtn(post), hideBtn(post, row),
         isSelf ? null : el('a', { href: link, target: '_blank', rel: 'noopener', title: 'Open link and comments', text: '[l+c]' }),
       ]);
       const main = el('div', { class: 'rs-main' }, [titleLine, meta, acts]);
@@ -873,7 +924,7 @@
     const link = el('input', { type: 'text', class: 'rs-pi-link', readonly: true, 'aria-label': 'Short link', value: short });
     link.onfocus = () => link.select();
     const copy = el('button', { type: 'button', class: 'rs-btn', text: 'Copy' });
-    copy.onclick = async () => { try { await navigator.clipboard.writeText(short); toast('Short link copied.'); } catch { link.select(); toast('Press Ctrl+C to copy the link.'); } };
+    copy.onclick = async () => { if (await copyText(short)) toast('Short link copied.'); else { link.select(); toast('Press Ctrl+C to copy the link.'); } };
     box = el('section', { id: 'rs-postinfo', 'data-id': post.id, 'aria-label': 'About this post' }, [
       el('div', { class: 'rs-pi-when', text: `Submitted ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} at ${when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` }),
       el('div', { class: 'rs-pi-score' }, [el('b', { text: score.toLocaleString() }), ` point${score === 1 ? '' : 's'}`, Number.isFinite(ratio) ? el('span', { text: ` (${Math.round((ratio <= 1 ? ratio * 100 : ratio))}% upvoted)` }) : null]),
@@ -898,6 +949,19 @@
   }, true);
 
   // ---------- comment pages ----------
+  // "parent" jumps up to the comment this one answers and flashes it; if that comment isn't on the page, it opens it.
+  const parentLink = (c) => {
+    const a = el('a', { href: c.getAttribute('parent-permalink') || c.getAttribute('permalink') || '#', text: 'parent', title: 'Go to the comment this replies to' });
+    a.onclick = (e) => {
+      const p = document.querySelector(`shreddit-comment[thingid="${c.getAttribute('parentid')}"]`);
+      if (!p || e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
+      e.preventDefault();
+      const own = [...p.querySelectorAll('[slot="commentMeta"], [slot="comment"]')].filter((x) => x.closest('shreddit-comment') === p);
+      (own[0] || p).scrollIntoView({ block: 'center', behavior: 'smooth' });
+      own.forEach((x) => { x.classList.add('rs-flash'); clearTimeout(x.rsFlash); x.rsFlash = setTimeout(() => x.classList.remove('rs-flash'), 1500); });
+    };
+    return a;
+  };
   const marks = { new: [], op: [], mod: [] };
   const comments = () => {
     const page = document.querySelector('shreddit-post[view-context="CommentsPage"]');
@@ -922,6 +986,7 @@
       if (comments.last && Date.parse(c.getAttribute('created')) > comments.last) { c.setAttribute('rs-new', ''); meta.append(el('span', { class: 'rs-badge rs-is-new', text: 'new' })); marks.new.push(c); }
       if (c.getAttribute('is-mod-distinguished') === 'true') marks.mod.push(c);
       const links = el('span', { class: 'rs-cacts' }, [el('a', { href: c.getAttribute('permalink') || '#', text: 'permalink' })]);
+      if (+c.getAttribute('depth') > 0 && c.getAttribute('parentid')) links.append(parentLink(c));
       (c.querySelector(':scope > details [slot="actionRow"]') || meta).append(links);
     }
     updateNav();
