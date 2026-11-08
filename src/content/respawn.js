@@ -132,6 +132,9 @@
       ['keys', 'Keyboard shortcuts'],
       ['keyHelp', 'List of keys (or press ?)', 'button'],
     ]],
+    ['Backup', [
+      ['settingsFile', 'Settings file', 'file'],
+    ]],
   ];
   let panel = null;
   const closePanel = () => { panel?.remove(); panel = null; document.removeEventListener('click', outside, true); document.removeEventListener('keydown', esc, true); };
@@ -148,7 +151,12 @@
     for (const [title, items] of SETTINGS) {
       panel.append(el('div', { class: 'rs-panel-sec', text: title }));
       for (const [key, label, choices, hint] of items) {
-        if (choices === 'button') {
+        if (choices === 'file') {
+          const save = el('button', { type: 'button', class: 'rs-btn', text: 'Save', title: 'Save your RESpawn settings, shortcuts, tags and hide lists to a file' });
+          const load = el('button', { type: 'button', class: 'rs-btn', text: 'Load', title: 'Load RESpawn settings from a file you saved' });
+          save.onclick = saveSettingsFile; load.onclick = loadSettingsFile;
+          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: label }), el('span', { class: 'rs-set-btns' }, [save, load])]));
+        } else if (choices === 'button') {
           const keysList = key === 'keyHelp';
           const b = el('button', { type: 'button', class: 'rs-btn', text: keysList ? 'Show' : 'Edit' });
           b.onclick = () => { closePanel(); ({ keyHelp: openKeyHelp, editShortcuts: openScEditor, tagList: openTagList, filterLists: openBlockEditor })[key](); };
@@ -185,6 +193,89 @@
     i.checked = !!cfg[key];
     i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (['showShortcuts', 'linkFriends', 'linkMod'].includes(key)) shortcutBar(); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
     return i;
+  };
+
+  // ---------- settings file (RES's backup and restore) ----------
+  // Everything you set up (settings, shortcuts, tags, hide lists) plus your subreddit visit counts, in one file you keep.
+  // A loaded file is checked value by value: anything unknown or malformed is left out.
+  const FILE_KIND = 'RESpawn settings';
+  const FEED_PATH = /^\/user\/[A-Za-z0-9_-]{3,20}\/m\/[A-Za-z0-9_]{1,64}\/$/;
+  const saveSettingsFile = () => {
+    const data = { kind: FILE_KIND, version: 1, saved: new Date().toISOString(), settings: { ...cfg, simulateLastVisitHoursAgo: undefined }, visits: subVisits() };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+    const d = new Date(), two = (n) => String(n).padStart(2, '0');
+    const a = el('a', { href: url, download: `respawn-settings-${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}.json` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    toast('Settings saved to your Downloads folder.');
+  };
+  const cleanSettings = (o) => {
+    const out = {};
+    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies']) if (typeof o[k] === 'boolean') out[k] = o[k];
+    for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']]]) if (ok.includes(o[k])) out[k] = o[k];
+    for (const [k, lo, hi] of [['filterScore', -99999, 99999], ['pauseEvery', 0, 99], ['maxVideos', 0, 99]]) if (Number.isFinite(o[k])) out[k] = Math.max(lo, Math.min(hi, Math.round(o[k])));
+    if (Array.isArray(o.shortcuts)) {
+      out.shortcuts = o.shortcuts.map((x) => {
+        const v = typeof x === 'string' ? { sub: x } : x && typeof x === 'object' ? x : {};
+        if (typeof v.feed === 'string') return FEED_PATH.test(v.feed) ? { feed: v.feed, name: clip(v.name, 40) } : null;
+        if (!validSub(v.sub)) return null;
+        const name = clip(typeof v.name === 'string' ? v.name.trim() : '', 40);
+        return name ? { sub: v.sub, name } : v.sub;
+      }).filter(Boolean).slice(0, 300);
+    }
+    if (o.feeds && typeof o.feeds === 'object') {
+      out.feeds = {};
+      for (const k of ['friends', 'mod']) {
+        const f = o.feeds[k];
+        if (!f || typeof f.path !== 'string' || !FEED_PATH.test(f.path)) continue;
+        const ids = {};
+        for (const [n, id] of Object.entries(f.ids && typeof f.ids === 'object' ? f.ids : {})) if (/^[a-z0-9_-]{2,23}$/.test(n) && /^t5_[a-z0-9]{1,12}$/.test(id)) ids[n] = id;
+        out.feeds[k] = { path: f.path, ids };
+      }
+    }
+    if (o.tags && typeof o.tags === 'object') {
+      out.tags = {};
+      for (const t of Object.values(o.tags).slice(0, 5000)) {
+        if (!t || !validUser(t.name)) continue;
+        const text = clip(typeof t.text === 'string' ? t.text.trim() : '', 40), ignore = t.ignore === true;
+        if (text || ignore) out.tags[t.name.toLowerCase()] = { name: t.name, text, color: TAG_COLORS.some(([c]) => c === t.color) ? t.color : 'blue', ignore };
+      }
+    }
+    const strs = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string').join('\n') : '');
+    if (Array.isArray(o.blockWords)) out.blockWords = parseWords(strs(o.blockWords));
+    if (Array.isArray(o.blockSubs)) out.blockSubs = parseSubList(strs(o.blockSubs));
+    if (Array.isArray(o.blockSites)) out.blockSites = parseSites(strs(o.blockSites));
+    if (o.filters && typeof o.filters === 'object') { out.filters = {}; for (const k of FILTER_KEYS) if (['only', 'hide'].includes(o.filters[k])) out.filters[k] = o.filters[k]; }
+    if (o.subStyleOverrides && typeof o.subStyleOverrides === 'object') { out.subStyleOverrides = {}; for (const [k, v] of Object.entries(o.subStyleOverrides)) if (validSub(k) && typeof v === 'boolean') out.subStyleOverrides[k.toLowerCase()] = v; }
+    return out;
+  };
+  const cleanVisits = (v) => {
+    const out = {};
+    for (const x of Object.values(v && typeof v === 'object' ? v : {}).slice(0, 5000)) if (x && validSub(x.name) && Number.isFinite(x.n) && Number.isFinite(x.t)) out[x.name.toLowerCase()] = { name: x.name, n: Math.max(0, Math.min(1e6, Math.round(x.n))), t: x.t };
+    return out;
+  };
+  const loadSettingsFile = () => {
+    const inp = el('input', { type: 'file', accept: '.json,application/json', hidden: true });
+    inp.onchange = async () => {
+      const f = inp.files?.[0];
+      inp.remove();
+      if (!f) return;
+      const bad = () => toast('That file is not RESpawn settings.');
+      if (f.size > 4e6) return bad();
+      let data;
+      try { data = JSON.parse(await f.text()); } catch { return bad(); }
+      if (data?.kind !== FILE_KIND || !data.settings || typeof data.settings !== 'object') return bad();
+      const when = Date.parse(data.saved) ? new Date(data.saved).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'earlier';
+      if (!window.confirm(`Replace your RESpawn settings with the ones saved ${when}?`)) return;
+      const { simulateLastVisitHoursAgo, ...base } = DEFAULTS;
+      saveCfg({ ...base, ...cleanSettings(data.settings) });
+      if (data.visits) { try { localStorage.setItem('rs-subvisits', JSON.stringify(cleanVisits(data.visits))); } catch { /* storage full */ } }
+      closePanel(); applyEnabled(); shortcutBar(); scButton(true); refilter();
+      for (const b of document.querySelectorAll('.rs-ut')) paintTag(b);
+      toast('Settings loaded.');
+    };
+    document.body.append(inp);
+    inp.click();
   };
 
   // ---------- left sidebar slide-out ----------

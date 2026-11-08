@@ -370,10 +370,12 @@ html.rs-on.rs-sub-plain .masthead section.relative[class*="-top-"] { margin-top:
 /* Post pages: the post's "..." sits next to its subreddit and time instead of far right */
 html.rs-on.rs-comments shreddit-post[view-context="CommentsPage"] > [slot="credit-bar"],
 html.rs-on.rs-comments shreddit-comments-page-ad > [slot="credit-bar"],
-html.rs-on.rs-comments shreddit-comment-tree-ad [slot="credit-bar"] { justify-content: flex-start !important; gap: 12px; }
-/* the ad's name block stretches to fill the row, which is what pushed its "..." to the far edge */
+html.rs-on.rs-comments shreddit-comment-tree-ad [slot="credit-bar"],
+html.rs-on shreddit-ad-post > [slot="credit-bar"] { justify-content: flex-start !important; gap: 12px; }
+/* the ad's name block stretches to fill the row, which is what pushed its "..." to the far edge (feeds too, when ads show) */
 html.rs-on.rs-comments shreddit-comments-page-ad > [slot="credit-bar"] > .flex-1,
-html.rs-on.rs-comments shreddit-comment-tree-ad [slot="credit-bar"] > .flex-1 { flex: 0 1 auto !important; }
+html.rs-on.rs-comments shreddit-comment-tree-ad [slot="credit-bar"] > .flex-1,
+html.rs-on shreddit-ad-post > [slot="credit-bar"] > .flex-1 { flex: 0 1 auto !important; }
 
 /* Post info box */
 html:not(.rs-on) #rs-postinfo { display: none !important; }
@@ -486,3 +488,4 @@ html.rs-on.rs-hl shreddit-comment[rs-op] > details > summary > [slot="commentMet
 .rs-bl-field b { display: block; font-size: 14px; }
 .rs-bl-field .rs-ed-tip { display: block; margin: 2px 0 6px; }
 #rs-blocked .rs-ed-subs { width: 100%; }
+.rs-set-btns { display: inline-flex; gap: 6px; flex: none; }
