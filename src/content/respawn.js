@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, pauseEvery: 0, maxVideos: 2, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -64,6 +64,7 @@
     document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
     applySubStyle();
     paintGear();
+    if (!cfg.enabled) releaseHolds();
   };
   // On/off lives at the top of the gear's settings panel (the gear stays in Reddit's top bar while RESpawn is off).
   const paintGear = () => {
@@ -101,6 +102,10 @@
       ['filterline', 'Show filter bar'],
       ['filterScore', 'Score filter: more than', 'number'],
     ]],
+    ['Scrolling and videos', [
+      ['pauseEvery', 'Pages before a pause', 'number', '0 = never pause'],
+      ['maxVideos', 'Videos playing at once', 'number', '0 = no limit'],
+    ]],
     ['Subreddit styles', [
       ['subStyles', 'Show subreddit styles'],
     ]],
@@ -132,17 +137,21 @@
     panel.append(el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Settings' }), x]), master);
     for (const [title, items] of SETTINGS) {
       panel.append(el('div', { class: 'rs-panel-sec', text: title }));
-      for (const [key, label, choices] of items) {
+      for (const [key, label, choices, hint] of items) {
         if (choices === 'button') {
           const keysList = key === 'keyHelp';
           const b = el('button', { type: 'button', class: 'rs-btn', text: keysList ? 'Show' : 'Edit' });
           b.onclick = () => { closePanel(); if (keysList) openKeyHelp(); else openScEditor(); };
           panel.append(el('div', { class: 'rs-set' }, [el('span', { text: keysList ? label : `${label} (${scList().length})` }), b]));
         } else if (choices === 'number') {
-          const n = el('input', { type: 'number', class: 'rs-num', step: '1', 'aria-label': label });
+          const score = key === 'filterScore';
+          const n = el('input', { type: 'number', class: 'rs-num', step: '1', min: score ? null : '0', max: score ? null : '99', 'aria-label': label });
           n.value = String(cfg[key] ?? 0);
-          n.onchange = () => { saveCfg({ [key]: Math.max(-99999, Math.min(99999, parseInt(n.value, 10) || 0)) }); n.value = String(cfg[key]); refilter(); };
-          panel.append(el('label', { class: 'rs-set' }, [el('span', { text: label }), n]));
+          n.onchange = () => {
+            saveCfg({ [key]: Math.max(score ? -99999 : 0, Math.min(score ? 99999 : 99, parseInt(n.value, 10) || 0)) }); n.value = String(cfg[key]);
+            if (score) refilter(); else if (key === 'pauseEvery') { if (!cfg.pauseEvery) releaseHolds(); } else vTrim();
+          };
+          panel.append(el('label', { class: hint ? 'rs-set rs-set-2' : 'rs-set' }, [el('span', {}, [label, hint ? el('small', { class: 'rs-set-hint', text: hint }) : null]), n]));
         } else if (choices) {
           const seg = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-label': label });
           for (const [v, t] of choices) {
@@ -966,6 +975,76 @@
   document.addEventListener('click', trackOpens, true);
   document.addEventListener('auxclick', trackOpens, true);
 
+  // ---------- endless scrolling with a pause (RES's "Never-Ending Reddit") ----------
+  // Reddit loads the next page by itself near the bottom of a feed. Each page gets a small "Page N" divider, like RES,
+  // and every N pages (a setting) RESpawn holds Reddit's loader back behind a "Load more" button, which hands it back.
+  const LOADER = ':scope > faceplate-partial[slot="load-after"]';
+  const releaseHolds = () => { for (const b of document.querySelectorAll('.rs-pause button')) b.click(); };
+  const pager = () => {
+    const feed = isCommentsPage() ? null : document.querySelector('shreddit-feed');
+    const p = feed?.querySelector(LOADER);
+    if (!p || p.id === feed.rsLoader) return;
+    const first = feed.rsLoader === undefined;
+    feed.rsLoader = p.id;
+    // Reddit draws only a few posts at first and loads the rest of page 1 straight away: that load is still page 1.
+    feed.rsPages = first ? (feed.querySelectorAll('shreddit-post').length < 10 ? 0 : 1) : (feed.rsPages || 0) + 1;
+    if (!cfg.enabled || !feed.rsPages) return;
+    p.before(el('div', { class: 'rs-page', 'aria-hidden': 'true', text: `Page ${feed.rsPages + 1}` }));
+    const every = +cfg.pauseEvery || 0;
+    if (!every || feed.rsPages % every) return;
+    const go = el('button', { type: 'button', class: 'rs-btn', text: 'Load more' });
+    const bar = el('div', { class: 'rs-pause', role: 'status' }, [el('span', { text: `Paused after ${feed.rsPages} pages.` }), go]);
+    go.onclick = () => { p.setAttribute('loading', 'eager'); bar.replaceWith(p); }; // eager = Reddit loads it right away
+    p.replaceWith(bar);
+  };
+
+  // ---------- videos: at most N playing at once (RES's limit) ----------
+  // Starting one more pauses the one that started first. Players RESpawn can't pause (some outside sites) are closed.
+  const playing = []; // oldest first: { key, pause }
+  const vStop = (key) => { const i = playing.findIndex((x) => x.key === key); if (i >= 0) playing.splice(i, 1); };
+  const vTrim = () => { const max = +cfg.maxVideos || 0; while (cfg.enabled && max > 0 && playing.length > max) { const old = playing.shift(); try { old.pause(); } catch { /* already gone */ } } };
+  const vStart = (key, pause) => { vStop(key); playing.push({ key, pause }); vTrim(); };
+  // Reddit's player keeps its <video> inside its own sealed-off part of the page, which RESpawn can still look into.
+  const deepVideos = (root, out, depth = 0) => {
+    for (const v of root.querySelectorAll('video')) out.push(v);
+    if (depth < 3) for (const x of root.querySelectorAll('*')) if (x.shadowRoot) deepVideos(x.shadowRoot, out, depth + 1);
+    return out;
+  };
+  const watchVideos = () => {
+    if (!cfg.enabled || !(+cfg.maxVideos > 0)) return;
+    const vids = [...document.querySelectorAll('video')];
+    for (const pl of document.querySelectorAll('shreddit-player, shreddit-player-2')) if (pl.shadowRoot && pl.getClientRects().length) deepVideos(pl.shadowRoot, vids);
+    for (const v of vids) {
+      if (v.rsWatched) continue;
+      v.rsWatched = true;
+      const start = () => { if (v.getClientRects().length) vStart(v, () => v.pause()); }; // hidden players don't count
+      v.addEventListener('play', start);
+      v.addEventListener('pause', () => vStop(v));
+      v.addEventListener('ended', () => vStop(v));
+      if (!v.paused) start();
+    }
+  };
+  setInterval(watchVideos, 1500);
+  // YouTube and Vimeo players say when they play or pause, and take a pause request, through messages.
+  const YT_ORIGIN = 'https://www.youtube-nocookie.com', VIMEO_ORIGIN = 'https://player.vimeo.com';
+  const frameSay = (f, msg) => { try { f.contentWindow?.postMessage(JSON.stringify(msg), f.rsOrigin); } catch { /* closed */ } };
+  window.addEventListener('message', (e) => {
+    if (e.origin !== YT_ORIGIN && e.origin !== VIMEO_ORIGIN) return;
+    const f = [...document.querySelectorAll('iframe.rs-yt')].find((x) => x.contentWindow === e.source);
+    if (!f) return;
+    let d = e.data;
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
+    if (!d || typeof d !== 'object') return;
+    if (e.origin === VIMEO_ORIGIN) {
+      if (d.event === 'ready') for (const ev of ['play', 'pause', 'ended']) frameSay(f, { method: 'addEventListener', value: ev });
+      else if (d.event === 'play') vStart(f, f.rsPause);
+      else if (d.event === 'pause' || d.event === 'ended') vStop(f);
+      return;
+    }
+    const st = d.event === 'onStateChange' ? d.info : d.info?.playerState;
+    if (st === 1) vStart(f, f.rsPause); else if (st === 0 || st === 2) vStop(f);
+  });
+
   // ---------- expando: open the post's content right in the feed ----------
   const ytId = (url) => {
     try {
@@ -975,50 +1054,106 @@
     } catch { /* not a url */ }
     return null;
   };
+  // Outside video sites whose players Reddit's own page allows (it blocks the rest, such as Twitch and X).
+  const urlOf = (href) => { try { const u = new URL(href); return { h: u.hostname.replace(/^(www|m)\./, ''), p: u.pathname, u }; } catch { return null; } };
+  const embedOf = (href) => {
+    const x = urlOf(href);
+    if (!x) return null;
+    const { h, p } = x;
+    let m;
+    if (h === 'streamable.com' && (m = p.match(/^\/(?:[eo]\/)?([a-z0-9]{4,12})\/?$/i))) return { src: `https://streamable.com/e/${m[1]}?autoplay=1`, plays: true };
+    if (h === 'vimeo.com' && (m = p.match(/^\/(\d{5,})(?:\/([a-f0-9]{6,}))?\/?$/))) return { src: `${VIMEO_ORIGIN}/video/${m[1]}?autoplay=1${m[2] ? `&h=${m[2]}` : ''}`, origin: VIMEO_ORIGIN };
+    if (h === 'player.vimeo.com' && (m = p.match(/^\/video\/(\d{5,})/))) return { src: `${VIMEO_ORIGIN}/video/${m[1]}?autoplay=1`, origin: VIMEO_ORIGIN };
+    if (/^(v3\.)?redgifs\.com$/.test(h) && (m = p.match(/^\/(?:watch|ifr)\/([a-z]+)/i))) return { src: `https://www.redgifs.com/ifr/${m[1].toLowerCase()}`, plays: true };
+    if (h === 'tiktok.com' && (m = p.match(/\/video\/(\d{8,})/))) return { src: `https://www.tiktok.com/embed/v2/${m[1]}`, tall: true };
+    if (h === 'instagram.com' && (m = p.match(/^\/(p|reel|tv)\/([\w-]{5,})/))) return { src: `https://www.instagram.com/${m[1]}/${m[2]}/embed/`, tall: true };
+    return null;
+  };
+  // Pictures on other sites: direct picture links, Imgur and Giphy (their short videos open as moving pictures).
+  const picOf = (href) => {
+    const x = urlOf(href);
+    if (!x || x.u.protocol !== 'https:') return '';
+    const { h, p } = x;
+    let m;
+    if (h === 'i.imgur.com' && (m = p.match(/^\/(\w{5,8})\.(gifv|mp4|webm)$/i))) return `https://i.imgur.com/${m[1]}.gif`;
+    if (h === 'imgur.com' && (m = p.match(/^\/(\w{5,8})\/?$/))) return `https://i.imgur.com/${m[1]}.jpg`;
+    if (/(^|\.)giphy\.com$/.test(h) && !/\.gif$/i.test(p) && (m = p.match(/^\/(?:gifs|media|clips)\/(?:[\w-]*-)?([a-zA-Z0-9]{8,})(?:\/|$)/))) return `https://i.giphy.com/${m[1]}.gif`;
+    if (/\.(jpe?g|png|gif|webp)$/i.test(p)) return x.u.href;
+    return '';
+  };
   const kindOf = (post) => {
     const type = post.getAttribute('post-type') || '';
     const href = post.getAttribute('content-href') || '';
     const media = post.querySelector(':scope > [slot="post-media-container"]');
     if ((type === 'text' || type === 'multi_media') && post.querySelector('shreddit-post-text-body')) return 'text';
     if (ytId(href)) return 'youtube';
-    if (type === 'video' && media?.querySelector('shreddit-player, video')) return 'video';
+    if (type === 'video' && media?.querySelector('shreddit-player, shreddit-player-2, video')) return 'video';
     if (type === 'gallery' && media) return 'gallery';
     if (type === 'image' && media) return 'image';
     if (type === 'crosspost' && media) return 'gallery';
-    if (/\.(jpe?g|png|gif|webp)(\?|$)/i.test(href)) return 'image';
+    if (embedOf(href)) return 'embed';
+    if (picOf(href)) return 'image';
+    if (media?.querySelector('shreddit-embed')) return 'rembed'; // Reddit's own player for another site
     return null;
   };
-  const fillBox = (box, post, kind) => {
+  const player = (box, src, opts, close, title) => {
+    const f = el('iframe', { class: `rs-yt${opts.tall ? ' rs-tall' : ''}`, src, title, allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen', allowfullscreen: true });
+    f.rsOrigin = opts.origin || '';
+    if (opts.origin === YT_ORIGIN) f.rsPause = () => frameSay(f, { event: 'command', func: 'pauseVideo', args: [] });
+    else if (opts.origin === VIMEO_ORIGIN) f.rsPause = () => frameSay(f, { method: 'pause' });
+    f.addEventListener('load', () => {
+      if (opts.origin === YT_ORIGIN) frameSay(f, { event: 'listening', id: 1, channel: 'widget' });
+      else if (opts.plays) vStart(f, close); // plays by itself and can't be paused from here: closed when over the limit
+    });
+    box.append(f);
+  };
+  const fillBox = (box, post, kind, close) => {
     const href = post.getAttribute('content-href') || '';
+    const title = post.getAttribute('post-title') || 'Video';
     if (kind === 'text') {
       const md = post.querySelector('shreddit-post-text-body [id$="-post-rtjson-content"], shreddit-post-text-body .md');
       const copy = md ? md.cloneNode(true) : el('p', { text: 'No text.' });
       copy.removeAttribute('id'); copy.className = 'rs-text md';
       box.append(copy);
     } else if (kind === 'youtube') {
-      box.append(el('iframe', { class: 'rs-yt', src: `https://www.youtube-nocookie.com/embed/${ytId(href)}?autoplay=1&rel=0`, title: post.getAttribute('post-title') || 'Video', allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen', allowfullscreen: true, loading: 'lazy' }));
-    } else if (kind === 'image' && /i\.redd\.it|\.(jpe?g|png|gif|webp)(\?|$)/i.test(href)) {
-      box.append(el('a', { href, target: '_blank', rel: 'noopener' }, [el('img', { class: 'rs-media-img', src: href, alt: post.getAttribute('post-title') || '' })]));
+      player(box, `${YT_ORIGIN}/embed/${ytId(href)}?autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, { origin: YT_ORIGIN }, close, title);
+    } else if (kind === 'embed') {
+      const e = embedOf(href);
+      player(box, e.src, e, close, title);
+    } else if (kind === 'image' && picOf(href)) {
+      const img = el('img', { class: 'rs-media-img', src: picOf(href), alt: post.getAttribute('post-title') || '' });
+      const a = el('a', { href, target: '_blank', rel: 'noopener' }, [img]);
+      img.onerror = () => a.replaceWith(el('p', { class: 'rs-media-err' }, ['That picture would not load here. ', el('a', { href, target: '_blank', rel: 'noopener', text: 'Open it' })]));
+      box.append(a);
     } else {
       // video, gallery, crosspost, other images: show Reddit's own player or carousel
       const media = post.querySelector(':scope > [slot="post-media-container"]');
       if (media) { media.classList.add('rs-moved-media'); box.append(media); }
+      for (const t of [300, 1200, 3000]) setTimeout(watchVideos, t); // Reddit's player builds its video a moment later
     }
     box.dataset.filled = '1';
   };
+  const XICON = { youtube: 'video', embed: 'video', rembed: 'video' };
   const xButton = (post, kind, row) => {
-    const b = el('button', { type: 'button', class: 'rs-x', 'data-kind': kind === 'youtube' ? 'video' : kind, 'aria-expanded': 'false', title: { text: 'Show text', video: 'Play video', youtube: 'Play video', image: 'Show picture', gallery: 'Show pictures' }[kind], html: ICON[kind === 'youtube' ? 'video' : kind] });
+    const icon = XICON[kind] || kind;
+    const label = { text: 'Show text', video: 'Play video', youtube: 'Play video', embed: 'Play video', rembed: 'Show', image: 'Show picture', gallery: 'Show pictures' }[kind];
+    const b = el('button', { type: 'button', class: 'rs-x', 'data-kind': icon, 'aria-expanded': 'false', title: label, html: ICON[icon] });
     let box = null;
+    const close = () => { if (b.getAttribute('aria-expanded') === 'true') b.click(); };
     b.onclick = (ev) => {
-      ev.preventDefault();
+      ev?.preventDefault?.();
       const open = b.getAttribute('aria-expanded') !== 'true';
       if (!box) { box = el('div', { class: `rs-box rs-box-${kind}` }); row.append(box); }
-      if (open && !box.dataset.filled) fillBox(box, post, kind);
+      if (open && !box.dataset.filled) fillBox(box, post, kind, close);
       box.hidden = !open;
-      if (!open) { box.querySelectorAll('video').forEach((v) => v.pause()); box.querySelectorAll('iframe.rs-yt').forEach((f) => f.remove()); delete box.dataset.filled; if (kind === 'youtube') box.replaceChildren(); }
+      if (!open) {
+        for (const v of deepVideos(box, [])) v.pause();
+        for (const f of box.querySelectorAll('iframe.rs-yt')) { vStop(f); f.remove(); }
+        if (kind === 'youtube' || kind === 'embed') { box.replaceChildren(); delete box.dataset.filled; }
+      }
       b.setAttribute('aria-expanded', String(open));
-      b.innerHTML = open ? ICON.close : ICON[kind === 'youtube' ? 'video' : kind];
-      b.title = open ? 'Close' : b.title;
+      b.innerHTML = open ? ICON.close : ICON[icon];
+      b.title = open ? 'Close' : label;
     };
     return b;
   };
@@ -1126,9 +1261,25 @@
     paint();
     return box;
   };
+  // Each post keeps the number it first got in this feed. Far down a feed Reddit unloads old posts and brings them back
+  // when you scroll up again; they keep their number. (Reddit's own position count includes ads, so it skips numbers.)
+  // Numbers start again on a new page, or when Reddit swaps in a different feed on the same page (For You / Following);
+  // a feed it redraws after Back keeps them. Pinned posts sit outside the feed and count first.
+  let rankBook = { key: '', feed: null, map: new Map() };
+  const rankOf = (post) => {
+    const key = location.pathname + location.search, feed = post.closest('shreddit-feed');
+    if (rankBook.key !== key) rankBook = { key, feed, map: new Map() };
+    else if (feed && rankBook.feed !== feed) {
+      const firstPost = feed.querySelector('shreddit-post');
+      if (rankBook.feed && firstPost && !rankBook.map.has(firstPost.id)) rankBook.map = new Map();
+      rankBook.feed = feed;
+    }
+    const m = rankBook.map;
+    if (!m.has(post.id)) m.set(post.id, m.size + 1);
+    return m.get(post.id);
+  };
   const densify = () => {
     if (isCommentsPage()) return;
-    let rank = document.querySelectorAll('.rs-row').length; // restarts when Reddit swaps the whole feed
     for (const post of document.querySelectorAll('shreddit-post')) {
       if (post.rsRow?.isConnected) continue; // already has its row (a post Reddit brings back after Back gets a new one)
       post.setAttribute('data-rs', '1');
@@ -1163,7 +1314,7 @@
         isSelf ? null : el('a', { href: link, target: '_blank', rel: 'noopener', title: 'Open link and comments', text: '[l+c]' }),
       ]);
       const main = el('div', { class: 'rs-main' }, [titleLine, meta, acts]);
-      row.append(el('div', { class: 'rs-rank', text: String(++rank) }), voteBox(post), thumb, main);
+      row.append(el('div', { class: 'rs-rank', text: String(rankOf(post)) }), voteBox(post), thumb, main);
       post.rsRow = row;
       (post.closest('article') || post).before(row);
     }
@@ -1582,7 +1733,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    densify(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel();
+    densify(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };
