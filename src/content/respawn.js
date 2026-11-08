@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, scoreColors: true, hideKids: false, hideMyName: false, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -62,10 +62,13 @@
     html.classList.toggle('rs-fl-hidden', !cfg.filterline);
     html.classList.toggle('rs-pin-header', !!cfg.pinHeader);
     html.classList.toggle('rs-hl', !!cfg.highlight);
+    html.classList.toggle('rs-no-chat', !!cfg.hideChat);
+    html.classList.toggle('rs-score-colors', !!cfg.scoreColors);
     document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
     applySubStyle();
     paintGear();
     if (!cfg.enabled) releaseHolds();
+    topButton(); hideMyName(true); scorePaint.n = -1; scorePaint();
   };
   // On/off lives at the top of the gear's settings panel (the gear stays in Reddit's top bar while RESpawn is off).
   const paintGear = () => {
@@ -98,6 +101,9 @@
       ['hideSuggested', 'Hide suggestions and games'],
       ['hideAds', 'Hide ads'],
       ['hideBadges', 'Hide "Top 1%" badges'],
+      ['hideChat', 'Hide chat'],
+      ['topButton', 'Back-to-top button'],
+      ['scoreColors', 'Color the highest scores'],
     ]],
     ['Filter bar', [
       ['filterline', 'Show filter bar'],
@@ -124,9 +130,11 @@
     ['People', [
       ['highlight', 'Color the poster, mods and friends'],
       ['tagList', 'Your tags', 'button'],
+      ['hideMyName', 'Hide your username on screen'],
     ]],
     ['Comments', [
       ['autoReplies', 'Load more replies as you scroll'],
+      ['hideKids', 'Start with replies hidden'],
     ]],
     ['Keyboard', [
       ['keys', 'Keyboard shortcuts'],
@@ -211,7 +219,7 @@
   };
   const cleanSettings = (o) => {
     const out = {};
-    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies']) if (typeof o[k] === 'boolean') out[k] = o[k];
+    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'scoreColors', 'hideKids', 'hideMyName']) if (typeof o[k] === 'boolean') out[k] = o[k];
     for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']]]) if (ok.includes(o[k])) out[k] = o[k];
     for (const [k, lo, hi] of [['filterScore', -99999, 99999], ['pauseEvery', 0, 99], ['maxVideos', 0, 99]]) if (Number.isFinite(o[k])) out[k] = Math.max(lo, Math.min(hi, Math.round(o[k])));
     if (Array.isArray(o.shortcuts)) {
@@ -1419,11 +1427,15 @@
     const down = el('button', { type: 'button', class: 'rs-down', title: 'Downvote', 'aria-label': 'Downvote', html: ICON.down });
     const score = el('div', { class: 'rs-score' });
     const box = el('div', { class: 'rs-vote' }, [up, score, down]);
+    const ratio = parseFloat(post.getAttribute('upvote-ratio'));
     const paint = () => {
       box.dataset.vote = state;
       up.setAttribute('aria-pressed', String(state === 'UP'));
       down.setAttribute('aria-pressed', String(state === 'DOWN'));
-      score.textContent = num(start + (state === 'UP' ? 1 : state === 'DOWN' ? -1 : 0));
+      const v = start + (state === 'UP' ? 1 : state === 'DOWN' ? -1 : 0);
+      score.textContent = num(v);
+      score.dataset.v = String(start); // its place on the page is judged without your own vote (see scorePaint)
+      score.title = `${v.toLocaleString()} point${v === 1 ? '' : 's'}${Number.isFinite(ratio) && ratio > 0 && ratio <= 1 ? `, ${Math.round(ratio * 100)}% upvoted` : ''}`;
     };
     const click = async (dir) => {
       if (!document.cookie.includes('csrf_token')) { toast('Log in to Reddit to vote.'); return; }
@@ -1454,6 +1466,22 @@
     if (!m.has(post.id)) m.set(post.id, m.size + 1);
     return m.get(post.id);
   };
+  // Scores colored by where they stand among the posts on this page (setting "Color the highest scores"): the top tenth
+  // stands out, the next fifth is green, the bottom third is faint, below zero is red. A big subreddit and a small one
+  // each get their own scale. Counted again as more posts load.
+  const scorePaint = () => {
+    if (!cfg.scoreColors) return;
+    const S = [...document.querySelectorAll('.rs-row .rs-score')];
+    if (S.length === scorePaint.n && S[0] === scorePaint.first) return;
+    scorePaint.n = S.length; scorePaint.first = S[0];
+    const vals = S.map((x) => +x.dataset.v || 0).sort((a, b) => b - a);
+    const at = (f) => vals[Math.min(vals.length - 1, Math.floor(vals.length * f))];
+    const top = at(0.1), good = at(0.3), low = at(0.7);
+    for (const x of S) {
+      const v = +x.dataset.v || 0;
+      x.dataset.size = v < 0 ? 'neg' : v <= low ? '0' : v >= top ? '3' : v >= good ? '2' : '1';
+    }
+  };
   const densify = () => {
     if (isCommentsPage()) return;
     for (const post of document.querySelectorAll('shreddit-post')) {
@@ -1482,6 +1510,9 @@
       by.append(`submitted ${ago(g('created-timestamp'))} ago by `, el('a', { href: `/user/${g('author')}/`, class: friendSet().has(g('author').toLowerCase()) ? 'rs-author rs-friend' : 'rs-author', text: g('author') }), nameTag(g('author')));
       const sub = subOf();
       if (!sub || sub.includes('+') || sub === 'popular' || sub === 'all') by.append(' to ', el('a', { href: `/${g('subreddit-prefixed-name')}/`, text: g('subreddit-prefixed-name') }));
+      // Crossposts (RES's x-post links): Reddit gives the original post's address as the content link.
+      const orig = post.hasAttribute('is-crosspost') && link.match(/^\/r\/([A-Za-z0-9_]{2,21})\/comments\/[a-z0-9]+\//i);
+      if (orig) by.append(' crossposted from ', el('a', { href: link, class: 'rs-xpost', title: 'Open the original post', text: `r/${orig[1]}` }));
       meta.append(by);
       const n = +g('comment-count') || 0;
       const acts = el('div', { class: 'rs-acts' }, [
@@ -1581,6 +1612,7 @@
       comments.last = +localStorage.getItem(key) || 0;
       localStorage.setItem(key, String(Date.now()));
       addNavigator();
+      html.classList.toggle('rs-kids-hidden', !!cfg.hideKids);
     }
     const folded = collapsedMap(), me = myName();
     for (const c of document.querySelectorAll('shreddit-comment:not([data-rs])')) {
@@ -1601,7 +1633,45 @@
       if (+c.getAttribute('depth') > 0 && c.getAttribute('parentid')) links.append(parentLink(c));
       (c.querySelector(':scope > details [slot="actionRow"]') || meta).append(links);
     }
-    updateNav(); moreReplies();
+    kids(); updateNav(); moreReplies();
+  };
+  // Hide all replies (RES's "hide child comments"): only the top comments show, each with its own "show N replies".
+  // A button next to Reddit's comment sort switches it for this page; a setting starts every post that way.
+  const kidsOf = (c) => [...c.querySelectorAll(':scope > details [slot^="children"]')];
+  const kidsCount = (c) => {
+    let n = c.querySelectorAll('shreddit-comment').length;
+    for (const b of c.querySelectorAll('faceplate-partial[loading="action"] button')) n += +(b.textContent.match(/(\d+)\s+more repl/i) || [])[1] || 0;
+    return n;
+  };
+  const kidsPaint = () => {
+    const b = document.getElementById('rs-kids');
+    if (b) { const on = html.classList.contains('rs-kids-hidden'); b.textContent = on ? 'Show all replies' : 'Hide all replies'; b.setAttribute('aria-pressed', String(on)); }
+  };
+  const kids = () => {
+    const sort = document.querySelector('shreddit-comments-sort-dropdown');
+    if (sort && !document.getElementById('rs-kids')) {
+      const b = el('button', { type: 'button', id: 'rs-kids', class: 'rs-btn', title: 'Show only the top comments, or every reply' });
+      b.onclick = () => {
+        html.classList.toggle('rs-kids-hidden');
+        for (const c of document.querySelectorAll('shreddit-comment[rs-kids-open]')) c.removeAttribute('rs-kids-open');
+        kidsPaint(); kids(); updateNav();
+      };
+      sort.after(b);
+    }
+    kidsPaint();
+    if (!html.classList.contains('rs-kids-hidden')) return;
+    for (const c of document.querySelectorAll('shreddit-comment[depth="0"][data-rs]')) {
+      let t = c.rsKids;
+      if (!t?.isConnected) {
+        if (!kidsOf(c).length) continue;
+        t = el('a', { href: '#', class: 'rs-kids-one', role: 'button' });
+        t.onclick = (e) => { e.preventDefault(); c.toggleAttribute('rs-kids-open'); kids(); updateNav(); };
+        [...c.querySelectorAll('.rs-cacts')].find((x) => x.closest('shreddit-comment') === c)?.append(t);
+        c.rsKids = t;
+      }
+      const n = kidsCount(c);
+      t.textContent = c.hasAttribute('rs-kids-open') ? 'hide replies' : `show ${n} repl${n === 1 ? 'y' : 'ies'}`;
+    }
   };
   // Comment navigator (RES): jump between new comments, the poster's, mods', friends', your own, people you tagged.
   let nav = null, navI = -1;
@@ -2082,6 +2152,68 @@
   document.addEventListener('mousedown', (e) => { if (hc && !hc.contains(e.target)) closeHover(); }, true);
   window.addEventListener('scroll', () => { if (hc) closeHover(); }, { passive: true });
 
+  // ---------- back to top (RES's page navigator) ----------
+  const TOP_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4h10M10 16.5V8M6 11.5l4-4 4 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const topShow = () => document.getElementById('rs-top')?.classList.toggle('rs-top-on', scrollY > innerHeight * 1.5);
+  const topButton = () => {
+    let b = document.getElementById('rs-top');
+    if (!cfg.enabled || !cfg.topButton) { b?.remove(); return; }
+    if (!b) {
+      b = el('button', { type: 'button', id: 'rs-top', title: 'Back to top', 'aria-label': 'Back to top', html: TOP_ICON });
+      b.onclick = () => window.scrollTo({ top: 0, behavior: 'instant' });
+      document.body.append(b);
+    }
+    topShow();
+  };
+  window.addEventListener('scroll', topShow, { passive: true });
+
+  // ---------- hide your username on screen (RES's username hider) ----------
+  // For screenshots and screen sharing: wherever your Reddit name is written on the page, it shows as "anonymous".
+  // Only what you see changes (links and Reddit itself are untouched), and typing boxes are left alone.
+  // Reddit's search box (a filter chip "u/you" and "Search in u/you") is drawn in walled-off parts of the top bar, so those
+  // are looked into too, along with the browser tab's title.
+  const NAME_STANDIN = 'anonymous';
+  const renamed = new Map(); // text node -> [its own text, what we showed instead]
+  const renamedHint = new Map(); // element -> [its own placeholder, ours]
+  let nameT = 0, nameLast = 0, titleOwn = '', titleShown = '';
+  const swapText = (root, me, re) => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeValue.toLowerCase().includes(me) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP) });
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      if (n.parentElement?.closest('textarea, input, script, style, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) continue;
+      const shown = n.nodeValue.replace(re, NAME_STANDIN);
+      if (shown === n.nodeValue) continue;
+      renamed.set(n, [n.nodeValue, shown]);
+      n.nodeValue = shown;
+    }
+  };
+  const swapHint = (e, re) => {
+    const own = e.getAttribute('placeholder') || '', shown = own.replace(re, NAME_STANDIN);
+    if (shown !== own) { renamedHint.set(e, [own, shown]); e.setAttribute('placeholder', shown); }
+  };
+  const hideMyName = (now) => {
+    const me = cfg.enabled && cfg.hideMyName ? myName() : '';
+    if (!me) {
+      for (const [n, [own, shown]] of renamed) if (n.nodeValue === shown) n.nodeValue = own;
+      for (const [e, [own, shown]] of renamedHint) if (e.getAttribute('placeholder') === shown) e.setAttribute('placeholder', own);
+      if (titleShown && document.title === titleShown) document.title = titleOwn;
+      renamed.clear(); renamedHint.clear(); titleShown = ''; return;
+    }
+    if (!now && Date.now() - nameLast < 400) { clearTimeout(nameT); nameT = setTimeout(() => hideMyName(true), 450); return; }
+    nameLast = Date.now();
+    const re = new RegExp(`(?<![A-Za-z0-9_-])${me}(?![A-Za-z0-9_-])`, 'gi');
+    swapText(document.body, me, re);
+    const roots = [...document.querySelectorAll('reddit-header-large *, reddit-search-large')].filter((e) => e.shadowRoot).map((e) => e.shadowRoot);
+    for (let i = 0; i < roots.length && i < 100; i++) {
+      swapText(roots[i], me, re);
+      for (const e of roots[i].querySelectorAll('*')) { if (e.shadowRoot) roots.push(e.shadowRoot); if (e.hasAttribute('placeholder')) swapHint(e, re); }
+    }
+    for (const e of document.querySelectorAll('reddit-header-large [placeholder], reddit-search-large [placeholder]')) swapHint(e, re);
+    const t = document.title.replace(re, NAME_STANDIN);
+    if (t !== document.title) { titleOwn = document.title; titleShown = t; document.title = t; }
+    if (renamed.size > 2000) for (const n of renamed.keys()) if (!n.isConnected) renamed.delete(n);
+    if (renamedHint.size > 200) for (const e of renamedHint.keys()) if (!e.isConnected) renamedHint.delete(e);
+  };
+
   // ---------- run ----------
   let lastUrl = '';
   // Reddit often changes pages without reloading, and swaps the page parts in a moment later; so everything below
@@ -2096,7 +2228,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    densify(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel();
+    densify(); scorePaint(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };
