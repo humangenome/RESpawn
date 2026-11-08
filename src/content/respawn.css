@@ -133,6 +133,8 @@ html.rs-on.rs-feed shreddit-sort-dropdown[header-text="Sort by"] { display: none
 html.rs-on #subgrid-container { max-width: none !important; width: auto !important; margin-inline: 24px !important; }
 html.rs-on .main-container { max-width: none !important; grid-template-columns: minmax(0, 1fr) 316px !important; }
 html.rs-on main#main-content { max-width: none !important; width: auto !important; }
+/* Reddit hides its right sidebar in a narrower window: then the posts take its space too */
+html.rs-on.rs-no-rail .main-container { grid-template-columns: minmax(0, 1fr) !important; }
 html.rs-on .rs-hide-icon, html.rs-on .rs-hide-games,
 html.rs-on in-feed-community-recommendations, html.rs-on #mod-recruitment-banner { display: none !important; }
 html.rs-on .masthead { margin-top: 8px !important; }
@@ -279,6 +281,8 @@ html.rs-on.rs-hide-recent .rs-recent { display: none !important; }
 html.rs-on.rs-hide-suggested in-feed-community-recommendations, html.rs-on.rs-hide-suggested .rs-hide-games { display: none !important; }
 html.rs-on.rs-left-hide #left-sidebar-container { display: none !important; }
 html.rs-on.rs-left-hide .grid-container, html.rs-on.rs-left-slide .grid-container { grid-template-columns: 0 minmax(0, 1fr) !important; }
+/* In a narrow window Reddit hides its left sidebar, and the page would drop into the empty first column: keep it in the second */
+html.rs-on.rs-left-hide #subgrid-container, html.rs-on.rs-left-slide #subgrid-container { grid-column: 2 !important; }
 html.rs-on.rs-left-slide #left-sidebar-container {
   position: fixed !important; left: 0; top: calc(var(--shreddit-header-height, 56px) + 34px); bottom: 0; z-index: 30; width: 272px !important;
   background: var(--rs-bg); border-right: 1px solid var(--rs-line); box-shadow: 8px 0 30px rgba(0,0,0,.12);
@@ -576,3 +580,17 @@ html.rs-on.rs-dash-open { overflow: hidden !important; }
   .rs-dt-row .rs-ut { grid-column: 1 / -1; grid-row: 2; }
 }
 html.rs-dash-open #rs-shortcuts a.rs-cur { background: none; color: var(--rs-weak); }
+
+/* Phone-sized windows (Firefox on Android runs add-ons): no thumbnail or post number, and the sort row wraps */
+@media (max-width: 560px) {
+  html.rs-on #subgrid-container { margin-inline: 10px !important; }
+  .rs-row { grid-template-columns: 40px minmax(0, 1fr); column-gap: 6px; }
+  .rs-row .rs-rank, .rs-row .rs-thumb { display: none; }
+  #rs-sorts { flex-wrap: wrap; row-gap: 6px; }
+  #rs-sorts .rs-expand-all { margin-left: 0; }
+}
+/* Narrow window on a post page: the post gets the full width (Reddit already drops the right side on feeds) */
+@media (max-width: 960px) {
+  html.rs-on.rs-comments .main-container { grid-template-columns: minmax(0, 1fr) !important; }
+  html.rs-on.rs-comments #right-sidebar-container { display: none !important; }
+}

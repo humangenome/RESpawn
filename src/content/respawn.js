@@ -2420,8 +2420,12 @@
   // Reddit often changes pages without reloading, and swaps the page parts in a moment later; so everything below
   // checks the page as it is on every pass instead of trusting the moment the address changed.
   const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); closeHover(); closeTagger(); closeBlockEditor(); closeDash(); };
+  // Reddit hides its right sidebar in a narrower window; the page layout then gives its space to the posts
+  const railCheck = () => { const r = document.getElementById('right-sidebar-container'); html.classList.toggle('rs-no-rail', !!r && getComputedStyle(r).display === 'none'); };
+  window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(railCheck, 150); }, { passive: true });
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
+    railCheck();
     const onComments = isCommentsPage();
     html.classList.toggle('rs-feed', !onComments);
     html.classList.toggle('rs-comments', onComments);
