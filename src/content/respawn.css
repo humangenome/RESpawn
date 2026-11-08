@@ -12,6 +12,9 @@
   --rs-visited: #6b4fa1;
   --rs-good: #1a7f4b;
   --rs-bad: #c62828;
+  --rs-op: #0055df;
+  --rs-mod: #228822;
+  --rs-friend: #c2410c;
   --rs-font: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
 }
 /* Reddit's dark theme (picked in Reddit, or the computer is in dark mode and Reddit is left on automatic).
@@ -36,7 +39,7 @@
 /* Off = Reddit as it is */
 html:not(.rs-on) .rs-row, html:not(.rs-on) #rs-shortcuts, html:not(.rs-on) #rs-sorts, html:not(.rs-on) #rs-nav,
 html:not(.rs-on) .rs-cacts, html:not(.rs-on) .rs-badge, html:not(.rs-on) #rs-filterline, html:not(.rs-on) #rs-mysubs,
-html:not(.rs-on) .rs-page, html:not(.rs-on) .rs-pause { display: none !important; }
+html:not(.rs-on) .rs-page, html:not(.rs-on) .rs-pause, html:not(.rs-on) .rs-ut { display: none !important; }
 
 /* Shortcut bar under Reddit's header (RES's subreddit manager) */
 #rs-shortcuts {
@@ -73,7 +76,7 @@ html:not(.rs-on) #rs-sc-btn { display: none !important; }
 
 /* "My subreddits" menu */
 #rs-mysubs { position: fixed; z-index: 2147483001; display: flex; flex-direction: column; width: 380px; max-height: min(70vh, 600px); border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); color: var(--rs-text); box-shadow: 0 12px 40px rgba(0,0,0,.18); font: 400 14px/1.3 var(--rs-font); overflow: hidden; }
-#rs-mysubs, #rs-mysubs *, #rs-sc-editor, #rs-sc-editor *, #rs-feedask, #rs-feedask * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
+#rs-mysubs, #rs-mysubs *, #rs-sc-editor, #rs-sc-editor *, #rs-feedask, #rs-feedask *, #rs-tagger, #rs-tagger *, #rs-taglist, #rs-taglist *, .rs-ut, .rs-ut * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
 .rs-ms-head { display: flex; align-items: center; gap: 8px; padding: 10px; border-bottom: 1px solid var(--rs-line); }
 .rs-ms-search:focus, .rs-ed-add:focus, .rs-ed-name:focus { outline: none; border-color: var(--rs-text); }
 .rs-ms-search { flex: 1; min-width: 0; height: 34px; margin: 0; padding: 0 12px; border: 1px solid var(--rs-line); border-radius: 999px; background: var(--rs-hover); color: var(--rs-text); font: 400 14px/1 var(--rs-font); }
@@ -391,7 +394,7 @@ html.rs-on .rs-row.rs-sel { background: var(--rs-hover); box-shadow: inset 3px 0
 html.rs-on shreddit-comment [slot="commentMeta"].rs-sel, html.rs-on shreddit-comment [slot="comment"].rs-sel { background-color: var(--rs-hover); box-shadow: inset 3px 0 0 var(--rs-text); border-radius: 0 6px 6px 0; }
 html.rs-on shreddit-post.rs-sel { outline: 2px solid var(--rs-strong-bg); outline-offset: 6px; border-radius: 12px; }
 html.rs-on shreddit-comment > details:focus, html.rs-on shreddit-comment > details:focus-visible { outline: none; }
-html:not(.rs-on) #rs-keyhelp { display: none !important; }
+html:not(.rs-on) #rs-keyhelp, html:not(.rs-on) #rs-taglist, html:not(.rs-on) #rs-tagger { display: none !important; }
 #rs-keyhelp { width: 680px; }
 #rs-keyhelp, #rs-keyhelp * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
 #rs-keyhelp .rs-kh-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; overflow-y: auto; padding: 4px 0 10px; }
@@ -445,3 +448,33 @@ a.rs-ed-feed:hover { color: var(--rs-text); text-decoration: underline; }
 #rs-hover .rs-hc-links a { padding: 6px 10px; border-radius: 999px; color: var(--rs-text); font-weight: 600; text-decoration: none; }
 #rs-hover .rs-hc-links a:hover { background: var(--rs-hover); }
 #rs-hover .rs-hc-links .rs-btn { margin-left: auto; }
+
+/* People: your tags, hidden people, colored names */
+.rs-ut { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; vertical-align: middle; flex: none; }
+.rs-ut-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); opacity: .4; cursor: pointer; }
+.rs-ut-btn svg { width: 13px; height: 13px; }
+.rs-row:hover .rs-ut-btn, shreddit-comment:hover .rs-ut-btn, shreddit-post:hover .rs-ut-btn, #rs-hover .rs-ut-btn, #rs-taglist .rs-ut-btn, .rs-ut-btn:focus-visible { opacity: 1; }
+.rs-ut-btn:hover { background: var(--rs-hover); color: var(--rs-text); }
+.rs-ut-label { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 7px; border: 0; border-radius: 999px; background: var(--rs-tc, #1d4ed8); color: #fff; font: 700 11px/1.5 var(--rs-font); cursor: pointer; }
+.rs-ut-ign { padding: 0 6px; border: 1px solid var(--rs-line); border-radius: 999px; color: var(--rs-weak); font: 700 11px/1.5 var(--rs-font); }
+html.rs-on .rs-row.rs-ignored { display: none !important; }
+html.rs-on.rs-hl shreddit-comment[rs-op] > details > summary > [slot="commentMeta"] .author-name-meta a,
+html.rs-on.rs-hl shreddit-comment[rs-mod] > details > summary > [slot="commentMeta"] .author-name-meta a,
+html.rs-on.rs-hl shreddit-comment[rs-friend] > details > summary > [slot="commentMeta"] .author-name-meta a,
+html.rs-on.rs-hl .rs-by a.rs-friend { padding: 0 5px; border-radius: 4px; color: #fff !important; text-decoration: none; }
+html.rs-on.rs-hl shreddit-comment[rs-friend] > details > summary > [slot="commentMeta"] .author-name-meta a, html.rs-on.rs-hl .rs-by a.rs-friend { background: var(--rs-friend); }
+html.rs-on.rs-hl shreddit-comment[rs-mod] > details > summary > [slot="commentMeta"] .author-name-meta a { background: var(--rs-mod); }
+html.rs-on.rs-hl shreddit-comment[rs-op] > details > summary > [slot="commentMeta"] .author-name-meta a { background: var(--rs-op); }
+#rs-tagger { position: fixed; z-index: 2147483002; width: 320px; padding: 14px 16px 12px; border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); color: var(--rs-text); box-shadow: 0 12px 40px rgba(0,0,0,.18); font: 400 14px/1.4 var(--rs-font); }
+#rs-tagger .rs-fa-title { display: block; margin-bottom: 10px; font-size: 15px; }
+#rs-tagger .rs-ed-add { width: 100%; }
+.rs-tg-colors { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; }
+.rs-tg-colors button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: var(--rs-tc); cursor: pointer; }
+.rs-tg-colors button[aria-checked="true"] { box-shadow: 0 0 0 2px var(--rs-bg), 0 0 0 4px var(--rs-tc); }
+#rs-tagger .rs-fa-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+#rs-taglist { width: 460px; }
+.rs-tl-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 28px; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid var(--rs-line); }
+.rs-tl-row > a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--rs-text); font-weight: 600; text-decoration: none; }
+.rs-tl-row > a:hover { text-decoration: underline; }
+#rs-tagger [hidden], #rs-taglist [hidden], #rs-feedask [hidden], #rs-panel [hidden] { display: none !important; }
+#rs-tagger .rs-set { margin-top: 2px; font: 400 14px/1.3 var(--rs-font); color: var(--rs-text); }

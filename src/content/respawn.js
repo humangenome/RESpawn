@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, pauseEvery: 0, maxVideos: 2, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, pauseEvery: 0, maxVideos: 2, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -61,6 +61,7 @@
     html.classList.toggle('rs-left-hide', cfg.leftNav === 'hide');
     html.classList.toggle('rs-fl-hidden', !cfg.filterline);
     html.classList.toggle('rs-pin-header', !!cfg.pinHeader);
+    html.classList.toggle('rs-hl', !!cfg.highlight);
     document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
     applySubStyle();
     paintGear();
@@ -119,6 +120,10 @@
     ['Hover cards', [
       ['hoverCards', 'Show when you point at a name'],
     ]],
+    ['People', [
+      ['highlight', 'Color the poster, mods and friends'],
+      ['tagList', 'Your tags', 'button'],
+    ]],
     ['Keyboard', [
       ['keys', 'Keyboard shortcuts'],
       ['keyHelp', 'List of keys (or press ?)', 'button'],
@@ -141,8 +146,9 @@
         if (choices === 'button') {
           const keysList = key === 'keyHelp';
           const b = el('button', { type: 'button', class: 'rs-btn', text: keysList ? 'Show' : 'Edit' });
-          b.onclick = () => { closePanel(); if (keysList) openKeyHelp(); else openScEditor(); };
-          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: keysList ? label : `${label} (${scList().length})` }), b]));
+          b.onclick = () => { closePanel(); ({ keyHelp: openKeyHelp, editShortcuts: openScEditor, tagList: openTagList })[key](); };
+          const n = { editShortcuts: () => scList().length, tagList: () => Object.keys(cfg.tags || {}).length }[key];
+          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: n ? `${label} (${n()})` : label }), b]));
         } else if (choices === 'number') {
           const score = key === 'filterScore';
           const n = el('input', { type: 'number', class: 'rs-num', step: '1', min: score ? null : '0', max: score ? null : '99', 'aria-label': label });
@@ -932,6 +938,7 @@
         row.rsFv = fVer;
         row.rsHide = on.some((k) => (fstate(k) === 'only' ? !matches(post, row, k) : matches(post, row, k)));
         row.classList.toggle('rs-filtered', row.rsHide);
+        row.classList.toggle('rs-ignored', ignored(post.getAttribute('author')));
       }
       if (row.rsHide) hidden++;
     }
@@ -1303,7 +1310,7 @@
       const meta = el('div', { class: 'rs-meta' });
       if (kind) meta.append(xButton(post, kind, row));
       const by = el('span', { class: 'rs-by' });
-      by.append(`submitted ${ago(g('created-timestamp'))} ago by `, el('a', { href: `/user/${g('author')}/`, text: g('author') }));
+      by.append(`submitted ${ago(g('created-timestamp'))} ago by `, el('a', { href: `/user/${g('author')}/`, class: friendSet().has(g('author').toLowerCase()) ? 'rs-author rs-friend' : 'rs-author', text: g('author') }), nameTag(g('author')));
       const sub = subOf();
       if (!sub || sub.includes('+') || sub === 'popular' || sub === 'all') by.append(' to ', el('a', { href: `/${g('subreddit-prefixed-name')}/`, text: g('subreddit-prefixed-name') }));
       meta.append(by);
@@ -1367,6 +1374,7 @@
   document.addEventListener('toggle', (e) => {
     const d = e.target;
     if (d?.tagName !== 'DETAILS' || d.parentElement?.tagName !== 'SHREDDIT-COMMENT' || !cfg.enabled) return;
+    if (d.parentElement.rsQuiet) { d.parentElement.rsQuiet = false; return; }
     const id = d.parentElement.getAttribute('thingid');
     if (!id) return;
     const m = collapsedMap();
@@ -1395,6 +1403,8 @@
     const page = document.querySelector('shreddit-post[view-context="CommentsPage"]');
     if (!page) return;
     const op = page.getAttribute('author');
+    const pa = page.querySelector('[slot="authorName"] a.author-name');
+    if (pa && validUser(op) && !page.querySelector('[slot="authorName"] .rs-ut')) (pa.closest('faceplate-hovercard') || pa).after(nameTag(op));
     const key = `rs-visit-${page.getAttribute('id')}`;
     if (comments.started !== key) {
       nav?.remove(); nav = null; navI = -1; marks.new = []; marks.op = []; marks.mod = [];
@@ -1410,7 +1420,13 @@
       if (!meta) continue;
       c.setAttribute('data-rs', '1');
       if (folded[c.getAttribute('thingid')]) { const d = c.querySelector(':scope > details'); if (d?.open) d.open = false; }
-      if (c.getAttribute('author') === op) { c.setAttribute('rs-op', ''); marks.op.push(c); }
+      const author = c.getAttribute('author') || '';
+      if (author === op || c.getAttribute('is-op') === 'true') { c.setAttribute('rs-op', ''); marks.op.push(c); }
+      if (c.getAttribute('is-mod-distinguished') === 'true') c.setAttribute('rs-mod', '');
+      if (friendSet().has(author.toLowerCase())) c.setAttribute('rs-friend', '');
+      const nm = meta.querySelector('.author-name-meta');
+      if (nm && validUser(author)) (nm.closest('.author-hovercard-trigger') || nm).after(nameTag(author));
+      if (ignored(author)) ignoreComment(c, true);
       if (comments.last && Date.parse(c.getAttribute('created')) > comments.last) { c.setAttribute('rs-new', ''); meta.append(el('span', { class: 'rs-badge rs-is-new', text: 'new' })); marks.new.push(c); }
       if (c.getAttribute('is-mod-distinguished') === 'true') marks.mod.push(c);
       const links = el('span', { class: 'rs-cacts' }, [el('a', { href: c.getAttribute('permalink') || '#', text: 'permalink' })]);
@@ -1612,6 +1628,130 @@
     if (row) select(row, false);
   };
 
+  // ---------- people: your tags, ignoring, colored names (RES's user tagger and user highlighter) ----------
+  // A tag is your own note on a person, shown next to their name everywhere. "Hide their posts and comments" (RES's
+  // ignore) drops their posts from feeds and folds their comments. Kept in your RESpawn settings, never sent anywhere.
+  const TAG_COLORS = [['gray', '#4b5563'], ['red', '#b91c1c'], ['orange', '#c2410c'], ['amber', '#a16207'], ['green', '#15803d'], ['teal', '#0f766e'], ['blue', '#1d4ed8'], ['purple', '#7e22ce'], ['pink', '#be185d']];
+  const TAG_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 10.6V4.2a.7.7 0 0 1 .7-.7h6.4l6 6a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4 0z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="7.3" cy="7.3" r="1.3" fill="currentColor"/></svg>';
+  const validUser = (n) => /^[A-Za-z0-9_-]{3,20}$/.test(n || '');
+  const tagOf = (name) => (cfg.tags || {})[String(name || '').toLowerCase()];
+  const ignored = (name) => !!tagOf(name)?.ignore;
+  const colorOf = (k) => (TAG_COLORS.find(([n]) => n === k) || TAG_COLORS[6])[1];
+  const paintTag = (box) => {
+    const name = box.dataset.user, t = tagOf(name);
+    const kids = [];
+    if (t?.text) kids.push(el('button', { type: 'button', class: 'rs-ut-label', style: `--rs-tc: ${colorOf(t.color)}`, title: `Your tag for u/${name}. Click to change it.`, text: t.text }));
+    if (t?.ignore) kids.push(el('span', { class: 'rs-ut-ign', text: 'hidden' }));
+    kids.push(el('button', { type: 'button', class: 'rs-ut-btn', title: t ? `Change your tag for u/${name}` : `Tag u/${name}`, 'aria-label': t ? `Change your tag for u/${name}` : `Tag u/${name}`, html: TAG_ICON }));
+    box.replaceChildren(...kids);
+  };
+  const nameTag = (name) => { const box = el('span', { class: 'rs-ut', 'data-user': name }); paintTag(box); return box; };
+  const ignoreComment = (c, on) => {
+    const d = c.querySelector(':scope > details');
+    c.toggleAttribute('rs-ignored', on);
+    if (on && d?.open) { c.rsQuiet = true; c.rsIgnFolded = true; d.open = false; } else if (!on && c.rsIgnFolded && d && !d.open) { c.rsQuiet = true; c.rsIgnFolded = false; d.open = true; }
+  };
+  const setTag = (name, t) => {
+    const all = { ...(cfg.tags || {}) }, k = name.toLowerCase();
+    if (t && (t.text || t.ignore)) all[k] = { name, text: t.text, color: t.color, ignore: !!t.ignore }; else delete all[k];
+    saveCfg({ tags: all });
+    for (const b of document.querySelectorAll('.rs-ut')) paintTag(b);
+    for (const c of document.querySelectorAll('shreddit-comment[data-rs]')) { const ig = ignored(c.getAttribute('author')); if (ig !== c.hasAttribute('rs-ignored')) ignoreComment(c, ig); }
+    refilter();
+  };
+  // Your friends list from Reddit, for coloring their names. Read again every 30 minutes while you use Reddit.
+  let friends = null;
+  const friendSet = () => {
+    if (!friends) { const c = readJSON('rs-friends'); friends = new Set(Array.isArray(c.names) ? c.names : []); friends.at = +c.t || 0; }
+    if (cfg.enabled && cfg.highlight && !friendSet.busy && loggedIn() && Date.now() - friends.at > 30 * 60e3) {
+      friendSet.busy = true; friends.at = Date.now();
+      fetch('/prefs/friends.json', { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+        if (!j) return;
+        const names = ((Array.isArray(j) ? j[0] : j)?.data?.children || []).map((c) => String(c?.name || '').toLowerCase()).filter(validUser);
+        friends = new Set(names); friends.at = Date.now();
+        try { localStorage.setItem('rs-friends', JSON.stringify({ t: friends.at, names })); } catch { /* storage full */ }
+        for (const c of document.querySelectorAll('shreddit-comment[data-rs]')) c.toggleAttribute('rs-friend', friends.has(String(c.getAttribute('author')).toLowerCase()));
+        for (const a of document.querySelectorAll('.rs-by a.rs-author')) a.classList.toggle('rs-friend', friends.has(a.textContent.toLowerCase()));
+      }).catch(() => { /* try again later */ }).finally(() => { friendSet.busy = false; });
+    }
+    return friends;
+  };
+  let tagger = null;
+  const closeTagger = () => { tagger?.remove(); tagger = null; document.removeEventListener('mousedown', taggerOutside, true); document.removeEventListener('keydown', taggerEsc, true); };
+  const taggerOutside = (e) => { if (tagger && !tagger.contains(e.target)) closeTagger(); };
+  const taggerEsc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeTagger(); } };
+  const openTagger = (name, anchor) => {
+    const r = anchor.getBoundingClientRect(); // before the hover card it may sit in closes
+    closeTagger(); closeHover();
+    const t = tagOf(name) || {};
+    let color = t.color || 'blue';
+    tagger = el('div', { id: 'rs-tagger', role: 'dialog', 'aria-label': `Tag u/${name}` });
+    const text = el('input', { type: 'text', class: 'rs-ed-add', maxlength: '40', placeholder: 'Your note, like "knows cars"', 'aria-label': 'Tag', spellcheck: 'false' });
+    text.value = t.text || '';
+    const sw = el('div', { class: 'rs-tg-colors', role: 'radiogroup', 'aria-label': 'Tag color' });
+    for (const [k, c] of TAG_COLORS) {
+      const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(k === color), 'aria-label': k, title: k, style: `--rs-tc: ${c}` });
+      b.onclick = () => { color = k; sw.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b))); };
+      sw.append(b);
+    }
+    const ign = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
+    ign.checked = !!t.ignore;
+    const save = el('button', { type: 'button', class: 'rs-done', text: 'Save' });
+    const remove = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', text: 'Remove tag', hidden: !tagOf(name) });
+    save.onclick = () => {
+      const was = ignored(name);
+      setTag(name, { text: text.value.trim(), color, ignore: ign.checked }); closeTagger();
+      if (ign.checked && !was) toast(`Hiding posts and comments from u/${name}.`);
+    };
+    remove.onclick = () => { setTag(name, null); closeTagger(); };
+    tagger.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') { e.preventDefault(); save.click(); } });
+    tagger.append(
+      el('b', { class: 'rs-fa-title', text: `Tag u/${name}` }), text, sw,
+      el('label', { class: 'rs-set' }, [el('span', { text: 'Hide their posts and comments' }), ign]),
+      el('div', { class: 'rs-fa-foot' }, [remove, save]),
+    );
+    document.body.append(tagger);
+    const h = tagger.offsetHeight;
+    tagger.style.left = `${Math.max(8, Math.min(Math.round(r.left), innerWidth - tagger.offsetWidth - 16))}px`;
+    tagger.style.top = `${Math.round(r.bottom + 6 + h < innerHeight ? r.bottom + 6 : Math.max(8, r.top - 6 - h))}px`;
+    text.focus();
+    setTimeout(() => { document.addEventListener('mousedown', taggerOutside, true); document.addEventListener('keydown', taggerEsc, true); }, 0);
+  };
+  // The tag button sits inside Reddit's comment header, which folds the comment when clicked: take the click first.
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest?.('.rs-ut button');
+    if (!b || !cfg.enabled) return;
+    e.preventDefault(); e.stopPropagation();
+    openTagger(b.closest('.rs-ut').dataset.user, b);
+  }, true);
+  // Every tag in one list, so you can take back "hide" for someone whose posts you no longer see.
+  let tagList = null;
+  const closeTagList = () => { tagList?.remove(); tagList = null; document.removeEventListener('keydown', tagListEsc, true); };
+  const tagListEsc = (e) => { if (e.key === 'Escape' && !tagger) closeTagList(); };
+  const openTagList = () => {
+    if (tagList) return closeTagList();
+    tagList = el('div', { id: 'rs-taglist', class: 'rs-modal', role: 'dialog', 'aria-label': 'Your tags' });
+    const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close', html: ICON.close });
+    x.onclick = closeTagList;
+    const rows = el('div', { class: 'rs-ed-rows' });
+    const draw = () => {
+      rows.replaceChildren();
+      const all = Object.values(cfg.tags || {}).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      for (const t of all) {
+        const del = el('button', { type: 'button', class: 'rs-ed-del', 'aria-label': `Remove your tag for u/${t.name}`, title: 'Remove', html: ICON.close });
+        del.onclick = () => { setTag(t.name, null); draw(); };
+        rows.append(el('div', { class: 'rs-tl-row' }, [el('a', { href: `/user/${t.name}/`, text: `u/${t.name}` }), nameTag(t.name), del]));
+      }
+      if (!all.length) rows.append(el('div', { class: 'rs-ms-empty', text: 'No tags yet. Click the tag icon next to any name.' }));
+    };
+    const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
+    done.onclick = closeTagList;
+    tagList.append(el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Your tags' }), x]), el('div', { class: 'rs-ed-scroll' }, [rows]), el('div', { class: 'rs-panel-foot' }, [el('span'), done]));
+    draw();
+    document.body.append(tagList);
+    setTimeout(() => document.addEventListener('keydown', tagListEsc, true), 0);
+  };
+
   // ---------- hover cards (RES's user and subreddit info) ----------
   // Point at a user or subreddit name in a post row for a moment and a small card shows who or what it is. Reddit's own
   // cards are gone from those rows (RESpawn draws them), so these stand in. One lookup per name, only after you pause on it.
@@ -1667,6 +1807,7 @@
         el('a', { href: `/user/${d.name || name}/`, text: 'Profile' }),
         el('a', { href: `/user/${d.name || name}/submitted/`, text: 'Posts' }),
         el('a', { href: `/user/${d.name || name}/comments/`, text: 'Comments' }),
+        nameTag(d.name || name),
       ]),
     ];
   };
@@ -1723,7 +1864,7 @@
   let lastUrl = '';
   // Reddit often changes pages without reloading, and swaps the page parts in a moment later; so everything below
   // checks the page as it is on every pass instead of trusting the moment the address changed.
-  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); closeHover(); };
+  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); closeHover(); closeTagger(); };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     const onComments = isCommentsPage();
