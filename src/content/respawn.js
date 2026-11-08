@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], pauseEvery: 0, maxVideos: 2, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -125,6 +125,9 @@
       ['highlight', 'Color the poster, mods and friends'],
       ['tagList', 'Your tags', 'button'],
     ]],
+    ['Comments', [
+      ['autoReplies', 'Load more replies as you scroll'],
+    ]],
     ['Keyboard', [
       ['keys', 'Keyboard shortcuts'],
       ['keyHelp', 'List of keys (or press ?)', 'button'],
@@ -132,7 +135,8 @@
   ];
   let panel = null;
   const closePanel = () => { panel?.remove(); panel = null; document.removeEventListener('click', outside, true); document.removeEventListener('keydown', esc, true); };
-  const outside = (e) => { if (panel && !panel.contains(e.target) && e.target.id !== 'rs-gear' && !e.target.closest?.('#rs-gear')) closePanel(); };
+  // Clicks RESpawn makes itself (pressing Reddit's "more replies") are not yours: they never close a menu or pick a comment.
+  const outside = (e) => { if (e.isTrusted && panel && !panel.contains(e.target) && e.target.id !== 'rs-gear' && !e.target.closest?.('#rs-gear')) closePanel(); };
   const esc = (e) => { if (e.key === 'Escape') closePanel(); };
   const togglePanel = () => {
     if (panel) return closePanel();
@@ -485,7 +489,7 @@
   // ---------- "My subreddits" menu: your communities, most visited first ----------
   let mySubs = null;
   const closeMySubs = () => { mySubs?.remove(); mySubs = null; document.querySelector('#rs-shortcuts .rs-mine')?.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', mySubsOutside, true); document.removeEventListener('keydown', mySubsEsc, true); };
-  const mySubsOutside = (e) => { if (mySubs && !mySubs.contains(e.target) && !e.target.closest?.('.rs-mine')) closeMySubs(); };
+  const mySubsOutside = (e) => { if (e.isTrusted && mySubs && !mySubs.contains(e.target) && !e.target.closest?.('.rs-mine')) closeMySubs(); };
   const mySubsEsc = (e) => { if (e.key === 'Escape') closeMySubs(); };
   const toggleMySubs = (btn) => {
     closeFeedAsk();
@@ -645,7 +649,7 @@
   };
   let feedAsk = null;
   const closeFeedAsk = () => { feedAsk?.remove(); feedAsk = null; document.removeEventListener('click', feedAskOutside, true); document.removeEventListener('keydown', feedAskEsc, true); };
-  const feedAskOutside = (e) => { if (feedAsk && !feedAsk.contains(e.target) && !e.target.closest?.('.rs-special')) closeFeedAsk(); };
+  const feedAskOutside = (e) => { if (e.isTrusted && feedAsk && !feedAsk.contains(e.target) && !e.target.closest?.('.rs-special')) closeFeedAsk(); };
   const feedAskEsc = (e) => { if (e.key === 'Escape') closeFeedAsk(); };
   const askSpecial = (k, btn) => {
     const again = feedAsk?.dataset.k === k;
@@ -1472,7 +1476,6 @@
     };
     return a;
   };
-  const marks = { new: [], op: [], mod: [] };
   const comments = () => {
     const page = document.querySelector('shreddit-post[view-context="CommentsPage"]');
     if (!page) return;
@@ -1481,49 +1484,100 @@
     if (pa && validUser(op) && !page.querySelector('[slot="authorName"] .rs-ut')) (pa.closest('faceplate-hovercard') || pa).after(nameTag(op));
     const key = `rs-visit-${page.getAttribute('id')}`;
     if (comments.started !== key) {
-      nav?.remove(); nav = null; navI = -1; marks.new = []; marks.op = []; marks.mod = [];
+      nav?.remove(); nav = null; navI = -1;
       comments.started = key;
       if (cfg.simulateLastVisitHoursAgo) localStorage.setItem(key, String(Date.now() - cfg.simulateLastVisitHoursAgo * 3600e3));
       comments.last = +localStorage.getItem(key) || 0;
       localStorage.setItem(key, String(Date.now()));
       addNavigator();
     }
-    const folded = collapsedMap();
+    const folded = collapsedMap(), me = myName();
     for (const c of document.querySelectorAll('shreddit-comment:not([data-rs])')) {
       const meta = c.querySelector('[slot="commentMeta"]');
       if (!meta) continue;
       c.setAttribute('data-rs', '1');
       if (folded[c.getAttribute('thingid')]) { const d = c.querySelector(':scope > details'); if (d?.open) d.open = false; }
       const author = c.getAttribute('author') || '';
-      if (author === op || c.getAttribute('is-op') === 'true') { c.setAttribute('rs-op', ''); marks.op.push(c); }
+      if (author === op || c.getAttribute('is-op') === 'true') c.setAttribute('rs-op', '');
+      if (me && author.toLowerCase() === me) c.setAttribute('rs-me', '');
       if (c.getAttribute('is-mod-distinguished') === 'true') c.setAttribute('rs-mod', '');
       if (friendSet().has(author.toLowerCase())) c.setAttribute('rs-friend', '');
       const nm = meta.querySelector('.author-name-meta');
       if (nm && validUser(author)) (nm.closest('.author-hovercard-trigger') || nm).after(nameTag(author));
       if (ignored(author)) ignoreComment(c, true);
-      if (comments.last && Date.parse(c.getAttribute('created')) > comments.last) { c.setAttribute('rs-new', ''); meta.append(el('span', { class: 'rs-badge rs-is-new', text: 'new' })); marks.new.push(c); }
-      if (c.getAttribute('is-mod-distinguished') === 'true') marks.mod.push(c);
+      if (comments.last && Date.parse(c.getAttribute('created')) > comments.last) { c.setAttribute('rs-new', ''); meta.append(el('span', { class: 'rs-badge rs-is-new', text: 'new' })); }
       const links = el('span', { class: 'rs-cacts' }, [el('a', { href: c.getAttribute('permalink') || '#', text: 'permalink' })]);
       if (+c.getAttribute('depth') > 0 && c.getAttribute('parentid')) links.append(parentLink(c));
       (c.querySelector(':scope > details [slot="actionRow"]') || meta).append(links);
     }
-    updateNav();
+    updateNav(); moreReplies();
   };
+  // Comment navigator (RES): jump between new comments, the poster's, mods', friends', your own, people you tagged.
   let nav = null, navI = -1;
+  const NAV = [['new', 'New comments', '[rs-new]'], ['op', 'By the poster (OP)', '[rs-op]'], ['mod', 'Moderators', '[rs-mod]'], ['friend', 'Friends', '[rs-friend]'], ['me', 'Your comments', '[rs-me]'], ['tagged', 'People you tagged', '']];
+  const navList = (k) => {
+    const css = (NAV.find((n) => n[0] === k) || NAV[0])[2];
+    const L = [...document.querySelectorAll(`shreddit-comment[data-rs]${css}`)].filter((c) => shown(ownParts(c)[0]));
+    return k === 'tagged' ? L.filter((c) => tagOf(c.getAttribute('author'))) : L;
+  };
   const addNavigator = () => {
     nav = el('div', { id: 'rs-nav', role: 'navigation', 'aria-label': 'Comment navigator' });
     const pick = el('select', { 'aria-label': 'Jump between' });
-    for (const [v, t] of [['new', 'New comments'], ['op', 'By the poster (OP)'], ['mod', 'Moderators']]) pick.append(el('option', { value: v, text: t }));
+    for (const [v, t] of NAV) pick.append(el('option', { value: v, text: t }));
     const prev = el('button', { type: 'button', text: 'Prev' }), next = el('button', { type: 'button', text: 'Next' });
-    const go = (d) => { const L = marks[pick.value]; if (!L.length) return; navI = (navI + d + L.length) % L.length; L[navI].scrollIntoView({ block: 'center', behavior: 'smooth' }); updateNav(); };
+    const go = (d) => {
+      const L = navList(pick.value);
+      if (!L.length) return updateNav();
+      navI = (Math.min(navI, L.length - 1) + d + L.length) % L.length;
+      const c = L[navI];
+      ownParts(c)[0]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (cfg.keys) select(c, false);
+      updateNav();
+    };
     prev.onclick = () => go(-1); next.onclick = () => go(1); pick.onchange = () => { navI = -1; updateNav(); };
     nav.append(pick, prev, next, el('span', { class: 'rs-count' }));
     document.body.append(nav);
   };
   const updateNav = () => {
     if (!nav) return;
-    const L = marks[nav.querySelector('select').value];
-    nav.querySelector('.rs-count').textContent = `${L.length ? Math.max(navI + 1, 0) : 0} / ${L.length}`;
+    const L = navList(nav.querySelector('select').value);
+    nav.querySelector('.rs-count').textContent = `${L.length ? Math.max(Math.min(navI, L.length - 1) + 1, 0) : 0} / ${L.length}`;
+  };
+  // Your Reddit name, for "Your comments". Asked of Reddit once a day.
+  const myName = () => {
+    const c = readJSON('rs-me');
+    if (loggedIn() && !myName.busy && Date.now() - (+c.t || 0) > 864e5) {
+      myName.busy = true;
+      fetch('/api/me.json', { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+        const n = j?.data?.name || j?.name;
+        if (validUser(n)) { try { localStorage.setItem('rs-me', JSON.stringify({ name: n.toLowerCase(), t: Date.now() })); } catch { /* storage full */ } }
+      }).catch(() => { /* next time */ });
+    }
+    return loggedIn() ? c.name || '' : '';
+  };
+  // "N more replies" and "View more comments" load by themselves as they come near the bottom of the screen
+  // (RES's never-ending comments). One at a time, a moment apart; "Continue this thread" pages are left alone.
+  const moreQ = [];
+  let moreBusy = false;
+  const moreIO = typeof IntersectionObserver === 'function' ? new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting && !e.target.rsPressed && !moreQ.includes(e.target)) moreQ.push(e.target);
+    pressMore();
+  }, { rootMargin: '0px 0px 500px 0px' }) : null;
+  const pressMore = () => {
+    if (moreBusy) return;
+    const b = moreQ.shift();
+    if (!b) return;
+    if (!b.isConnected || b.rsPressed || !shown(b) || !cfg.enabled || !cfg.autoReplies) { pressMore(); return; }
+    moreBusy = true; b.rsPressed = true; moreIO?.unobserve(b);
+    b.click();
+    setTimeout(() => { moreBusy = false; pressMore(); }, 700);
+  };
+  const moreReplies = () => {
+    if (!moreIO || !cfg.enabled || !cfg.autoReplies) return;
+    for (const b of document.querySelectorAll('faceplate-partial[loading="action"] button')) {
+      if (b.rsWatched || !/more repl|view more comments/i.test(b.textContent)) continue;
+      b.rsWatched = true; moreIO.observe(b);
+    }
   };
 
   // ---------- keyboard (RES's keys) ----------
@@ -1690,7 +1744,7 @@
   }, true);
   // Clicking a post or comment picks it, like RES
   document.addEventListener('click', (e) => {
-    if (!cfg.enabled || !cfg.keys) return;
+    if (!cfg.enabled || !cfg.keys || !e.isTrusted) return;
     const t = e.target;
     const it = t.closest?.('.rs-row') || (isCommentsPage() && (t.closest?.('shreddit-comment') || t.closest?.('shreddit-post[view-context="CommentsPage"]')));
     if (it && it !== sel) select(it, false);
@@ -1947,7 +2001,7 @@
     const onComments = isCommentsPage();
     html.classList.toggle('rs-feed', !onComments);
     html.classList.toggle('rs-comments', onComments);
-    if (!onComments && nav) { nav.remove(); nav = null; comments.started = null; marks.new = []; marks.op = []; marks.mod = []; }
+    if (!onComments && nav) { nav.remove(); nav = null; comments.started = null; }
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
