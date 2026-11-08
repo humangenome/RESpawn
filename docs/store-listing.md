@@ -5,8 +5,8 @@ Text and answers to paste into the two stores. Packages: `scripts/build.sh --sto
 
 ## Name
 
-- Chrome (75 characters at most): RESpawn (Reddit Enhancement Suite features for New Reddit)
-- Firefox (45 at most): RESpawn: RES features for New Reddit
+RESpawn: RES features for New Reddit (both stores; Firefox allows 45 characters at most). The
+description names Reddit Enhancement Suite in full, so searches for it still find RESpawn.
 
 ## Summary (132 characters at most)
 

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "RESpawn (Reddit Enhancement Suite features for New Reddit)",
+  "name": "RESpawn: RES features for New Reddit",
   "short_name": "RESpawn",
   "version": "0.1.0",
   "description": "Keeps the new Reddit look and brings back old Reddit and RES features. Not affiliated with the RES team or Reddit.",
@@ -21,7 +21,6 @@
       "run_at": "document_idle"
     }
   ],
-  "firefox_name": "RESpawn: RES features for New Reddit",
   "homepage_url": "https://github.com/humangenome/RESpawn",
   "icons": {
     "16": "icons/icon-16.png",
