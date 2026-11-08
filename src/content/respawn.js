@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, pauseEvery: 0, maxVideos: 2, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], pauseEvery: 0, maxVideos: 2, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -102,6 +102,7 @@
     ['Filter bar', [
       ['filterline', 'Show filter bar'],
       ['filterScore', 'Score filter: more than', 'number'],
+      ['filterLists', 'Hide by word, sub or site', 'button'],
     ]],
     ['Scrolling and videos', [
       ['pauseEvery', 'Pages before a pause', 'number', '0 = never pause'],
@@ -146,8 +147,8 @@
         if (choices === 'button') {
           const keysList = key === 'keyHelp';
           const b = el('button', { type: 'button', class: 'rs-btn', text: keysList ? 'Show' : 'Edit' });
-          b.onclick = () => { closePanel(); ({ keyHelp: openKeyHelp, editShortcuts: openScEditor, tagList: openTagList })[key](); };
-          const n = { editShortcuts: () => scList().length, tagList: () => Object.keys(cfg.tags || {}).length }[key];
+          b.onclick = () => { closePanel(); ({ keyHelp: openKeyHelp, editShortcuts: openScEditor, tagList: openTagList, filterLists: openBlockEditor })[key](); };
+          const n = { editShortcuts: () => scList().length, tagList: () => Object.keys(cfg.tags || {}).length, filterLists: blockCount }[key];
           panel.append(el('div', { class: 'rs-set' }, [el('span', { text: n ? `${label} (${n()})` : label }), b]));
         } else if (choices === 'number') {
           const score = key === 'filterScore';
@@ -936,7 +937,7 @@
       if (!post) continue;
       if (row.rsFv !== fVer) {
         row.rsFv = fVer;
-        row.rsHide = on.some((k) => (fstate(k) === 'only' ? !matches(post, row, k) : matches(post, row, k)));
+        row.rsHide = blocked(post) || on.some((k) => (fstate(k) === 'only' ? !matches(post, row, k) : matches(post, row, k)));
         row.classList.toggle('rs-filtered', row.rsHide);
         row.classList.toggle('rs-ignored', ignored(post.getAttribute('author')));
       }
@@ -971,8 +972,81 @@
     }
     const clear = el('button', { type: 'button', class: 'rs-fl-clear', text: 'Clear', hidden: true });
     clear.onclick = () => { saveCfg({ filters: {} }); refilter(); };
-    bar.append(el('span', { class: 'rs-fl-count', role: 'status' }), clear);
+    const lists = el('button', { type: 'button', class: 'rs-fl-lists', title: 'Hide posts by words in the title, by subreddit or by website' }, [el('span', { class: 'rs-fl-plus', 'aria-hidden': 'true', text: '+' }), ' Hide words, subs, sites']);
+    lists.onclick = (e) => { e.stopPropagation(); openBlockEditor(); };
+    bar.append(el('span', { class: 'rs-fl-count', role: 'status' }), clear, lists);
     return bar;
+  };
+
+  // ---------- your hide lists (RES's filteReddit): words in titles, subreddits, websites ----------
+  // Words match whole words or phrases, any capitals. A hidden subreddit still shows when you visit it. A website
+  // covers its subdomains (x.com covers mobile.x.com).
+  const clip = (v, n) => String(v || '').slice(0, n);
+  const parseWords = (t) => [...new Map(String(t).split(/[\n,]+/).map((w) => clip(w.trim().replace(/\s+/g, ' '), 60)).filter(Boolean).map((w) => [w.toLowerCase(), w])).values()].slice(0, 300);
+  const parseSites = (t) => [...new Set(String(t).split(/[\s,]+/).map((x) => x.trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/^www\./, '').replace(/[/?#].*$/, '')).filter((x) => /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(x)))].slice(0, 300);
+  const parseSubList = (t) => [...new Set(String(t).split(/[\s,]+/).map((x) => cleanSub(x).toLowerCase()).filter(validSub))].slice(0, 300);
+  const blockCount = () => (cfg.blockWords || []).length + (cfg.blockSubs || []).length + (cfg.blockSites || []).length;
+  let wordRe = { key: null, re: null };
+  const wordsRe = () => {
+    const key = (cfg.blockWords || []).join('\n');
+    if (wordRe.key !== key) {
+      const esc = (cfg.blockWords || []).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+'));
+      wordRe = { key, re: esc.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${esc.join('|')})(?![\\p{L}\\p{N}])`, 'iu') : null };
+    }
+    return wordRe.re;
+  };
+  const siteOf = (post) => { try { return new URL(post.getAttribute('content-href') || '', location.origin).hostname.replace(/^www\./, '').toLowerCase(); } catch { return ''; } };
+  const blocked = (post) => {
+    const re = wordsRe();
+    if (re && re.test(post.getAttribute('post-title') || '')) return true;
+    const sub = String(post.getAttribute('subreddit-name') || post.getAttribute('subreddit-prefixed-name') || '').replace(/^r\//i, '').toLowerCase();
+    if (sub && (cfg.blockSubs || []).includes(sub) && (subOf() || '').toLowerCase() !== sub) return true;
+    const sites = cfg.blockSites || [];
+    if (sites.length) {
+      const hosts = [String(post.getAttribute('domain') || '').toLowerCase(), siteOf(post)].filter(Boolean);
+      if (hosts.some((h) => sites.some((x) => h === x || h.endsWith(`.${x}`)))) return true;
+    }
+    return false;
+  };
+  const toggleBlockSub = (sub) => {
+    const k = sub.toLowerCase(), l = cfg.blockSubs || [], on = l.includes(k);
+    saveCfg({ blockSubs: on ? l.filter((x) => x !== k) : [...l, k] }); refilter();
+    toast(on ? `Posts from r/${sub} show in your feeds again.` : `Hiding r/${sub} from your feeds. It still shows when you visit it.`);
+  };
+  let blockEd = null;
+  const closeBlockEditor = () => { if (blockEd?.rsSave) blockEd.rsSave(); blockEd?.remove(); blockEd = null; document.removeEventListener('keydown', blockEdEsc, true); };
+  const blockEdEsc = (e) => { if (e.key === 'Escape') closeBlockEditor(); };
+  const openBlockEditor = () => {
+    closeMySubs();
+    if (blockEd) return closeBlockEditor();
+    blockEd = el('div', { id: 'rs-blocked', class: 'rs-modal', role: 'dialog', 'aria-label': 'Hide posts by word, subreddit or website' });
+    const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close', html: ICON.close });
+    x.onclick = closeBlockEditor;
+    const field = (label, tip, value, ph) => {
+      const ta = el('textarea', { class: 'rs-ed-subs', rows: '3', placeholder: ph, 'aria-label': label, spellcheck: 'false' });
+      ta.value = value;
+      return [ta, el('label', { class: 'rs-bl-field' }, [el('b', { text: label }), el('span', { class: 'rs-ed-tip', text: tip }), ta])];
+    };
+    const [words, wBox] = field('Words in titles', 'Whole words or phrases, separated by commas or new lines.', (cfg.blockWords || []).join(', '), 'trailer, leaked, spoilers');
+    const [subs, sBox] = field('Subreddits', 'Still shown when you visit that subreddit.', (cfg.blockSubs || []).join(', '), 'politics, news');
+    const [sites, xBox] = field('Websites', 'A site covers its subdomains.', (cfg.blockSites || []).join(', '), 'x.com, tiktok.com');
+    const msg = el('span', { class: 'rs-ed-count', role: 'status' });
+    const save = () => {
+      saveCfg({ blockWords: parseWords(words.value), blockSubs: parseSubList(subs.value), blockSites: parseSites(sites.value) });
+      words.value = cfg.blockWords.join(', '); subs.value = cfg.blockSubs.join(', '); sites.value = cfg.blockSites.join(', '); // shows how it was read
+      refilter();
+      const n = document.querySelectorAll('.rs-row.rs-filtered').length;
+      msg.textContent = n ? `${n} post${n === 1 ? '' : 's'} hidden on this page` : '';
+    };
+    blockEd.rsSave = save;
+    for (const ta of [words, subs, sites]) ta.addEventListener('change', save);
+    const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
+    done.onclick = closeBlockEditor;
+    blockEd.append(el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Hide posts' }), x]), wBox, sBox, xBox, el('div', { class: 'rs-panel-foot' }, [msg, done]));
+    document.body.append(blockEd);
+    save();
+    words.focus();
+    setTimeout(() => document.addEventListener('keydown', blockEdEsc, true), 0);
   };
   const trackOpens = (e) => {
     const a = e.target.closest?.('a');
@@ -1820,7 +1894,10 @@
     const sc = el('button', { type: 'button', class: 'rs-btn' });
     const paint = () => { const on = scIndex(sub) >= 0; sc.textContent = on ? '− Shortcut' : '+ Shortcut'; sc.setAttribute('aria-pressed', String(on)); };
     sc.onclick = () => { scToggle(sub); paint(); };
-    paint();
+    const hideSub = el('button', { type: 'button', class: 'rs-btn' });
+    const paintHide = () => { const on = (cfg.blockSubs || []).includes(sub.toLowerCase()); hideSub.textContent = on ? 'Show in feeds' : 'Hide in feeds'; hideSub.setAttribute('aria-pressed', String(on)); };
+    hideSub.onclick = () => { toggleBlockSub(sub); paintHide(); };
+    paint(); paintHide();
     return [
       el('div', { class: 'rs-hc-head' }, [
         icon ? el('img', { class: 'rs-hc-icon rs-hc-round', src: icon, alt: '' }) : el('span', { class: 'rs-hc-icon rs-hc-round rs-ms-noicon', text: 'r/' }),
@@ -1831,7 +1908,7 @@
         d.created_utc ? el('span', { text: `Created ${dateOf(d.created_utc)}` }) : null,
       ]),
       about ? el('p', { class: 'rs-hc-about', text: about }) : null,
-      el('div', { class: 'rs-hc-links' }, [el('a', { href: `/r/${sub}/`, text: d.user_is_subscriber ? 'Open (joined)' : 'Open' }), sc]),
+      el('div', { class: 'rs-hc-links' }, [el('a', { href: `/r/${sub}/`, text: d.user_is_subscriber ? 'Open (joined)' : 'Open' }), sc, hideSub]),
     ];
   };
   const openHover = async (a, t) => {
@@ -1864,7 +1941,7 @@
   let lastUrl = '';
   // Reddit often changes pages without reloading, and swaps the page parts in a moment later; so everything below
   // checks the page as it is on every pass instead of trusting the moment the address changed.
-  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); closeHover(); closeTagger(); };
+  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); closeHover(); closeTagger(); closeBlockEditor(); };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     const onComments = isCommentsPage();
