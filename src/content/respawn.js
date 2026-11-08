@@ -10,11 +10,17 @@
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
+  // Our own fixed icon drawings (never text from a page), read once and copied in without innerHTML
+  const svgCache = new Map();
+  const svgOf = (src) => {
+    if (!svgCache.has(src)) svgCache.set(src, new DOMParser().parseFromString(src.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '), 'image/svg+xml').documentElement);
+    return document.importNode(svgCache.get(src), true);
+  };
   const el = (tag, attrs = {}, kids = []) => {
     const e = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
       if (k === 'text') e.textContent = v;
-      else if (k === 'html') e.innerHTML = v; // only our own fixed icon markup
+      else if (k === 'html') e.replaceChildren(svgOf(v)); // only our own fixed icon drawings
       else if (v !== null && v !== undefined && v !== false) e.setAttribute(k, v === true ? '' : v);
     }
     for (const c of [].concat(kids)) if (c) e.append(c);
@@ -1344,7 +1350,7 @@
         if (kind === 'youtube' || kind === 'embed') { box.replaceChildren(); delete box.dataset.filled; }
       }
       b.setAttribute('aria-expanded', String(open));
-      b.innerHTML = open ? ICON.close : ICON[icon];
+      b.replaceChildren(svgOf(open ? ICON.close : ICON[icon]));
       b.title = open ? 'Close' : label;
     };
     return b;
