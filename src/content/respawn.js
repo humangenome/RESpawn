@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, scoreColors: true, hideKids: false, hideMyName: false, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, scoreColors: true, hideKids: false, hideMyName: false, linkDashboard: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -120,6 +120,7 @@
     ['Shortcut bar', [
       ['showShortcuts', 'Show shortcut bar'],
       ['scMode', 'Bar shows', [['mine', 'My list'], ['visits', 'Most visited']]],
+      ['linkDashboard', 'DASHBOARD link'],
       ['linkFriends', 'FRIENDS link'],
       ['linkMod', 'MOD and MODQUEUE links (moderators)'],
       ['editShortcuts', 'Your shortcuts', 'button'],
@@ -192,14 +193,16 @@
     }
     const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
     done.onclick = closePanel;
-    panel.append(el('div', { class: 'rs-panel-foot' }, [el('a', { href: 'https://github.com/humangenome/RESpawn', target: '_blank', rel: 'noopener', text: 'About RESpawn' }), done]));
+    const dashB = el('button', { type: 'button', class: 'rs-btn', text: 'Dashboard' });
+    dashB.onclick = () => openDash();
+    panel.append(el('div', { class: 'rs-panel-foot' }, [el('a', { href: 'https://github.com/humangenome/RESpawn', target: '_blank', rel: 'noopener', text: 'About RESpawn' }), el('span', { class: 'rs-set-btns' }, [dashB, done])]));
     document.body.append(panel);
     setTimeout(() => { document.addEventListener('click', outside, true); document.addEventListener('keydown', esc, true); }, 0);
   };
   const toggle = (key) => {
     const i = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
     i.checked = !!cfg[key];
-    i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (['showShortcuts', 'linkFriends', 'linkMod'].includes(key)) shortcutBar(); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
+    i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (['showShortcuts', 'linkFriends', 'linkMod', 'linkDashboard'].includes(key)) shortcutBar(); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
     return i;
   };
 
@@ -219,7 +222,7 @@
   };
   const cleanSettings = (o) => {
     const out = {};
-    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'scoreColors', 'hideKids', 'hideMyName']) if (typeof o[k] === 'boolean') out[k] = o[k];
+    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'scoreColors', 'hideKids', 'hideMyName', 'linkDashboard']) if (typeof o[k] === 'boolean') out[k] = o[k];
     for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']]]) if (ok.includes(o[k])) out[k] = o[k];
     for (const [k, lo, hi] of [['filterScore', -99999, 99999], ['pauseEvery', 0, 99], ['maxVideos', 0, 99]]) if (Number.isFinite(o[k])) out[k] = Math.max(lo, Math.min(hi, Math.round(o[k])));
     if (Array.isArray(o.shortcuts)) {
@@ -397,6 +400,11 @@
     const mine = el('button', { type: 'button', class: 'rs-mine', 'aria-haspopup': 'true', 'aria-expanded': 'false' }, [document.createTextNode('My subreddits'), el('span', { html: ARROW.d })]);
     mine.onclick = (e) => { e.stopPropagation(); toggleMySubs(mine); };
     bar.replaceChildren(mine);
+    if (cfg.linkDashboard) {
+      const d = el('button', { type: 'button', class: 'rs-fixed rs-dash-link', 'aria-haspopup': 'dialog', 'aria-expanded': String(!!dash), title: 'Your saved comments, tags and hide lists', text: 'DASHBOARD' });
+      d.onclick = () => (dash ? closeDash() : openDash());
+      bar.append(d);
+    }
     bar.classList.remove('rs-dragging'); // a finished drag rebuilds the bar
     const path = location.pathname;
     const fixed = [['HOME', '/', path === '/' || /^\/(best|hot|new|top|rising)\/?$/.test(path)], ['POPULAR', '/r/popular/', /^\/r\/popular/i.test(path)], ['ALL', '/r/all/', /^\/r\/all/i.test(path)]];
@@ -1130,9 +1138,9 @@
       ta.value = value;
       return [ta, el('label', { class: 'rs-bl-field' }, [el('b', { text: label }), el('span', { class: 'rs-ed-tip', text: tip }), ta])];
     };
-    const [words, wBox] = field('Words in titles', 'Whole words or phrases, separated by commas or new lines.', (cfg.blockWords || []).join(', '), 'trailer, leaked, spoilers');
-    const [subs, sBox] = field('Subreddits', 'Still shown when you visit that subreddit.', (cfg.blockSubs || []).join(', '), 'politics, news');
-    const [sites, xBox] = field('Websites', 'A site covers its subdomains.', (cfg.blockSites || []).join(', '), 'x.com, tiktok.com');
+    const [words, wBox] = field('Words in titles', 'Whole words or phrases, separated by commas or new lines.', (cfg.blockWords || []).join(', '), 'For example: trailer, leaked');
+    const [subs, sBox] = field('Subreddits', 'Still shown when you visit that subreddit.', (cfg.blockSubs || []).join(', '), 'For example: politics, news');
+    const [sites, xBox] = field('Websites', 'A site covers its subdomains.', (cfg.blockSites || []).join(', '), 'For example: x.com, tiktok.com');
     const msg = el('span', { class: 'rs-ed-count', role: 'status' });
     const save = () => {
       saveCfg({ blockWords: parseWords(words.value), blockSubs: parseSubList(subs.value), blockSites: parseSites(sites.value) });
@@ -1894,7 +1902,7 @@
     return path.some((n) => n.getAttribute && n.id !== 'rs-keyhelp' && (n.tagName === 'DIALOG' || n.getAttribute('aria-modal') === 'true' || (n.getAttribute('role') === 'dialog' && n.id !== 'rs-panel')));
   };
   window.addEventListener('keydown', (e) => {
-    if (!cfg.enabled || !cfg.keys || e.ctrlKey || e.metaKey || e.altKey || e.isComposing || panel || editor) return;
+    if (!cfg.enabled || !cfg.keys || e.ctrlKey || e.metaKey || e.altKey || e.isComposing || panel || editor || dash) return;
     if (keyHelp && (e.key === 'Escape' || e.key === '?')) { e.preventDefault(); e.stopImmediatePropagation(); closeKeyHelp(); return; }
     if (skipKey(e)) return;
     const fn = e.key === '?' ? openKeyHelp : KEYMAP[isCommentsPage() ? 'comments' : 'feed'][e.key];
@@ -1947,6 +1955,7 @@
     for (const b of document.querySelectorAll('.rs-ut')) paintTag(b);
     for (const c of document.querySelectorAll('shreddit-comment[data-rs]')) { const ig = ignored(c.getAttribute('author')); if (ig !== c.hasAttribute('rs-ignored')) ignoreComment(c, ig); }
     refilter();
+    if (dash && dashTab === 'tags') drawDash(); else paintDashTabs();
   };
   // Your friends list from Reddit, for coloring their names. Read again every 30 minutes while you use Reddit.
   let friends = null;
@@ -2152,6 +2161,192 @@
   document.addEventListener('mousedown', (e) => { if (hc && !hc.contains(e.target)) closeHover(); }, true);
   window.addEventListener('scroll', () => { if (hc) closeHover(); }, { passive: true });
 
+  // ---------- dashboard (RES's dashboard): your saved comments, tags and hide lists on one page ----------
+  // Opens over the page you are on (DASHBOARD in the shortcut bar, or the settings panel). Saved comments come from your
+  // Reddit account, 100 at a time; tags and hide lists are your RESpawn settings. Reddit's comment text is read into
+  // plain paragraphs (never put on the page as Reddit's own markup).
+  let dash = null, dashTab = 'saved';
+  const saved = { items: [], after: null, busy: false, loaded: false, err: '', q: '' };
+  const closeDash = () => {
+    if (!dash) return;
+    dash.rsSave?.(); dash.remove(); dash = null;
+    html.classList.remove('rs-dash-open');
+    document.removeEventListener('keydown', dashEsc, true);
+    document.querySelectorAll('.rs-dash-link').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  };
+  const dashEsc = (e) => { if (e.key === 'Escape' && !tagger) { e.stopPropagation(); closeDash(); } };
+  const commentText = (markup) => {
+    const doc = new DOMParser().parseFromString(String(markup || ''), 'text/html'); // a parsed copy runs nothing
+    const root = doc.querySelector('.md') || doc.body, out = [];
+    for (const b of root.children) {
+      if (/^(UL|OL)$/.test(b.tagName)) { for (const li of b.children) out.push(['li', li.textContent.trim()]); }
+      else out.push([b.tagName === 'BLOCKQUOTE' ? 'quote' : b.tagName === 'PRE' ? 'pre' : 'p', b.textContent.trim()]);
+    }
+    const kept = out.filter(([, t]) => t);
+    return kept.length ? kept : [['p', root.textContent.trim()]];
+  };
+  const meNow = async () => {
+    const n = myName();
+    if (n || !loggedIn()) return n;
+    try { const j = await (await fetch('/api/me.json', { credentials: 'include' })).json(); return validUser(j?.data?.name) ? j.data.name.toLowerCase() : ''; } catch { return ''; }
+  };
+  const loadSaved = async (more) => {
+    if (saved.busy) return;
+    saved.busy = true; saved.err = ''; drawDash();
+    const me = await meNow();
+    if (!me) { saved.busy = false; saved.err = 'login'; drawDash(); return; }
+    try {
+      const after = more && saved.after ? `&after=${encodeURIComponent(saved.after)}` : '';
+      const r = await fetch(`/user/${encodeURIComponent(me)}/saved.json?type=comments&limit=100&raw_json=1${after}`, { credentials: 'include' });
+      if (!r.ok) throw new Error(String(r.status));
+      const j = await r.json();
+      const got = (j?.data?.children || []).filter((k) => k?.kind === 't1' && /^t1_[a-z0-9]+$/.test(k.data?.name || ''));
+      saved.items = more ? [...saved.items, ...got] : got;
+      saved.after = typeof j?.data?.after === 'string' ? j.data.after : null;
+      saved.loaded = true;
+    } catch { saved.err = 'net'; }
+    saved.busy = false; drawDash();
+  };
+  const savedCard = (c) => {
+    const d = c.data;
+    const sub = validSub(d.subreddit) ? d.subreddit : '';
+    const perma = typeof d.permalink === 'string' && /^\/r\/[A-Za-z0-9_]+\/comments\//.test(d.permalink) ? d.permalink : null;
+    // A paragraph that is only a Reddit picture link shows the picture
+    const para = ([k, t]) => (k === 'p' && /^https:\/\/(preview|i)\.redd\.it\/\S+$/.test(t) ? el('img', { class: 'rs-dc-img', src: t, alt: 'Picture in the comment', loading: 'lazy' }) : el('p', { class: `rs-dc-${k}`, text: k === 'li' ? `• ${t}` : t }));
+    const body = el('div', { class: 'rs-dc-body' }, commentText(d.body_html).slice(0, 60).map(para));
+    const more = el('button', { type: 'button', class: 'rs-dc-more', text: 'Show all', hidden: true });
+    more.onclick = () => { const open = body.classList.toggle('rs-open'); more.textContent = open ? 'Show less' : 'Show all'; };
+    const unsave = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', text: c.gone ? 'Undo' : 'Unsave', title: 'Remove from your saved comments on Reddit' });
+    const card = el('article', { class: c.gone ? 'rs-dash-card rs-dc-gone' : 'rs-dash-card' });
+    unsave.onclick = async () => {
+      if (needLogin('change your saved comments')) return;
+      unsave.disabled = true;
+      try { await gql('UpdateCommentSaveState', { commentId: d.name, saveState: c.gone ? 'SAVED' : 'NONE' }); }
+      catch { unsave.disabled = false; toast('Reddit did not take that. Try again.'); return; }
+      c.gone = !c.gone;
+      card.classList.toggle('rs-dc-gone', c.gone); unsave.textContent = c.gone ? 'Undo' : 'Unsave'; unsave.disabled = false;
+    };
+    const pts = +d.score || 0;
+    const meta = [validUser(d.author) ? `u/${d.author}` : 'deleted account', `${num(pts)} point${pts === 1 ? '' : 's'}`, d.created_utc ? dateOf(d.created_utc) : ''].filter(Boolean).join(' · ');
+    card.append(
+      el('div', { class: 'rs-dc-head' }, [sub ? el('a', { href: `/r/${sub}/`, class: 'rs-dc-sub', text: `r/${sub}` }) : null, el(perma ? 'a' : 'span', { href: perma, class: 'rs-dc-title', text: String(d.link_title || '') })]),
+      body, more,
+      el('div', { class: 'rs-dc-foot' }, [el('span', { class: 'rs-dc-meta', text: meta }), el('span', { class: 'rs-dc-note', text: 'Removed from saved' }), perma ? el('a', { href: perma, class: 'rs-btn', text: 'Open' }) : null, unsave]),
+    );
+    requestAnimationFrame(() => { if (body.scrollHeight > body.clientHeight + 4) more.hidden = false; });
+    return card;
+  };
+  const savedTab = (box) => {
+    const search = el('input', { type: 'search', class: 'rs-dash-search', placeholder: 'Search saved comments', 'aria-label': 'Search saved comments', spellcheck: 'false' });
+    search.value = saved.q;
+    const count = el('span', { class: 'rs-dash-count', role: 'status' });
+    const list = el('div', { class: 'rs-dash-list' });
+    const draw = () => {
+      const q = saved.q.trim().toLowerCase();
+      const hit = (c) => !q || [c.data.body, c.data.link_title, c.data.subreddit, c.data.author].some((v) => String(v || '').toLowerCase().includes(q));
+      const shownItems = saved.items.filter(hit);
+      list.replaceChildren(...shownItems.map(savedCard));
+      count.textContent = saved.loaded ? (q ? `${shownItems.length} of ${saved.items.length}` : `${saved.items.length}${saved.after ? '+' : ''} saved`) : '';
+      if (saved.busy && !saved.items.length) list.append(el('p', { class: 'rs-dash-empty', text: 'Loading your saved comments…' }));
+      else if (saved.err === 'login') list.append(el('p', { class: 'rs-dash-empty', text: 'Log in to Reddit to see your saved comments.' }));
+      else if (saved.err === 'net' && !saved.items.length) {
+        const again = el('button', { type: 'button', class: 'rs-btn', text: 'Try again' }); again.onclick = () => loadSaved(false);
+        list.append(el('div', { class: 'rs-dash-empty' }, [el('p', { text: 'Reddit did not answer.' }), again]));
+      } else if (saved.loaded && !saved.items.length) list.append(el('p', { class: 'rs-dash-empty', text: 'No saved comments yet. Save one from its "..." menu, or pick it and press s.' }));
+      else if (q && !shownItems.length) list.append(el('p', { class: 'rs-dash-empty', text: 'No saved comments match.' }));
+      if (saved.after && !q) {
+        const b = el('button', { type: 'button', class: 'rs-btn rs-dash-more', text: saved.busy ? 'Loading…' : 'Load more', disabled: saved.busy });
+        b.onclick = () => loadSaved(true);
+        list.append(b);
+      }
+    };
+    search.oninput = () => { saved.q = search.value; draw(); };
+    box.append(el('div', { class: 'rs-dash-tools' }, [search, count]), list);
+    draw();
+    if (!saved.loaded && !saved.busy && !saved.err) loadSaved(false);
+  };
+  const tagsTab = (box) => {
+    const all = Object.values(cfg.tags || {}).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    const list = el('div', { class: 'rs-dash-list' });
+    for (const t of all) {
+      const del = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', text: 'Remove', 'aria-label': `Remove your tag for u/${t.name}` });
+      del.onclick = () => setTag(t.name, null);
+      list.append(el('div', { class: 'rs-dt-row' }, [el('a', { href: `/user/${t.name}/`, class: 'rs-dt-name', text: `u/${t.name}` }), nameTag(t.name), del]));
+    }
+    if (!all.length) list.append(el('p', { class: 'rs-dash-empty', text: 'No tags yet. Click the tag icon next to any name.' }));
+    box.append(el('div', { class: 'rs-dash-tools' }, [el('span', { class: 'rs-dash-count', text: all.length ? `${all.length} tag${all.length === 1 ? '' : 's'}` : '' })]), list);
+  };
+  const hideTab = (box) => {
+    const field = (label, tip, value, ph) => {
+      const ta = el('textarea', { class: 'rs-ed-subs', rows: '4', placeholder: ph, 'aria-label': label, spellcheck: 'false' });
+      ta.value = value;
+      return [ta, el('label', { class: 'rs-bl-field' }, [el('b', { text: label }), el('span', { class: 'rs-ed-tip', text: tip }), ta])];
+    };
+    const [words, wBox] = field('Words in titles', 'Whole words or phrases, separated by commas or new lines.', (cfg.blockWords || []).join(', '), 'For example: trailer, leaked');
+    const [subs, sBox] = field('Subreddits', 'Still shown when you visit that subreddit.', (cfg.blockSubs || []).join(', '), 'For example: politics, news');
+    const [sites, xBox] = field('Websites', 'A site covers its subdomains.', (cfg.blockSites || []).join(', '), 'For example: x.com, tiktok.com');
+    const msg = el('span', { class: 'rs-dash-count', role: 'status' });
+    const save = () => {
+      const before = JSON.stringify([cfg.blockWords, cfg.blockSubs, cfg.blockSites]);
+      saveCfg({ blockWords: parseWords(words.value), blockSubs: parseSubList(subs.value), blockSites: parseSites(sites.value) });
+      words.value = cfg.blockWords.join(', '); subs.value = cfg.blockSubs.join(', '); sites.value = cfg.blockSites.join(', ');
+      if (JSON.stringify([cfg.blockWords, cfg.blockSubs, cfg.blockSites]) !== before) { refilter(); msg.textContent = 'Saved'; paintDashTabs(); }
+    };
+    for (const ta of [words, subs, sites]) ta.addEventListener('change', save);
+    dash.rsSave = save;
+    box.append(wBox, sBox, xBox, msg);
+  };
+  const DASH_TABS = [['saved', 'Saved comments'], ['tags', 'Tags'], ['hide', 'Hide lists']];
+  const paintDashTabs = () => {
+    if (!dash) return;
+    const n = { tags: Object.keys(cfg.tags || {}).length, hide: blockCount() };
+    for (const b of dash.querySelectorAll('.rs-dash-tabs button')) {
+      const k = b.dataset.tab, label = DASH_TABS.find((t) => t[0] === k)[1];
+      b.textContent = n[k] ? `${label} (${n[k]})` : label;
+      b.setAttribute('aria-selected', String(k === dashTab));
+    }
+  };
+  const drawDash = () => {
+    if (!dash) return;
+    const box = dash.querySelector('.rs-dash-in');
+    if (dashTab === 'saved' && box.rsTab === 'saved' && box.rsDraw) { box.rsDraw(); return; }
+    dash.rsSave?.(); dash.rsSave = null;
+    box.replaceChildren(); box.rsTab = dashTab; box.rsDraw = null;
+    if (dashTab === 'saved') { const inner = el('div'); box.append(inner); savedTab(inner); box.rsDraw = () => { const keep = inner.querySelector('.rs-dash-search'); const pos = keep && document.activeElement === keep ? keep.selectionStart : null; inner.replaceChildren(); savedTab(inner); if (pos !== null) { const s = inner.querySelector('.rs-dash-search'); s.focus(); s.setSelectionRange(pos, pos); } }; }
+    else if (dashTab === 'tags') tagsTab(box);
+    else hideTab(box);
+    box.append(el('footer', { class: 'rs-dash-foot' }, [el('a', { href: 'https://github.com/humangenome/RESpawn', target: '_blank', rel: 'noopener', text: 'About RESpawn' }), el('a', { href: 'https://github.com/humangenome/RESpawn/issues', target: '_blank', rel: 'noopener', text: 'Report a problem' })]));
+    paintDashTabs();
+  };
+  const openDash = (tab) => {
+    closePanel(); closeMySubs(); closeTagList(); closeBlockEditor(); closeHover();
+    if (tab) dashTab = tab;
+    if (dash) { drawDash(); return; }
+    if (!saved.busy) { saved.loaded = false; saved.err = ''; } // read your saved comments again each time it opens
+    dash = el('div', { id: 'rs-dash', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'RESpawn dashboard' });
+    const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close the dashboard', title: 'Close (Esc)', html: ICON.close });
+    x.onclick = closeDash;
+    const tabs = el('div', { class: 'rs-dash-tabs', role: 'tablist' });
+    for (const [k] of DASH_TABS) {
+      const b = el('button', { type: 'button', role: 'tab', 'data-tab': k });
+      b.onclick = () => { if (dashTab === k) return; dashTab = k; drawDash(); };
+      tabs.append(b);
+    }
+    dash.append(
+      el('div', { class: 'rs-dash-top' }, [el('div', { class: 'rs-dash-bar' }, [el('h2', { text: 'Dashboard' }), x, tabs])]),
+      el('div', { class: 'rs-dash-main' }, [el('div', { class: 'rs-dash-in' })]),
+    );
+    // Sits under Reddit's top bar and the shortcut bar when they are on screen, so those still work while it is open
+    const bar = document.getElementById('rs-shortcuts'), bottom = bar?.isConnected ? Math.round(bar.getBoundingClientRect().bottom) : 0;
+    dash.style.top = `${Math.max(0, Math.min(bottom, 200))}px`;
+    document.body.append(dash);
+    html.classList.add('rs-dash-open');
+    document.querySelectorAll('.rs-dash-link').forEach((b) => b.setAttribute('aria-expanded', 'true'));
+    drawDash();
+    dash.querySelector('.rs-dash-tabs [aria-selected="true"]')?.focus();
+    setTimeout(() => document.addEventListener('keydown', dashEsc, true), 0);
+  };
+
   // ---------- back to top (RES's page navigator) ----------
   const TOP_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4h10M10 16.5V8M6 11.5l4-4 4 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const topShow = () => document.getElementById('rs-top')?.classList.toggle('rs-top-on', scrollY > innerHeight * 1.5);
@@ -2218,7 +2413,7 @@
   let lastUrl = '';
   // Reddit often changes pages without reloading, and swaps the page parts in a moment later; so everything below
   // checks the page as it is on every pass instead of trusting the moment the address changed.
-  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); closeHover(); closeTagger(); closeBlockEditor(); };
+  const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); closeHover(); closeTagger(); closeBlockEditor(); closeDash(); };
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     const onComments = isCommentsPage();
