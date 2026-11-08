@@ -4,12 +4,14 @@
 
 RESpawn keeps the new Reddit look and brings back the way old Reddit and Reddit Enhancement Suite (RES)
 worked: more posts on a screen, sort tabs in the open, RES's filter bar, one-click comments, save and
-hide, a subreddit shortcut bar with groups and FRIENDS / MOD / MODQUEUE links, a switch for subreddit
-styles, keyboard shortcuts, hover cards for users and subreddits, images and videos that open in place
-(including Streamable, Vimeo, TikTok, Imgur and Giphy), a limit on videos playing at once, endless
-scrolling with page dividers and an optional pause, user tags and hiding people, colored names for the
-poster, mods and friends, hiding posts by word, subreddit or website, more replies that load by
-themselves, a comment navigator, remembered collapsed comments, new-comment counts and a settings
+hide, a subreddit shortcut bar with groups and DASHBOARD / FRIENDS / MOD / MODQUEUE links, a switch for
+subreddit styles, keyboard shortcuts, hover cards for users and subreddits, images and videos that open
+in place (including Streamable, Vimeo, TikTok, Imgur and Giphy), a limit on videos playing at once,
+endless scrolling with page dividers and an optional pause, user tags and hiding people, colored names
+for the poster, mods and friends, hiding posts by word, subreddit or website, more replies that load by
+themselves, hiding all replies at once, a comment navigator, remembered collapsed comments, new-comment
+counts, a dashboard with your saved comments, tags and hide lists, scores colored so the top posts
+stand out, crosspost links, a back-to-top button, hiding chat and your own username, and a settings
 backup file. It follows Reddit's light and dark modes.
 
 RES made Reddit better for over a decade, but it only works on old.reddit.com. RESpawn is a new
@@ -21,10 +23,14 @@ extension for today's www.reddit.com, in Chrome and Firefox.
 
 ## Status
 
-Early work. Nothing to install yet.
+Ready for the Chrome Web Store and Firefox Add-ons, not submitted yet.
 
+- To try it now: run `scripts/build.sh`, then load `dist/chrome` in Chrome (chrome://extensions,
+  Developer mode, Load unpacked) or `dist/firefox` in Firefox (about:debugging, This Firefox, Load
+  Temporary Add-on).
 - [Feature check](docs/feature-check.tsv): every one of RES's 82 features, sorted into what Reddit
   already does, what RESpawn rebuilds and what no longer applies.
+- [Privacy policy](PRIVACY.md): no servers, no tracking, nothing collected.
 
 ## How it works
 
