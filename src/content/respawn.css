@@ -15,6 +15,7 @@
   --rs-op: #0055df;
   --rs-mod: #228822;
   --rs-friend: #c2410c;
+  --rs-hluser: #7c3aed;
   --rs-font: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
 }
 /* Reddit's dark theme (picked in Reddit, or the computer is in dark mode and Reddit is left on automatic).
@@ -496,6 +497,25 @@ a.rs-ed-feed:hover { color: var(--rs-text); text-decoration: underline; }
 #rs-hover .rs-hc-links a { padding: 6px 10px; border-radius: 999px; color: var(--rs-text); font-weight: 600; text-decoration: none; }
 #rs-hover .rs-hc-links a:hover { background: var(--rs-hover); }
 #rs-hover .rs-hc-links .rs-btn { margin-left: auto; }
+html.rs-on faceplate-hovercard.rs-own-card::part(content-container), html.rs-on faceplate-hovercard.rs-own-card > [slot="content"] { display: none !important; }
+/* The person card: name with their posts and comments, then RES's facts (since, karma, your tag), then its buttons */
+#rs-hover .rs-hc-who { min-width: 0; }
+#rs-hover a.rs-hc-name { display: block; color: var(--rs-text); font: 700 15px/1.3 var(--rs-font); text-decoration: none; overflow-wrap: anywhere; }
+#rs-hover a.rs-hc-name:hover { text-decoration: underline; }
+#rs-hover .rs-hc-who .rs-hc-sub { display: flex; gap: 12px; margin-top: 1px; }
+#rs-hover .rs-hc-who .rs-hc-sub a { color: var(--rs-weak); font-weight: 600; text-decoration: none; }
+#rs-hover .rs-hc-who .rs-hc-sub a:hover { color: var(--rs-text); text-decoration: underline; }
+#rs-hover .rs-hc-facts { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 14px; margin: 12px 0 0; }
+#rs-hover .rs-hc-facts dt { margin: 0; color: var(--rs-weak); font-weight: 400; }
+#rs-hover .rs-hc-facts dd { margin: 0; min-width: 0; min-height: 20px; display: flex; align-items: center; color: var(--rs-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+#rs-hover .rs-hc-facts .rs-ut { margin-left: -4px; }
+/* No tag yet: the tag button says so in words */
+#rs-hover .rs-hc-facts .rs-ut:not(:has(.rs-ut-label)) .rs-ut-btn { width: auto; gap: 4px; padding: 0 8px 0 5px; font: 600 12px/20px var(--rs-font); }
+#rs-hover .rs-hc-facts .rs-ut:not(:has(.rs-ut-label)) .rs-ut-btn::after { content: "Add a tag"; }
+#rs-hover .rs-hc-about { color: var(--rs-weak); }
+#rs-hover .rs-hc-btns { display: flex; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rs-line); }
+#rs-hover .rs-hc-btns .rs-btn { flex: 1; min-width: 0; height: 30px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+#rs-hover .rs-hc-btns .rs-btn[aria-pressed="true"] { background: var(--rs-hover); border-color: var(--rs-text); }
 
 /* People: your tags, hidden people, colored names */
 .rs-ut { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; vertical-align: middle; flex: none; }

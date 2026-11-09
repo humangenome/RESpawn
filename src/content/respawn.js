@@ -2133,6 +2133,8 @@
     const op = page.getAttribute('author');
     const pa = page.querySelector('[slot="authorName"] a.author-name');
     if (pa && validUser(op) && !page.querySelector('[slot="authorName"] .rs-ut')) (pa.closest('faceplate-hovercard') || pa).after(nameTag(op));
+    // Reddit has its own small card on the post's author: with RESpawn's hover cards on, only ours opens there
+    pa?.closest('faceplate-hovercard')?.classList.toggle('rs-own-card', !!cfg.hoverCards);
     if (cfg.enabled && page.id) loadFlairs(page.id);
     const key = `rs-visit-${page.getAttribute('id')}`;
     if (comments.started !== key) {
@@ -2605,12 +2607,16 @@
   const HC_DELAY = 450, HC_LINGER = 250;
   const hcCache = new Map();
   let hc = null, hcLink = null, hcT = 0;
+  // Names in our rows (relative addresses), and on a post page the comment authors and the post's own author (Reddit
+  // writes those as full www.reddit.com addresses).
+  const HC_PEOPLE = 'shreddit-comment .author-hovercard-trigger, shreddit-post[view-context="CommentsPage"] [slot="authorName"]';
   const hcTarget = (a) => {
-    if (!a?.closest?.('.rs-row .rs-meta')) return null;
-    const h = a.getAttribute('href') || '';
-    let m = h.match(/^\/user\/([A-Za-z0-9_-]{3,20})\/?$/);
+    const row = a?.closest?.('.rs-row .rs-meta');
+    if (!row && !a?.closest?.(HC_PEOPLE)) return null;
+    const h = (a.getAttribute('href') || '').replace(/^https:\/\/(www\.)?reddit\.com(?=\/)/i, '');
+    let m = h.match(/^\/(?:user|u)\/([A-Za-z0-9_-]{3,20})\/?$/);
     if (m) return { kind: 'user', name: m[1] };
-    m = h.match(/^\/r\/([A-Za-z0-9_]{2,21})\/?$/);
+    m = row && h.match(/^\/r\/([A-Za-z0-9_]{2,21})\/?$/);
     return m ? { kind: 'sub', name: m[1] } : null;
   };
   const hcData = ({ kind, name }) => {
@@ -2625,7 +2631,6 @@
   const unamp = (u) => String(u || '').replace(/&amp;/g, '&');
   const imgUrl = (u) => { const x = unamp(u); return /^https:\/\/([a-z0-9-]+\.)*(redd\.it|redditmedia\.com|redditstatic\.com)\//i.test(x) ? x : ''; };
   const dateOf = (sec) => new Date(sec * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const yearsOf = (sec) => { const y = Math.floor((Date.now() / 1000 - sec) / 31557600); return y < 1 ? 'under a year' : `${y} yr${y === 1 ? '' : 's'}`; };
   const closeHover = () => { clearTimeout(hcT); hc?.remove(); hc = null; hcLink = null; };
   const placeHover = (card, a) => {
     const r = a.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
@@ -2633,29 +2638,57 @@
     card.style.left = `${Math.max(8, Math.min(Math.round(r.left), innerWidth - w - 16))}px`;
     card.style.top = `${Math.round(below ? r.bottom + 8 : r.top - 8 - h)}px`;
   };
+  // People you highlight from their card (RES's "Highlight"): their name stands out everywhere on the page until you
+  // reload. Drawn as one style rule per name, so comments and rows that load later are covered too.
+  const hlUsers = new Set();
+  const paintHlUsers = () => {
+    let st = document.getElementById('rs-hl-users');
+    if (!hlUsers.size) { st?.remove(); return; }
+    if (!st) { st = el('style', { id: 'rs-hl-users' }); document.head.append(st); }
+    const names = [...hlUsers];
+    st.textContent = `${names.map((n) => `html.rs-on shreddit-comment[author="${n}" i] > details > summary > [slot="commentMeta"] .author-name-meta a, html.rs-on .rs-by a.rs-author[href="/user/${n}/" i]`).join(', ')} { padding: 0 5px; border-radius: 4px; background: var(--rs-hluser) !important; color: #fff !important; text-decoration: none; }`;
+  };
+  const toggleHlUser = (name) => { const k = name.toLowerCase(); if (hlUsers.has(k)) hlUsers.delete(k); else hlUsers.add(k); paintHlUsers(); return hlUsers.has(k); };
+  const sinceOf = (sec) => {
+    const d = new Date(sec * 1000), y = Math.floor((Date.now() / 1000 - sec) / 31557600);
+    return `${d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })} (${y < 1 ? 'under a year' : `${y} year${y === 1 ? '' : 's'}`})`;
+  };
   const userCard = (d, name) => {
     if (d.gone !== undefined) return [el('p', { class: 'rs-hc-note', text: d.gone === 403 && !loggedIn() ? 'Log in to Reddit to see who this is.' : d.gone === 404 ? `u/${name} was deleted or does not exist.` : 'Reddit did not answer. Try again in a moment.' })];
     if (d.is_suspended) return [el('div', { class: 'rs-hc-head' }, [el('b', { text: `u/${d.name || name}` })]), el('p', { class: 'rs-hc-note', text: 'This account is suspended.' })];
+    const who = d.name || name;
     const icon = imgUrl(d.icon_img);
     const about = String(d.subreddit?.public_description || '').trim();
-    const flags = [d.is_employee ? 'Reddit admin' : '', d.is_mod ? 'Moderator' : '', d.is_gold ? 'Premium' : ''].filter(Boolean);
+    const flags = [d.is_employee ? 'Reddit admin' : '', d.is_mod ? 'Moderator' : '', d.is_gold ? 'Premium' : '', friendSet().has(who.toLowerCase()) ? 'Friend' : ''].filter(Boolean);
+    // Ignore and Highlight work like RES's buttons: Ignore hides their posts and comments (the same switch as in their tag)
+    const ign = el('button', { type: 'button', class: 'rs-btn' });
+    const paintIgn = () => { const on = ignored(who); ign.textContent = on ? 'Unignore' : 'Ignore'; ign.setAttribute('aria-pressed', String(on)); ign.title = on ? `Show u/${who}'s posts and comments again` : `Hide u/${who}'s posts and comments`; };
+    ign.onclick = () => { const t = tagOf(who) || {}, on = !t.ignore; setTag(who, { text: t.text || '', color: t.color || 'blue', ignore: on }); paintIgn(); if (on) toast(`Hiding posts and comments from u/${who}.`); };
+    const hl = el('button', { type: 'button', class: 'rs-btn', title: `Make u/${who}'s name stand out on this page` });
+    const paintHl = () => { const on = hlUsers.has(who.toLowerCase()); hl.textContent = on ? 'Unhighlight' : 'Highlight'; hl.setAttribute('aria-pressed', String(on)); };
+    hl.onclick = () => { toggleHlUser(who); paintHl(); };
+    paintIgn(); paintHl();
     return [
       el('div', { class: 'rs-hc-head' }, [
         icon ? el('img', { class: 'rs-hc-icon rs-hc-round', src: icon, alt: '' }) : el('span', { class: 'rs-hc-icon rs-hc-round rs-ms-noicon', text: 'u/' }),
-        el('div', {}, [el('b', { text: `u/${d.name || name}` }), el('span', { class: 'rs-hc-sub', text: `Redditor for ${yearsOf(d.created_utc)}, since ${dateOf(d.created_utc)}` })]),
+        el('div', { class: 'rs-hc-who' }, [
+          el('a', { class: 'rs-hc-name', href: `/user/${who}/`, text: `u/${who}` }),
+          el('span', { class: 'rs-hc-sub' }, [
+            el('a', { href: `/user/${who}/submitted/`, text: 'Posts' }), el('a', { href: `/user/${who}/comments/`, text: 'Comments' }),
+            /^[a-z0-9]{1,13}$/i.test(d.id || '') ? el('a', { href: `https://chat.reddit.com/user/t2_${d.id}/`, target: '_blank', rel: 'noopener', text: 'Chat' }) : null,
+          ]),
+        ]),
       ]),
-      el('div', { class: 'rs-hc-stats' }, [
-        el('span', {}, [el('b', { text: num(d.link_karma || 0) }), ' post karma']),
-        el('span', {}, [el('b', { text: num(d.comment_karma || 0) }), ' comment karma']),
+      el('dl', { class: 'rs-hc-facts' }, [
+        el('dt', { text: 'Redditor since' }), el('dd', { text: sinceOf(d.created_utc) }),
+        el('dt', { text: 'Post karma' }), el('dd', { text: (+d.link_karma || 0).toLocaleString() }),
+        el('dt', { text: 'Comment karma' }), el('dd', { text: (+d.comment_karma || 0).toLocaleString() }),
+        el('dt', { text: 'Your tag' }), el('dd', {}, [nameTag(who)]),
       ]),
       flags.length ? el('div', { class: 'rs-hc-flags' }, flags.map((f) => el('span', { class: 'rs-hc-flag', text: f }))) : null,
       about ? el('p', { class: 'rs-hc-about', text: about }) : null,
-      el('div', { class: 'rs-hc-links' }, [
-        el('a', { href: `/user/${d.name || name}/`, text: 'Profile' }),
-        el('a', { href: `/user/${d.name || name}/submitted/`, text: 'Posts' }),
-        el('a', { href: `/user/${d.name || name}/comments/`, text: 'Comments' }),
-        nameTag(d.name || name),
-      ]),
+      // Message = Reddit's private message form (RES's "send message"); Chat = the chat Reddit's own profile opens
+      el('div', { class: 'rs-hc-btns' }, [ign, hl, el('a', { class: 'rs-btn', href: `/message/compose/?to=${encodeURIComponent(who)}`, title: `Send u/${who} a private message`, text: 'Message' })]),
     ];
   };
   const subCard = (d, name) => {
