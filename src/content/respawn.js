@@ -34,6 +34,9 @@
     if (s < 86400) return `${Math.round(s / 3600)} hr`;
     return `${Math.round(s / 86400)} d`;
   };
+  // Writing the same words again still counts as a page change to the watcher below, which would start another pass,
+  // which writes them again: so words that are redrawn on every pass are only written when they change.
+  const setText = (e, t) => { if (e && e.textContent !== t) e.textContent = t; };
   const num = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M` : n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
   const subOf = () => (location.pathname.match(/^\/r\/([^/]+)/) || [])[1];
   const isCommentsPage = () => !!document.querySelector('shreddit-post[view-context="CommentsPage"]');
@@ -2085,12 +2088,13 @@
       addNavigator();
       html.classList.toggle('rs-kids-hidden', !!cfg.hideKids);
     }
-    const folded = collapsedMap(), me = myName();
+    let folded = null; // your folded comments, read only when there are new comments to look at
+    const me = myName();
     for (const c of document.querySelectorAll('shreddit-comment:not([data-rs])')) {
       const meta = c.querySelector('[slot="commentMeta"]');
       if (!meta) continue;
       c.setAttribute('data-rs', '1');
-      if (folded[c.getAttribute('thingid')]) { const d = c.querySelector(':scope > details'); if (d?.open) d.open = false; }
+      if ((folded ||= collapsedMap())[c.getAttribute('thingid')]) { const d = c.querySelector(':scope > details'); if (d?.open) d.open = false; }
       const author = c.getAttribute('author') || '';
       if (author === op || c.getAttribute('is-op') === 'true') c.setAttribute('rs-op', '');
       if (me && author.toLowerCase() === me) c.setAttribute('rs-me', '');
@@ -2116,7 +2120,7 @@
   };
   const kidsPaint = () => {
     const b = document.getElementById('rs-kids');
-    if (b) { const on = html.classList.contains('rs-kids-hidden'); b.textContent = on ? 'Show all replies' : 'Hide all replies'; b.setAttribute('aria-pressed', String(on)); }
+    if (b) { const on = html.classList.contains('rs-kids-hidden'); setText(b, on ? 'Show all replies' : 'Hide all replies'); b.setAttribute('aria-pressed', String(on)); }
   };
   const kids = () => {
     const sort = document.querySelector('shreddit-comments-sort-dropdown');
@@ -2141,7 +2145,7 @@
         c.rsKids = t;
       }
       const n = kidsCount(c);
-      t.textContent = c.hasAttribute('rs-kids-open') ? 'hide replies' : `show ${n} repl${n === 1 ? 'y' : 'ies'}`;
+      setText(t, c.hasAttribute('rs-kids-open') ? 'hide replies' : `show ${n} repl${n === 1 ? 'y' : 'ies'}`);
     }
   };
   // Comment navigator (RES): jump between new comments, the poster's, mods', friends', your own, people you tagged.
@@ -2173,7 +2177,7 @@
   const updateNav = () => {
     if (!nav) return;
     const L = navList(nav.querySelector('select').value);
-    nav.querySelector('.rs-count').textContent = `${L.length ? Math.max(Math.min(navI, L.length - 1) + 1, 0) : 0} / ${L.length}`;
+    setText(nav.querySelector('.rs-count'), `${L.length ? Math.max(Math.min(navI, L.length - 1) + 1, 0) : 0} / ${L.length}`);
   };
   // Your Reddit name, for "Your comments". Asked of Reddit once a day.
   const myName = () => {
@@ -2907,7 +2911,11 @@
   const pageIn = new Promise((res) => { if (document.readyState !== 'loading') res(); else document.addEventListener('DOMContentLoaded', () => res(), { once: true }); });
   Promise.all([loadCfg(), pageIn]).then(() => {
     applyEnabled(); leftSlide(); tick();
-    new MutationObserver(() => { clearTimeout(tick.t); tick.t = setTimeout(tick, 120); }).observe(document.body, { childList: true, subtree: true });
+    // Typing in a comment box, or dragging its corner, changes only that box: nothing there for a pass to do
+    new MutationObserver((L) => {
+      if (L.every((m) => m.target.closest?.('shreddit-composer, comment-composer-host'))) return;
+      clearTimeout(tick.t); tick.t = setTimeout(tick, 120);
+    }).observe(document.body, { childList: true, subtree: true });
     setInterval(() => { if (location.href !== lastUrl) tick(); }, 800);
   });
   window.__respawn = { cfg: () => cfg, saveCfg };
