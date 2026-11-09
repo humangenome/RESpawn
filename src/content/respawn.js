@@ -1716,8 +1716,10 @@
     if (r.list === 'all') return r.sort === 'hot' ? '/#all' : `/#all/${tail}`;
     return r.sort === 'best' ? '/' : `/#${tail}`;
   };
-  // This site's own copy of a list, where there is one: a subreddit's hot, top and controversial (the same list as old
-  // Reddit's), and Home's best, top and controversial (near old Reddit's; used only when old Reddit won't answer).
+  // This site's own copy of a list, where there is one: a subreddit's hot, top and controversial (the same order as old
+  // Reddit's) and Home's best, top and controversial (near old Reddit's). Used only when old Reddit won't answer: old
+  // Reddit's own list comes first, as it follows your old Reddit settings (thumbnails: always, never or the subreddit's
+  // choice) the way old Reddit itself does.
   const clWww = (r) => {
     if (r.list === 'all' || r.sort === 'new' || r.sort === 'rising' || (r.list === 'home' && r.sort === 'hot')) return null;
     const u = new URL(r.list === 'sub' ? `/r/${r.sub}/${r.sort === 'hot' ? '' : `${r.sort}/`}.json` : `/${r.sort}/.json`, location.origin);
@@ -1778,7 +1780,7 @@
         permalink: a('permalink'), url: a('url'), domain, author: a('author'), subreddit_name_prefixed: a('subreddit-prefixed'),
         created_utc: (+a('timestamp') || 0) / 1000, num_comments: +a('comments-count') || 0, score: +a('score') || 0,
         over_18: a('nsfw') === 'true', spoiler: a('spoiler') === 'true', is_self: /^self\./.test(domain), is_gallery: a('is-gallery') === 'true',
-        is_video: domain === 'v.redd.it', thumbnail: th.startsWith('//') ? `https:${th}` : th,
+        is_video: domain === 'v.redd.it', thumbnail: ((u) => (FLAIR_IMG.test(u) ? u : ''))(th.startsWith('//') ? `https:${th}` : th), // Reddit's own picture addresses only
         _hasText: !!t.querySelector('.expando-button.selftext'), // old Reddit gives a text post with a body its own open button
         link_flair_text: t.querySelector('.linkflairlabel')?.textContent || '',
         // old Reddit draws a tag's emoji as an empty span with the picture as its background
@@ -1817,7 +1819,6 @@
   };
   const clFetch = async (r, after, count) => {
     const www = clWww(r);
-    if (www && r.list === 'sub') return clWwwGet(www, after, count).catch(() => clOld(r, after, count));
     if (!www || !oldOff()) {
       try { return await clOld(r, after, count); } catch (e) { if (!www || (e.message === 'login' && !loggedIn())) throw e; }
     }
