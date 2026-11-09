@@ -12,7 +12,8 @@ for the poster, mods and friends, hiding posts by word, subreddit or website, mo
 themselves, hiding all replies at once, a comment navigator, remembered collapsed comments, new-comment
 counts, a dashboard with your saved comments, tags and hide lists, scores colored so the top posts
 stand out, crosspost links, a back-to-top button, hiding chat and your own username, and a settings
-backup file. It follows Reddit's light and dark modes.
+backup file. A button beside the gear flips light and dark in one click (Auto, which follows your
+computer, is in the settings).
 
 RES made Reddit better for over a decade, but it only works on old.reddit.com. RESpawn is a new
 extension for today's www.reddit.com, in Chrome and Firefox.

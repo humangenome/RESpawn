@@ -18,7 +18,7 @@
       "css": [
         "respawn.css"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "homepage_url": "https://github.com/humangenome/RESpawn",

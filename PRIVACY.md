@@ -13,9 +13,12 @@ Everything stays in your own browser:
   the add-on's own browser storage, which Reddit's page cannot read.
 - **Small records that make features work:** which posts you opened (for the "visited" filter), which
   subreddits you visit most (for "Most visited"), which comments you collapsed, when you last opened
-  a post (for new-comment counts), your Reddit name and friends list (to color names). These are kept
+  a post (for new-comment counts), your Reddit name and friends list (to color names), and a copy of
+  RESpawn's on/off layout switches (so each page opens already arranged). These are kept
   in your browser's storage for reddit.com. Reddit's own page can read that storage, the same way it
   sees what you visit on its site. RESpawn never sends these records anywhere.
+- **Light or dark:** the light/dark button and setting use Reddit's own Display Mode cookie, the same
+  one Reddit's menu sets, so Reddit's pages open in the mode you picked.
 - **The settings file:** only when you press Save under Settings > Backup, as a file on your computer.
 
 Removing the add-on removes its own storage. The reddit.com records are cleared when you clear your

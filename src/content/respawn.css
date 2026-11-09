@@ -247,6 +247,12 @@ html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 #rs-gear.rs-gear-off::after { content: ""; position: absolute; left: 50%; top: 50%; width: 28px; height: 2px; margin: -1px 0 0 -14px; border-radius: 2px; background: currentColor; box-shadow: 0 0 0 2px var(--rs-bg); transform: rotate(-45deg); }
 #rs-gear svg { width: 22px; height: 22px; }
 #rs-gear.rs-gear-float { position: fixed; top: 8px; right: 120px; z-index: 2147483000; }
+/* light or dark, one click, beside the gear */
+#rs-theme { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-right: 2px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--rs-text); cursor: pointer; }
+#rs-theme:hover { background: var(--rs-hover); }
+#rs-theme svg { width: 21px; height: 21px; }
+#rs-theme.rs-theme-float { position: fixed; top: 8px; right: 164px; z-index: 2147483000; }
+html:not(.rs-on) #rs-theme { display: none !important; }
 
 /* Settings panel */
 #rs-panel {

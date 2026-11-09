@@ -42,7 +42,7 @@ Also
 - RES's keyboard shortcuts (press ? for the list)
 - A dashboard with your saved comments, tags and hide lists
 - Hide chat, ads, badges, "Recent posts" and suggestions; back-to-top button; hide your username on screen
-- Settings backup file; follows Reddit's light and dark modes
+- A one-click light and dark switch, or Auto to follow your computer; settings backup file
 
 Not made by the RES team, and not affiliated with or endorsed by Reddit. Free and open source (GPL-3.0): https://github.com/humangenome/RESpawn
 

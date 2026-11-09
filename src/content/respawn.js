@@ -55,21 +55,52 @@
   const saveCfg = (patch) => { cfg = { ...cfg, ...patch }; if (store) store.set({ respawn: cfg }); else localStorage.setItem('respawn-cfg', JSON.stringify(cfg)); };
   if (!store) { try { cfg = { ...cfg, ...JSON.parse(localStorage.getItem('respawn-cfg') || '{}'), ...(window.__RS_CFG || {}) }; } catch { /* ignore */ } }
 
+  // ---------- page arranged before it shows ----------
+  // RESpawn starts as the page starts, so the sidebar, ads and the rest never appear and then vanish. The add-on's own
+  // storage answers a moment too late for that, so a copy of just these on/off switches is kept in the site's storage.
+  const BOOT_KEY = 'rs-boot';
+  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'scoreColors'];
+  const setPageClasses = (c) => {
+    const on = {
+      'rs-on': !!c.enabled, 'rs-hide-ads': !!c.hideAds, 'rs-hide-badges': !!c.hideBadges, 'rs-hide-recent': !!c.hideRecent,
+      'rs-hide-suggested': !!c.hideSuggested, 'rs-no-shortcuts': !c.showShortcuts, 'rs-left-slide': c.leftNav === 'slide',
+      'rs-left-hide': c.leftNav === 'hide', 'rs-fl-hidden': !c.filterline, 'rs-pin-header': !!c.pinHeader, 'rs-hl': !!c.highlight,
+      'rs-no-chat': !!c.hideChat, 'rs-score-colors': !!c.scoreColors,
+    };
+    for (const [k, v] of Object.entries(on)) html.classList.toggle(k, v);
+  };
+  const saveBoot = () => { try { localStorage.setItem(BOOT_KEY, JSON.stringify(Object.fromEntries(BOOT_FIELDS.map((k) => [k, cfg[k]])))); } catch { /* storage full or blocked */ } };
+  try { setPageClasses({ ...cfg, ...(store ? JSON.parse(localStorage.getItem(BOOT_KEY) || '{}') : {}) }); } catch { setPageClasses(cfg); }
+  html.classList.add(/^\/(r\/[^/]+\/|user\/[^/]+\/)?comments\//.test(location.pathname) ? 'rs-comments' : 'rs-feed'); // checked again once the page is in
+
+  // ---------- light or dark (Reddit's Display Mode) ----------
+  // Reddit keeps Display Mode in a cookie named theme: none = Auto (follows the computer), 1 = Light, 2 = Dark. Setting it
+  // the same way keeps Reddit's own menu in agreement, and every page opens in that mode from the start.
+  const themeNow = () => ({ 1: 'light', 2: 'dark' })[(document.cookie.match(/(?:^|;\s*)theme=(\d)/) || [])[1]] || 'auto';
+  const darkShown = () => { const t = themeNow(); return t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches); };
+  const setTheme = (t) => {
+    document.cookie = t === 'auto' ? 'theme=; domain=.reddit.com; path=/; max-age=0; secure; samesite=lax'
+      : `theme=${t === 'dark' ? 2 : 1}; domain=.reddit.com; path=/; max-age=31536000; secure; samesite=lax`;
+    html.classList.toggle('theme-dark', t === 'dark'); html.classList.toggle('theme-light', t === 'light');
+    paintTheme();
+  };
+  const MOON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.2 12.6A6.8 6.8 0 0 1 7.4 3.8a6.8 6.8 0 1 0 8.8 8.8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+  const SUN = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4M4.2 4.2l1.7 1.7M14.1 14.1l1.7 1.7M4.2 15.8l1.7-1.7M14.1 5.9l1.7-1.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  // One click flips what you see now; Auto is in the settings panel (and Reddit's own menu).
+  const paintTheme = () => {
+    const b = document.getElementById('rs-theme');
+    if (b) {
+      const dark = darkShown(), t = dark ? 'Switch to light mode' : 'Switch to dark mode';
+      if (b.dataset.dark !== String(dark)) { b.dataset.dark = String(dark); b.replaceChildren(svgOf(dark ? SUN : MOON)); }
+      b.title = t; b.setAttribute('aria-label', t);
+    }
+    document.querySelectorAll('#rs-panel .rs-seg[data-key="theme"] button').forEach((o) => o.setAttribute('aria-checked', String(o.dataset.v === themeNow())));
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintTheme);
+
   // ---------- on/off switch (bottom-left, see-through) ----------
   const applyEnabled = () => {
-    html.classList.toggle('rs-on', !!cfg.enabled);
-    html.classList.toggle('rs-hide-ads', !!cfg.hideAds);
-    html.classList.toggle('rs-hide-badges', !!cfg.hideBadges);
-    html.classList.toggle('rs-hide-recent', !!cfg.hideRecent);
-    html.classList.toggle('rs-hide-suggested', !!cfg.hideSuggested);
-    html.classList.toggle('rs-no-shortcuts', !cfg.showShortcuts);
-    html.classList.toggle('rs-left-slide', cfg.leftNav === 'slide');
-    html.classList.toggle('rs-left-hide', cfg.leftNav === 'hide');
-    html.classList.toggle('rs-fl-hidden', !cfg.filterline);
-    html.classList.toggle('rs-pin-header', !!cfg.pinHeader);
-    html.classList.toggle('rs-hl', !!cfg.highlight);
-    html.classList.toggle('rs-no-chat', !!cfg.hideChat);
-    html.classList.toggle('rs-score-colors', !!cfg.scoreColors);
+    setPageClasses(cfg); saveBoot();
     document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
     applySubStyle();
     paintGear();
@@ -88,19 +119,28 @@
   // ---------- gear + settings panel ----------
   const GEAR = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4zm7 4.1v-1.8l-2-.4a5.6 5.6 0 0 0-.6-1.4l1.2-1.7-1.3-1.3-1.7 1.2a5.6 5.6 0 0 0-1.4-.6l-.4-2H9.1l-.4 2a5.6 5.6 0 0 0-1.4.6L5.6 4.3 4.3 5.6l1.2 1.7a5.6 5.6 0 0 0-.6 1.4l-2 .4v1.8l2 .4c.1.5.3 1 .6 1.4l-1.2 1.7 1.3 1.3 1.7-1.2c.4.3.9.5 1.4.6l.4 2h1.8l.4-2c.5-.1 1-.3 1.4-.6l1.7 1.2 1.3-1.3-1.2-1.7c.3-.4.5-.9.6-1.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
   const addGear = () => {
-    if (document.getElementById('rs-gear')) return;
-    const user = document.querySelector('#expand-user-drawer-button');
-    const actions = user?.closest('.ps-lg') || user?.closest('nav');
-    const gear = el('button', { id: 'rs-gear', type: 'button', title: 'RESpawn settings', 'aria-label': 'RESpawn settings', html: GEAR });
-    gear.onclick = (e) => { e.stopPropagation(); togglePanel(); };
-    if (actions) {
-      let slot = user; while (slot.parentElement && slot.parentElement !== actions) slot = slot.parentElement;
-      actions.insertBefore(gear, slot);
-    } else { gear.classList.add('rs-gear-float'); document.body.append(gear); }
-    paintGear();
+    let gear = document.getElementById('rs-gear');
+    if (!gear) {
+      const user = document.querySelector('#expand-user-drawer-button');
+      const actions = user?.closest('.ps-lg') || user?.closest('nav');
+      gear = el('button', { id: 'rs-gear', type: 'button', title: 'RESpawn settings', 'aria-label': 'RESpawn settings', html: GEAR });
+      gear.onclick = (e) => { e.stopPropagation(); togglePanel(); };
+      if (actions) {
+        let slot = user; while (slot.parentElement && slot.parentElement !== actions) slot = slot.parentElement;
+        actions.insertBefore(gear, slot);
+      } else { gear.classList.add('rs-gear-float'); document.body.append(gear); }
+      paintGear();
+    }
+    if (!document.getElementById('rs-theme')) {
+      const b = el('button', { id: 'rs-theme', type: 'button' });
+      b.onclick = () => setTheme(darkShown() ? 'light' : 'dark');
+      if (gear.classList.contains('rs-gear-float')) b.classList.add('rs-theme-float');
+      gear.before(b); paintTheme();
+    }
   };
   const SETTINGS = [
     ['Layout', [
+      ['theme', 'Light or dark', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], 'Auto follows your computer'],
       ['leftNav', 'Left sidebar', [['show', 'Show'], ['slide', 'Slide out'], ['hide', 'Hide']]],
       ['pinHeader', 'Keep top bar on screen when scrolling'],
       ['hideRecent', 'Hide "Recent posts"'],
@@ -187,13 +227,17 @@
           };
           panel.append(el('label', { class: hint ? 'rs-set rs-set-2' : 'rs-set' }, [el('span', {}, [label, hint ? el('small', { class: 'rs-set-hint', text: hint }) : null]), n]));
         } else if (choices) {
-          const seg = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-label': label });
+          const seg = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-label': label, 'data-key': key });
+          const now = key === 'theme' ? themeNow() : cfg[key]; // light or dark is Reddit's own setting, not kept in ours
           for (const [v, t] of choices) {
-            const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(cfg[key] === v), text: t });
-            b.onclick = () => { saveCfg({ [key]: v }); applyEnabled(); if (key === 'scMode') shortcutBar(); seg.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b))); };
+            const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(now === v), 'data-v': v, text: t });
+            b.onclick = () => {
+              if (key === 'theme') { setTheme(v); return; }
+              saveCfg({ [key]: v }); applyEnabled(); if (key === 'scMode') shortcutBar(); seg.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+            };
             seg.append(b);
           }
-          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: label }), seg]));
+          panel.append(el('div', { class: hint ? 'rs-set rs-set-2' : 'rs-set' }, [el('span', {}, [label, hint ? el('small', { class: 'rs-set-hint', text: hint }) : null]), seg]));
         } else panel.append(el('label', { class: 'rs-set' }, [el('span', { text: label }), toggle(key)]));
       }
     }
@@ -2448,7 +2492,9 @@
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };
-  loadCfg().then(() => {
+  // The page's own parts are read once the page is in; the switches above are already on it.
+  const pageIn = new Promise((res) => { if (document.readyState !== 'loading') res(); else document.addEventListener('DOMContentLoaded', () => res(), { once: true }); });
+  Promise.all([loadCfg(), pageIn]).then(() => {
     applyEnabled(); leftSlide(); tick();
     new MutationObserver(() => { clearTimeout(tick.t); tick.t = setTimeout(tick, 120); }).observe(document.body, { childList: true, subtree: true });
     setInterval(() => { if (location.href !== lastUrl) tick(); }, 800);
