@@ -135,6 +135,8 @@ html.rs-on .main-container { max-width: none !important; grid-template-columns: 
 html.rs-on main#main-content { max-width: none !important; width: auto !important; }
 /* Reddit hides its right sidebar in a narrower window: then the posts take its space too */
 html.rs-on.rs-no-rail .main-container { grid-template-columns: minmax(0, 1fr) !important; }
+html.rs-on.rs-rail-empty .main-container { grid-template-columns: minmax(0, 1fr) !important; }
+html.rs-on.rs-rail-empty #right-sidebar-container { position: fixed !important; left: 0 !important; top: 0 !important; visibility: hidden !important; pointer-events: none !important; }
 html.rs-on .rs-hide-icon, html.rs-on .rs-hide-games,
 html.rs-on in-feed-community-recommendations, html.rs-on #mod-recruitment-banner { display: none !important; }
 html.rs-on .masthead { margin-top: 8px !important; }
@@ -143,6 +145,8 @@ html.rs-on .masthead h1 { font-size: 24px !important; }
 
 /* Feed: our rows replace the cards */
 html.rs-on.rs-feed article:has(shreddit-post[data-rs]), html.rs-on.rs-feed shreddit-post[data-rs] { display: none !important; }
+/* Reddit's big cards never show before their compact rows are made (a post RESpawn could not turn into a row stays as it is) */
+html.rs-on.rs-feed article:has(> shreddit-post:not([data-rs-failed])), html.rs-on.rs-feed shreddit-post:not([data-rs-failed]) { display: none !important; }
 html.rs-on.rs-feed shreddit-feed hr { display: none !important; }
 html.rs-on.rs-hide-ads shreddit-ad-post, html.rs-on.rs-hide-ads article:has(shreddit-ad-post),
 html.rs-on.rs-hide-ads shreddit-comments-page-ad, html.rs-on.rs-hide-ads shreddit-comment-tree-ad, html.rs-on.rs-hide-ads shreddit-sidebar-ad { display: none !important; }
@@ -401,7 +405,7 @@ html:not(.rs-on) #rs-postinfo { display: none !important; }
 #rs-postinfo + #rs-about { margin-top: 8px; }
 
 /* Old Reddit: the top bar scrolls away with the page (setting: keep it on screen) */
-html.rs-on:not(.rs-pin-header) reddit-header-large { position: absolute !important; }
+html.rs-on:not(.rs-pin-header) reddit-header-large { position: absolute !important; overflow-x: clip; } /* Reddit's own bar runs past the edge in narrow windows; it must not widen the page */
 html.rs-on:not(.rs-pin-header) #rs-shortcuts { position: relative; top: 0; }
 html.rs-on.rs-left-slide:not(.rs-pin-header) #left-sidebar-container { top: 0 !important; z-index: 1000 !important; }
 
@@ -588,6 +592,22 @@ html.rs-on.rs-dash-open { overflow: hidden !important; }
 html.rs-dash-open #rs-shortcuts a.rs-cur { background: none; color: var(--rs-weak); }
 
 /* Phone-sized windows (Firefox on Android runs add-ons): no thumbnail or post number, and the sort row wraps */
+/* Narrow windows: the whole shortcut bar slides sideways inside itself instead of making the page wider */
+@media (max-width: 720px) {
+  #rs-shortcuts { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  #rs-shortcuts::-webkit-scrollbar { display: none; }
+  #rs-shortcuts .rs-sc-list { flex: none; overflow: visible; }
+  #rs-shortcuts .rs-sc-arrow { display: none !important; }
+  #rs-mysubs { max-width: calc(100vw - 16px); }
+}
+/* Phone widths: light/dark lives in the settings panel so Reddit's header still fits */
+@media (max-width: 560px) {
+  #rs-theme { display: none !important; }
+  #rs-shortcuts #rs-gear { flex: none; width: 28px; height: 28px; margin: 0 4px 0 -6px; padding: 0; color: var(--rs-text); }
+  #rs-shortcuts #rs-gear svg { width: 18px; height: 18px; }
+  #rs-panel { left: 8px; right: 8px; width: auto; }
+  html.rs-on div:has(> #rs-sc-btn) { flex-wrap: wrap !important; row-gap: 8px; } /* subreddit buttons go onto two lines instead of past the edge */
+}
 @media (max-width: 560px) {
   html.rs-on #subgrid-container { margin-inline: 10px !important; }
   .rs-row { grid-template-columns: 40px minmax(0, 1fr); column-gap: 6px; }

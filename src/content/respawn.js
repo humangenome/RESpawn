@@ -118,24 +118,34 @@
 
   // ---------- gear + settings panel ----------
   const GEAR = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4zm7 4.1v-1.8l-2-.4a5.6 5.6 0 0 0-.6-1.4l1.2-1.7-1.3-1.3-1.7 1.2a5.6 5.6 0 0 0-1.4-.6l-.4-2H9.1l-.4 2a5.6 5.6 0 0 0-1.4.6L5.6 4.3 4.3 5.6l1.2 1.7a5.6 5.6 0 0 0-.6 1.4l-2 .4v1.8l2 .4c.1.5.3 1 .6 1.4l-1.2 1.7 1.3 1.3 1.7-1.2c.4.3.9.5 1.4.6l.4 2h1.8l.4-2c.5-.1 1-.3 1.4-.6l1.7 1.2 1.3-1.3-1.2-1.7c.3-.4.5-.9.6-1.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+  // The gear sits in Reddit's top bar, left of your picture. On a phone-width window Reddit's bar has no room left, so
+  // it moves to the start of the shortcut bar (and back when the window widens).
+  const PHONE = 560;
   const addGear = () => {
     let gear = document.getElementById('rs-gear');
     if (!gear) {
-      const user = document.querySelector('#expand-user-drawer-button');
-      const actions = user?.closest('.ps-lg') || user?.closest('nav');
       gear = el('button', { id: 'rs-gear', type: 'button', title: 'RESpawn settings', 'aria-label': 'RESpawn settings', html: GEAR });
       gear.onclick = (e) => { e.stopPropagation(); togglePanel(); };
-      if (actions) {
-        let slot = user; while (slot.parentElement && slot.parentElement !== actions) slot = slot.parentElement;
-        actions.insertBefore(gear, slot);
-      } else { gear.classList.add('rs-gear-float'); document.body.append(gear); }
       paintGear();
     }
-    if (!document.getElementById('rs-theme')) {
-      const b = el('button', { id: 'rs-theme', type: 'button' });
-      b.onclick = () => setTheme(darkShown() ? 'light' : 'dark');
-      if (gear.classList.contains('rs-gear-float')) b.classList.add('rs-theme-float');
-      gear.before(b); paintTheme();
+    let theme = document.getElementById('rs-theme');
+    if (!theme) {
+      theme = el('button', { id: 'rs-theme', type: 'button' });
+      theme.onclick = () => setTheme(darkShown() ? 'light' : 'dark');
+    }
+    const bar = innerWidth <= PHONE && cfg.showShortcuts ? document.getElementById('rs-shortcuts') : null;
+    const user = document.querySelector('#expand-user-drawer-button');
+    const actions = user?.closest('.ps-lg') || user?.closest('nav');
+    let slot = null;
+    if (!bar && actions) { slot = user; while (slot.parentElement && slot.parentElement !== actions) slot = slot.parentElement; }
+    const want = bar ? 'bar' : actions ? 'header' : 'float';
+    if (gear.dataset.at !== want || !gear.isConnected || theme.nextElementSibling !== gear) {
+      gear.dataset.at = want;
+      gear.classList.toggle('rs-gear-float', want === 'float'); theme.classList.toggle('rs-theme-float', want === 'float');
+      if (want === 'bar') bar.prepend(theme, gear);
+      else if (want === 'header') { actions.insertBefore(gear, slot); gear.before(theme); }
+      else document.body.append(theme, gear);
+      paintTheme();
     }
   };
   const SETTINGS = [
@@ -1024,11 +1034,12 @@
       }
       tabs.append(tab);
     }
-    const all = el('button', { type: 'button', class: 'rs-expand-all', text: 'Expand all' });
+    // RES's "show images": every picture on the page opens in place; pressed again, they close.
+    const all = el('button', { type: 'button', class: 'rs-expand-all', text: 'Show images' });
     all.onclick = () => {
-      const open = all.textContent === 'Expand all';
-      for (const b of document.querySelectorAll('.rs-row:not(.rs-filtered) .rs-x[data-kind="image"], .rs-row:not(.rs-filtered) .rs-x[data-kind="gallery"], .rs-row:not(.rs-filtered) .rs-x[data-kind="text"]')) if ((b.getAttribute('aria-expanded') === 'true') !== open) b.click();
-      all.textContent = open ? 'Collapse all' : 'Expand all';
+      const open = all.textContent === 'Show images';
+      for (const b of document.querySelectorAll('.rs-row:not(.rs-filtered) .rs-x[data-kind="image"], .rs-row:not(.rs-filtered) .rs-x[data-kind="gallery"]')) if ((b.getAttribute('aria-expanded') === 'true') !== open) b.click();
+      all.textContent = open ? 'Hide images' : 'Show images';
     };
     const funnel = el('button', { type: 'button', class: 'rs-funnel', title: 'Filter bar', 'aria-label': 'Show or hide the filter bar', 'aria-pressed': String(!!cfg.filterline), html: FUNNEL });
     funnel.onclick = () => { saveCfg({ filterline: !cfg.filterline }); applyEnabled(); };
@@ -1525,6 +1536,21 @@
     if (!m.has(post.id)) m.set(post.id, m.size + 1);
     return m.get(post.id);
   };
+  // When Reddit redraws a feed in a new order (For You / Following, or Home fetched fresh after Back) the kept numbers
+  // stop running in order: then count again from the top. A post Reddit shows twice keeps its first number.
+  const rankCheck = () => {
+    const rows = [], seen = new Set();
+    for (const r of document.querySelectorAll('.rs-row')) {
+      const id = r.rsPost?.id, f = r.closest('shreddit-feed');
+      if (id && !seen.has(id) && rankBook.map.has(id) && (!f || !rankBook.feed || f === rankBook.feed)) { seen.add(id); rows.push(r); }
+    }
+    if (rows.every((r, i) => i === 0 || rankBook.map.get(r.rsPost.id) > rankBook.map.get(rows[i - 1].rsPost.id))) return;
+    rankBook.map = new Map(rows.map((r, i) => [r.rsPost.id, i + 1]));
+    for (const r of document.querySelectorAll('.rs-row')) {
+      const n = r.rsPost && rankBook.map.get(r.rsPost.id), box = r.querySelector('.rs-rank');
+      if (n && box && box.textContent !== String(n)) box.textContent = String(n);
+    }
+  };
   // Scores colored by where they stand among the posts on this page (setting "Color the highest scores"): the top tenth
   // stands out, the next fifth is green, the bottom third is faint, below zero is red. A big subreddit and a small one
   // each get their own scale. Counted again as more posts load.
@@ -1554,7 +1580,8 @@
   const densify = () => {
     if (isCommentsPage()) return;
     for (const post of document.querySelectorAll('shreddit-post')) {
-      if (post.rsRow?.isConnected) continue; // already has its row (a post Reddit brings back after Back gets a new one)
+      if (post.rsRow?.isConnected || post.hasAttribute('data-rs-failed')) continue; // already has its row (a post Reddit brings back after Back gets a new one)
+      try {
       post.setAttribute('data-rs', '1');
       const g = (k) => post.getAttribute(k) || '';
       const link = g('content-href'), perma = g('permalink');
@@ -1593,6 +1620,7 @@
       row.append(el('div', { class: 'rs-rank', text: String(rankOf(post)) }), voteBox(post), thumb, main);
       post.rsRow = row;
       (post.closest('article') || post).before(row);
+      } catch (e) { post.removeAttribute('data-rs'); post.setAttribute('data-rs-failed', ''); post.rsRow?.remove(); post.rsRow = null; } // Reddit's own card stays
     }
   };
 
@@ -1815,7 +1843,7 @@
   // Reddit has its own keys, but in a feed they go to the cards RESpawn hides, so RESpawn answers the keys it uses.
   const KEYS = {
     feed: [['j / k', 'Next / previous post'], ['J / K', 'Last / first post'], ['a / z', 'Upvote / downvote'], ['Enter', 'Open the link (Shift: new tab)'],
-      ['c', 'Open comments (Shift: new tab)'], ['x', 'Expand or close'], ['X', 'Expand all or close all'], ['s', 'Save or unsave'], ['h', 'Hide'],
+      ['c', 'Open comments (Shift: new tab)'], ['x', 'Expand or close'], ['X', 'Show images or hide them'], ['s', 'Save or unsave'], ['h', 'Hide'],
       ['l', 'Copy the link'], ['r', 'Go to the subreddit'], ['u', 'Go to the poster']],
     comments: [['j / k', 'Next / previous comment'], ['J / K', 'Next / previous at the same level'], ['p', 'Parent comment'], ['t', 'Top of this thread'],
       ['Enter or f', 'Fold or unfold'], ['a / z', 'Upvote / downvote'], ['r', 'Reply'], ['s', 'Save or unsave'], ['l', 'Copy the link'], ['u', 'Go to the poster'], ['?', 'This list']],
@@ -2476,8 +2504,17 @@
   // checks the page as it is on every pass instead of trusting the moment the address changed.
   const onRoute = () => { countVisit(); shortcutBar(); closeMySubs(); closeFeedAsk(); closeHover(); closeTagger(); closeBlockEditor(); closeDash(); };
   // Reddit hides its right sidebar in a narrower window; the page layout then gives its space to the posts
-  const railCheck = () => { const r = document.getElementById('right-sidebar-container'); html.classList.toggle('rs-no-rail', !!r && getComputedStyle(r).display === 'none'); };
-  window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(railCheck, 150); }, { passive: true });
+  // Home's right side holds only "Recent posts": with that hidden it is an empty column, so the posts get its space too.
+  // (Emptiness is judged by size, not visibility, so content that arrives later still shows the column again.)
+  const railCheck = () => {
+    const r = document.getElementById('right-sidebar-container');
+    const gone = !!r && getComputedStyle(r).display === 'none';
+    html.classList.toggle('rs-no-rail', gone);
+    const c = r && (r.querySelector('#right-sidebar-contents') || r);
+    const empty = !!c && !gone && ![...c.querySelectorAll('*')].some((e) => { const b = e.getBoundingClientRect(); return b.width > 1 && b.height > 1; });
+    html.classList.toggle('rs-rail-empty', empty);
+  };
+  window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(() => { railCheck(); addGear(); }, 150); }, { passive: true });
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     railCheck();
@@ -2488,7 +2525,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    densify(); scorePaint(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    densify(); rankCheck(); scorePaint(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };
