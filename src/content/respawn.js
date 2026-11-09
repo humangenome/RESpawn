@@ -2743,6 +2743,26 @@
   document.addEventListener('mousedown', (e) => { if (hc && !hc.contains(e.target)) closeHover(); }, true);
   window.addEventListener('scroll', () => { if (hc) closeHover(); }, { passive: true });
 
+  // ---------- profile pages: post karma and comment karma apart (old Reddit) ----------
+  // New Reddit's profile card gives one Karma number. Under it go the two old Reddit showed ("1,601 post karma",
+  // "36,377 comment karma"), from the same lookup the hover cards use.
+  const karmaSplit = () => {
+    const m = cfg.enabled && location.pathname.match(/^\/(?:user|u)\/([A-Za-z0-9_-]{3,20})(?:\/|$)/);
+    let box = document.getElementById('rs-karma');
+    if (!m) { box?.remove(); return; }
+    if (box?.isConnected && box.dataset.user === m[1].toLowerCase()) return;
+    const side = document.getElementById('right-sidebar-contents');
+    const label = side && [...side.querySelectorAll('p, span')].find((e) => !e.children.length && e.textContent.trim() === 'Karma');
+    if (!label) return;
+    box?.remove();
+    box = el('div', { id: 'rs-karma', 'data-user': m[1].toLowerCase() });
+    label.after(box);
+    hcData({ kind: 'user', name: m[1] }).then((d) => {
+      if (!box.isConnected || d.gone !== undefined || d.link_karma === undefined) return;
+      box.append(el('span', { text: `${(+d.link_karma || 0).toLocaleString()} post karma` }), el('span', { text: `${(+d.comment_karma || 0).toLocaleString()} comment karma` }));
+    });
+  };
+
   // ---------- dashboard (RES's dashboard): your saved comments, tags and hide lists on one page ----------
   // Opens over the page you are on (DASHBOARD in the shortcut bar, or the settings panel). Saved comments come from your
   // Reddit account, 100 at a time; tags and hide lists are your RESpawn settings. Reddit's comment text is read into
@@ -3021,6 +3041,7 @@
     clMount(); densify(); rankCheck(); scorePaint(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
+    karmaSplit();
   };
   // The page's own parts are read once the page is in; the switches above are already on it.
   const pageIn = new Promise((res) => { if (document.readyState !== 'loading') res(); else document.addEventListener('DOMContentLoaded', () => res(), { once: true }); });

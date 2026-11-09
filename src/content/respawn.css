@@ -517,6 +517,11 @@ html.rs-on faceplate-hovercard.rs-own-card::part(content-container), html.rs-on 
 #rs-hover .rs-hc-btns .rs-btn { flex: 1; min-width: 0; height: 30px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 #rs-hover .rs-hc-btns .rs-btn[aria-pressed="true"] { background: var(--rs-hover); border-color: var(--rs-text); }
 
+/* Profile card: post and comment karma under Reddit's one Karma number */
+#rs-karma { display: flex; flex-direction: column; margin-top: 4px; color: var(--rs-weak); font: 400 12px/1.4 var(--rs-font); white-space: nowrap; }
+#rs-karma:empty { display: none; }
+html:not(.rs-on) #rs-karma { display: none; }
+
 /* People: your tags, hidden people, colored names */
 .rs-ut { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; vertical-align: middle; flex: none; }
 .rs-ut-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); opacity: .4; cursor: pointer; }
