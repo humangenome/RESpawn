@@ -1732,9 +1732,12 @@
   const clThumb = (d) => {
     const x = clMedia(d), im = x.preview?.images?.[0];
     const pick = (list) => (list || []).find((r) => r.width >= 140) || (list || []).at(-1);
-    if (d.over_18 || x.over_18) return pick(im?.variants?.nsfw?.resolutions)?.url || ''; // blurred, as Reddit shows it
     if (d.spoiler) return pick(im?.variants?.obfuscated?.resolutions)?.url || '';
+    // Reddit already follows your "Blur mature (18+) images" setting in the small picture it sends (checked 11/9 on old
+    // Reddit's page and the JSON): a clear one when blurring is off; the word "nsfw" or no picture when it is on. So its
+    // own picture comes first, and the blurred copy only when it sent none.
     if (/^https:\/\//.test(d.thumbnail || '')) return d.thumbnail;
+    if (d.over_18 || x.over_18) return pick(im?.variants?.nsfw?.resolutions)?.url || '';
     return pick(im?.resolutions)?.url || '';
   };
   const clKind = (d) => {
