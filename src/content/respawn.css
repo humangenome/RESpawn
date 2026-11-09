@@ -377,6 +377,8 @@ html.rs-on:not(.rs-sub-plain) #subreddit-banner-img { height: 64px !important; m
 
 /* Sidebar card */
 html.rs-on .rs-hide-about { display: none !important; }
+/* the divider under Reddit's own About box stays behind when it is hidden, leaving an empty band above "User flair" */
+html.rs-on .rs-hide-about ~ hr:first-of-type { display: none !important; }
 html:not(.rs-on) #rs-about { display: none !important; }
 #rs-about { margin: 12px 0 8px; padding: 14px 16px; border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); color: var(--rs-text); font: 400 14px/1.45 var(--rs-font); }
 #rs-about, #rs-about * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
