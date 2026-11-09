@@ -2333,20 +2333,24 @@
     }
   };
   // Comment navigator (RES): jump between new comments, the poster's, mods', friends', your own, people you tagged.
-  let nav = null, navI = -1;
-  const NAV = [['new', 'New comments', '[rs-new]'], ['op', 'By the poster (OP)', '[rs-op]'], ['mod', 'Moderators', '[rs-mod]'], ['friend', 'Friends', '[rs-friend]'], ['me', 'Your comments', '[rs-me]'], ['tagged', 'People you tagged', '']];
+  // A slim column of buttons in the bottom-right corner (back-to-top sits on top of it), so it covers no comments:
+  // the kind to jump between (its menu opens to the left), up, how many, down.
+  let nav = null, navI = -1, navKind = 'new';
+  const NAV = [['new', 'New comments', '[rs-new]', 'New'], ['op', 'By the poster (OP)', '[rs-op]', 'OP'], ['mod', 'Moderators', '[rs-mod]', 'Mod'], ['friend', 'Friends', '[rs-friend]', 'Frnd'], ['me', 'Your comments', '[rs-me]', 'You'], ['tagged', 'People you tagged', '', 'Tag']];
+  const NAV_UP = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 12.5l5-5 5 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const NAV_DOWN = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 7.5l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const navOf = (k) => NAV.find((n) => n[0] === k) || NAV[0];
   const navList = (k) => {
-    const css = (NAV.find((n) => n[0] === k) || NAV[0])[2];
+    const css = navOf(k)[2];
     const L = [...document.querySelectorAll(`shreddit-comment[data-rs]${css}`)].filter((c) => shown(ownParts(c)[0]));
     return k === 'tagged' ? L.filter((c) => tagOf(c.getAttribute('author'))) : L;
   };
   const addNavigator = () => {
     nav = el('div', { id: 'rs-nav', role: 'navigation', 'aria-label': 'Comment navigator' });
-    const pick = el('select', { 'aria-label': 'Jump between' });
-    for (const [v, t] of NAV) pick.append(el('option', { value: v, text: t }));
-    const prev = el('button', { type: 'button', text: 'Prev' }), next = el('button', { type: 'button', text: 'Next' });
+    const kind = el('button', { type: 'button', class: 'rs-nav-kind', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+    const prev = el('button', { type: 'button', class: 'rs-nav-prev', html: NAV_UP }), next = el('button', { type: 'button', class: 'rs-nav-next', html: NAV_DOWN });
     const go = (d) => {
-      const L = navList(pick.value);
+      const L = navList(navKind);
       if (!L.length) return updateNav();
       navI = (Math.min(navI, L.length - 1) + d + L.length) % L.length;
       const c = L[navI];
@@ -2354,14 +2358,55 @@
       if (cfg.keys) select(c, false);
       updateNav();
     };
-    prev.onclick = () => go(-1); next.onclick = () => go(1); pick.onchange = () => { navI = -1; updateNav(); };
-    nav.append(pick, prev, next, el('span', { class: 'rs-count' }));
+    prev.onclick = () => go(-1); next.onclick = () => go(1);
+    kind.onclick = (e) => { e.stopPropagation(); if (!closeNavMenu(true)) openNavMenu(); };
+    nav.append(kind, prev, el('span', { class: 'rs-count' }), next);
     document.body.append(nav);
+    updateNav();
+  };
+  // The kinds to jump between, in a small menu to the left of the column (arrow keys move, Enter picks, Esc closes)
+  const navMenuOutside = (e) => { if (!e.target.closest?.('#rs-nav')) closeNavMenu(); };
+  const closeNavMenu = (focus) => {
+    const m = document.getElementById('rs-nav-menu');
+    document.removeEventListener('click', navMenuOutside, true);
+    if (!m) return false;
+    m.remove();
+    const k = nav?.querySelector('.rs-nav-kind');
+    k?.setAttribute('aria-expanded', 'false');
+    if (focus) k?.focus();
+    return true;
+  };
+  const openNavMenu = () => {
+    const k = nav?.querySelector('.rs-nav-kind');
+    if (!k) return;
+    const m = el('div', { id: 'rs-nav-menu', role: 'menu', 'aria-label': 'Jump between' });
+    for (const [v, t] of NAV) {
+      const o = el('button', { type: 'button', role: 'menuitemradio', 'aria-checked': String(v === navKind), tabindex: '-1', text: t });
+      o.onclick = (e) => { e.stopPropagation(); navKind = v; navI = -1; closeNavMenu(true); updateNav(); };
+      m.append(o);
+    }
+    m.onkeydown = (e) => {
+      const L = [...m.children], i = L.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') L[(i + (e.key === 'ArrowDown' ? 1 : -1) + L.length) % L.length].focus();
+      else if (e.key === 'Home' || e.key === 'End') L[e.key === 'Home' ? 0 : L.length - 1].focus();
+      else if (e.key === 'Escape') closeNavMenu(true);
+      else { if (e.key === 'Tab') closeNavMenu(); return; }
+      e.preventDefault(); e.stopPropagation();
+    };
+    nav.append(m);
+    k.setAttribute('aria-expanded', 'true');
+    (m.querySelector('[aria-checked="true"]') || m.firstChild).focus();
+    setTimeout(() => document.addEventListener('click', navMenuOutside, true), 0);
   };
   const updateNav = () => {
     if (!nav) return;
-    const L = navList(nav.querySelector('select').value);
-    setText(nav.querySelector('.rs-count'), `${L.length ? Math.max(Math.min(navI, L.length - 1) + 1, 0) : 0} / ${L.length}`);
+    const [, label, , short] = navOf(navKind), L = navList(navKind), n = L.length ? Math.max(Math.min(navI, L.length - 1) + 1, 0) : 0;
+    const k = nav.querySelector('.rs-nav-kind'), count = nav.querySelector('.rs-count');
+    setText(k, short);
+    k.title = `Jump between: ${label}. Click to change.`; k.setAttribute('aria-label', `Jump between: ${label}`);
+    for (const [c, t] of [['.rs-nav-prev', 'Previous'], ['.rs-nav-next', 'Next']]) { const b = nav.querySelector(c); b.title = `${t}: ${label}`; b.setAttribute('aria-label', b.title); }
+    setText(count, `${n}/${L.length}`);
+    count.title = `${n} of ${L.length}: ${label}`;
   };
   // Your Reddit name, for "Your comments". Asked of Reddit once a day.
   const myName = () => {
@@ -3135,11 +3180,23 @@
       if (main) { railCheck.ro ||= new ResizeObserver(() => railWide(railCheck.el)); for (const x of [main, ...rail.children]) railCheck.ro.observe(x); }
     }
     railWide(rail);
+    // With no right column (narrow window) the post's column keeps clear of the navigator's buttons in the corner
+    const edge = gone && isCommentsPage() ? navEdge() : null, m = edge !== null && document.querySelector('main#main-content');
+    html.style.setProperty('--rs-nav-gutter', `${m ? Math.max(0, Math.ceil(m.getBoundingClientRect().right - edge + 12)) : 0}px`);
+  };
+  // Left edge of the navigator's column of buttons and back-to-top in the bottom-right corner (fixed on screen)
+  const navEdge = () => {
+    const xs = ['rs-nav', 'rs-top'].map((id) => document.getElementById(id)).filter((e) => e?.getClientRects().length).map((e) => e.getBoundingClientRect().left);
+    return xs.length ? Math.min(...xs) : null;
   };
   const railWide = (r) => {
     if (!r?.isConnected) { for (const c of document.querySelectorAll('shreddit-comment.rs-wide')) c.classList.remove('rs-wide'); return; }
+    // A widened comment reaches across the column's width, but stops short of the navigator's buttons in the corner
+    // so they never sit over its words
     const box = r.getBoundingClientRect(), gap = parseFloat(getComputedStyle(r.parentElement).columnGap) || 0;
-    html.style.setProperty('--rs-rail-w', `${Math.ceil(box.width + gap)}px`);
+    const edge = navEdge(), right = r.parentElement.getBoundingClientRect().right;
+    const reach = Math.ceil(box.width + gap) - (edge === null ? 0 : Math.max(0, Math.ceil(right - edge + 12)));
+    html.style.setProperty('--rs-wide-reach', `${Math.max(0, reach)}px`);
     const end = Math.max(box.top, ...[...r.children].filter((k) => k.getClientRects().length).map((k) => k.getBoundingClientRect().bottom)); // where its content ends
     // Read every place first, then mark: widening a comment only moves the ones after it up, and they stay below too
     const all = [...document.querySelectorAll('main#main-content shreddit-comment')];

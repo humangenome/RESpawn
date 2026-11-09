@@ -142,7 +142,9 @@ html.rs-on.rs-rail-empty .main-container { grid-template-columns: minmax(0, 1fr)
 html.rs-on.rs-rail-empty #right-sidebar-container { position: fixed !important; left: 0 !important; top: 0 !important; visibility: hidden !important; pointer-events: none !important; }
 /* Post pages: a comment that starts below the end of the right column runs on under it at the full width, like
    text flowing around a box (the script marks those comments and measures the column) */
-html.rs-on.rs-comments shreddit-comment.rs-wide { margin-right: calc(-1 * var(--rs-rail-w, 0px)); }
+html.rs-on.rs-comments shreddit-comment.rs-wide { margin-right: calc(-1 * var(--rs-wide-reach, 0px)); }
+/* No right column (narrow window): the post's column keeps clear of the navigator's buttons in the corner */
+@media (min-width: 561px) { html.rs-on.rs-comments.rs-no-rail main#main-content { padding-right: var(--rs-nav-gutter, 0px) !important; } }
 html.rs-on .rs-hide-icon, html.rs-on .rs-hide-games,
 html.rs-on in-feed-community-recommendations, html.rs-on #mod-recruitment-banner { display: none !important; }
 html.rs-on .masthead { margin-top: 8px !important; }
@@ -252,12 +254,25 @@ html.rs-on shreddit-comment > details:not([open]) > summary .rs-fold:not(:empty)
 .rs-cacts a:hover { background: var(--rs-hover); color: var(--rs-text); }
 /* "parent" flashes the comment it jumps to */
 .rs-flash { background-color: color-mix(in srgb, var(--rs-up) 16%, transparent) !important; border-radius: 6px; }
+/* Comment navigator: a slim column in the bottom-right corner, back-to-top on top of it (comments keep clear of it):
+   the kind to jump between (its menu opens to the left), up, how many, down */
+:root { --rs-nav-h: 122px; }
 #rs-nav {
-  position: fixed; right: 24px; bottom: 24px; z-index: 20; display: flex; align-items: center; gap: 6px; padding: 8px 10px;
-  border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); box-shadow: 0 6px 24px rgba(0,0,0,.12); font: 600 12px/1 var(--rs-font);
+  position: fixed; right: 24px; bottom: 24px; z-index: 20; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  width: 40px; height: var(--rs-nav-h); padding: 4px 0; border: 1px solid var(--rs-line); border-radius: 20px; background: var(--rs-bg); color: var(--rs-text);
+  box-shadow: 0 6px 24px rgba(0,0,0,.12); font: 700 10px/1 var(--rs-font);
 }
-#rs-nav select, #rs-nav button { height: 28px; padding: 0 10px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-text); font: inherit; cursor: pointer; }
-#rs-nav .rs-count { color: var(--rs-weak); padding: 0 4px; }
+#rs-nav > button { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 30px; padding: 0; border: 0; border-radius: 12px; background: none; color: var(--rs-text); font: inherit; cursor: pointer; }
+#rs-nav > button:hover, #rs-nav > button[aria-expanded="true"] { background: var(--rs-hover); }
+#rs-nav > button svg { width: 18px; height: 18px; }
+#rs-nav .rs-nav-kind { height: 28px; letter-spacing: .03em; text-transform: uppercase; }
+#rs-nav .rs-count { display: flex; align-items: center; justify-content: center; flex: none; height: 18px; max-width: 38px; color: var(--rs-weak); letter-spacing: -.02em; white-space: nowrap; }
+#rs-nav-menu { position: absolute; right: calc(100% + 8px); bottom: -1px; display: flex; flex-direction: column; min-width: 200px; padding: 6px; border: 1px solid var(--rs-line); border-radius: 12px; background: var(--rs-bg); box-shadow: 0 12px 40px rgba(0,0,0,.18); }
+#rs-nav-menu button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--rs-text); font: 500 13px/1.2 var(--rs-font); text-align: left; white-space: nowrap; cursor: pointer; }
+#rs-nav-menu button::before { content: ""; flex: none; width: 12px; font-weight: 700; }
+#rs-nav-menu button[aria-checked="true"] { font-weight: 700; }
+#rs-nav-menu button[aria-checked="true"]::before { content: "\2713"; }
+#rs-nav-menu button:hover, #rs-nav-menu button:focus-visible { background: var(--rs-hover); outline: none; }
 
 /* Votes like old Reddit with RES: solid arrows tight above and below a bold score, grey until you vote, then orange
    up or blue down (old Reddit's own colors). The grey is darker than old Reddit's on the light background so it
@@ -574,7 +589,7 @@ html.rs-on.rs-no-chat reddit-chat-header-button, html.rs-on.rs-no-chat reddit-ch
 #rs-top svg { width: 20px; height: 20px; }
 #rs-top:hover { background: var(--rs-hover); }
 #rs-top.rs-top-on { opacity: 1; visibility: visible; }
-html.rs-comments #rs-top { bottom: 84px; }
+html.rs-comments #rs-top { width: 40px; height: 40px; bottom: calc(24px + var(--rs-nav-h) + 8px); } /* on top of the navigator */
 
 /* Hide all replies: only the top comments show, each with "show N replies" */
 #rs-kids { height: 32px; margin-left: 8px; vertical-align: middle; }
