@@ -20,7 +20,7 @@ Posts and feeds
 - More posts on a screen, numbered, with votes, comments, share, save and hide on every row
 - Sort tabs in the open, and RES's filter bar: nsfw, spoiler, visited, comments opened, expando, score
 - Hide posts by words in the title, by subreddit or by website
-- Pictures and videos open right in the feed, including Streamable, Vimeo, TikTok, Instagram, Imgur and Giphy; a limit on videos playing at once
+- Pictures and videos open right in the feed, including Streamable, Vimeo, Twitch clips, TikTok, Instagram, Imgur and Giphy; a limit on videos playing at once
 - Endless scrolling with page dividers and an optional pause every few pages
 - Scores colored so the top posts on each page stand out; crossposts link to the original
 

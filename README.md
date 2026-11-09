@@ -6,7 +6,7 @@ RESpawn keeps the new Reddit look and brings back the way old Reddit and Reddit 
 worked: more posts on a screen, sort tabs in the open, RES's filter bar, one-click comments, save and
 hide, a subreddit shortcut bar with groups and DASHBOARD / FRIENDS / MOD / MODQUEUE links, a switch for
 subreddit styles, keyboard shortcuts, hover cards for users and subreddits, images and videos that open
-in place (including Streamable, Vimeo, TikTok, Imgur and Giphy), a limit on videos playing at once,
+in place (including Streamable, Vimeo, Twitch clips, TikTok, Imgur and Giphy), a limit on videos playing at once,
 endless scrolling with page dividers and an optional pause, user tags and hiding people, colored names
 for the poster, mods and friends, hiding posts by word, subreddit or website, more replies that load by
 themselves, hiding all replies at once, a comment navigator, remembered collapsed comments, new-comment

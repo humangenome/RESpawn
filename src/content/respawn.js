@@ -1307,13 +1307,15 @@
     } catch { /* not a url */ }
     return null;
   };
-  // Outside video sites whose players Reddit's own page allows (it blocks the rest, such as Twitch and X).
+  // Outside video sites whose players Reddit's own page allows (it blocks the rest, such as X). Twitch's player is blocked
+  // too, but a Twitch clip plays through Reddit's own player page for the post (redditmedia.com), as on old Reddit.
   const urlOf = (href) => { try { const u = new URL(href); return { h: u.hostname.replace(/^(www|m)\./, ''), p: u.pathname, u }; } catch { return null; } };
-  const embedOf = (href) => {
+  const embedOf = (href, postId) => {
     const x = urlOf(href);
     if (!x) return null;
     const { h, p } = x;
     let m;
+    if (postId && (h === 'clips.twitch.tv' || (h === 'twitch.tv' && /^\/(?:\w+\/)?clip\/[\w-]+/.test(p)))) return { src: `https://www.redditmedia.com/mediaembed/${postId.replace(/^t3_/, '')}` };
     if (h === 'streamable.com' && (m = p.match(/^\/(?:[eo]\/)?([a-z0-9]{4,12})\/?$/i))) return { src: `https://streamable.com/e/${m[1]}?autoplay=1`, plays: true };
     if (h === 'vimeo.com' && (m = p.match(/^\/(\d{5,})(?:\/([a-f0-9]{6,}))?\/?$/))) return { src: `${VIMEO_ORIGIN}/video/${m[1]}?autoplay=1${m[2] ? `&h=${m[2]}` : ''}`, origin: VIMEO_ORIGIN };
     if (h === 'player.vimeo.com' && (m = p.match(/^\/video\/(\d{5,})/))) return { src: `${VIMEO_ORIGIN}/video/${m[1]}?autoplay=1`, origin: VIMEO_ORIGIN };
@@ -1344,7 +1346,7 @@
     if (type === 'gallery' && media) return 'gallery';
     if (type === 'image' && media) return 'image';
     if (type === 'crosspost' && media) return 'gallery';
-    if (embedOf(href)) return 'embed';
+    if (embedOf(href, post.id)) return 'embed';
     if (picOf(href)) return 'image';
     if (media?.querySelector('shreddit-embed')) return 'rembed'; // Reddit's own player for another site
     return null;
@@ -1371,7 +1373,7 @@
     } else if (kind === 'youtube') {
       player(box, `${YT_ORIGIN}/embed/${ytId(href)}?autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, { origin: YT_ORIGIN }, close, title);
     } else if (kind === 'embed') {
-      const e = embedOf(href);
+      const e = embedOf(href, post.id);
       player(box, e.src, e, close, title);
     } else if (kind === 'image' && picOf(href)) {
       const img = el('img', { class: 'rs-media-img', src: picOf(href), alt: post.getAttribute('post-title') || '' });

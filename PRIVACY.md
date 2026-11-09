@@ -34,7 +34,7 @@ RESpawn only talks to Reddit, from your browser, signed in as you, and only when
   comments (for the Dashboard), and public profile and subreddit details when you point at a name.
 
 When you open a video or picture from another website in place (YouTube, Vimeo, Streamable, TikTok,
-Instagram, RedGifs, Imgur, Giphy), your browser loads it from that website, just as Reddit's own player
+Instagram, RedGifs, Imgur, Giphy, and Twitch clips through Reddit's own player page), your browser loads it from that website, just as Reddit's own player
 or a link would. Nothing loads from those sites until you open it.
 
 RESpawn does not use analytics, crash reporting or any other outside service.
