@@ -24,7 +24,7 @@ if not os.path.isdir("extension/icons"):
     m.pop("icons", None)
 if target == "firefox":
     # Firefox needs its own id and, for new add-ons, a statement of what data leaves the browser: none.
-    m["browser_specific_settings"] = {"gecko": {"id": "respawn@humangenome", "strict_min_version": "140.0",
+    m["browser_specific_settings"] = {"gecko": {"id": "respawn@humangenome", "strict_min_version": "142.0",
                                                 "data_collection_permissions": {"required": ["none"]}}}
     # No "gecko_android" yet: Firefox Add-ons then lists it for phones too, and post pages still spill sideways and the
     # shortcut bar covers Reddit's header at phone size (checked 11/9). Add it back after a phone pass.
