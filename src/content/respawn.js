@@ -6,7 +6,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, scoreColors: true, hideKids: false, hideMyName: false, linkDashboard: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, scoreColors: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -59,7 +59,9 @@
   // RESpawn starts as the page starts, so the sidebar, ads and the rest never appear and then vanish. The add-on's own
   // storage answers a moment too late for that, so a copy of just these on/off switches is kept in the site's storage.
   const BOOT_KEY = 'rs-boot';
-  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'scoreColors'];
+  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'scoreColors', 'classicHome'];
+  // Old Reddit's lists (see "old Reddit's lists" below) live on / : r/all at /#all..., Home at / unless that is switched off.
+  const isClassicUrl = (c) => !!c.enabled && location.pathname === '/' && !new URLSearchParams(location.search).has('feed') && (/^#all(\/|$)/.test(location.hash) || !!c.classicHome);
   const setPageClasses = (c) => {
     const on = {
       'rs-on': !!c.enabled, 'rs-hide-ads': !!c.hideAds, 'rs-hide-badges': !!c.hideBadges, 'rs-hide-recent': !!c.hideRecent,
@@ -70,7 +72,10 @@
     for (const [k, v] of Object.entries(on)) html.classList.toggle(k, v);
   };
   const saveBoot = () => { try { localStorage.setItem(BOOT_KEY, JSON.stringify(Object.fromEntries(BOOT_FIELDS.map((k) => [k, cfg[k]])))); } catch { /* storage full or blocked */ } };
-  try { setPageClasses({ ...cfg, ...(store ? JSON.parse(localStorage.getItem(BOOT_KEY) || '{}') : {}) }); } catch { setPageClasses(cfg); }
+  let boot = cfg;
+  try { boot = { ...cfg, ...(store ? JSON.parse(localStorage.getItem(BOOT_KEY) || '{}') : {}) }; } catch { /* keep the defaults */ }
+  setPageClasses(boot);
+  html.classList.toggle('rs-classic', isClassicUrl(boot)); // Reddit's own Home feed never shows under it
   html.classList.add(/^\/(r\/[^/]+\/|user\/[^/]+\/)?comments\//.test(location.pathname) ? 'rs-comments' : 'rs-feed'); // checked again once the page is in
 
   // ---------- light or dark (Reddit's Display Mode) ----------
@@ -100,7 +105,7 @@
 
   // ---------- on/off switch (bottom-left, see-through) ----------
   const applyEnabled = () => {
-    setPageClasses(cfg); saveBoot();
+    setPageClasses(cfg); saveBoot(); clMount();
     document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
     applySubStyle();
     paintGear();
@@ -176,6 +181,7 @@
     ['Shortcut bar', [
       ['showShortcuts', 'Show shortcut bar'],
       ['scMode', 'Bar shows', [['mine', 'My list'], ['visits', 'Most visited']]],
+      ['classicHome', "HOME shows old Reddit's list"],
       ['linkDashboard', 'DASHBOARD link'],
       ['linkFriends', 'FRIENDS link'],
       ['linkMod', 'MOD and MODQUEUE links (moderators)'],
@@ -282,7 +288,7 @@
   };
   const cleanSettings = (o) => {
     const out = {};
-    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'scoreColors', 'hideKids', 'hideMyName', 'linkDashboard']) if (typeof o[k] === 'boolean') out[k] = o[k];
+    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'scoreColors', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome']) if (typeof o[k] === 'boolean') out[k] = o[k];
     for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']]]) if (ok.includes(o[k])) out[k] = o[k];
     for (const [k, lo, hi] of [['filterScore', -99999, 99999], ['pauseEvery', 0, 99], ['maxVideos', 0, 99]]) if (Number.isFinite(o[k])) out[k] = Math.max(lo, Math.min(hi, Math.round(o[k])));
     if (Array.isArray(o.shortcuts)) {
@@ -467,7 +473,8 @@
     }
     bar.classList.remove('rs-dragging'); // a finished drag rebuilds the bar
     const path = location.pathname;
-    const fixed = [['HOME', '/', path === '/' || /^\/(best|hot|new|top|rising)\/?$/.test(path)], ['POPULAR', '/r/popular/', /^\/r\/popular/i.test(path)], ['ALL', '/r/all/', /^\/r\/all/i.test(path)]];
+    const allOn = path === '/' && /^#all(\/|$)/.test(location.hash);
+    const fixed = [['HOME', '/', !allOn && (path === '/' || /^\/(best|hot|new|top|rising)\/?$/.test(path))], ['POPULAR', '/r/popular/', /^\/r\/popular/i.test(path)], ['ALL', '/#all', allOn || /^\/r\/all/i.test(path)]];
     const link = ([label, href, on]) => el('a', { href, class: on ? 'rs-fixed rs-cur' : 'rs-fixed', text: label });
     for (const f of fixed) bar.append(link(f));
     if (loggedIn()) {
@@ -1007,9 +1014,25 @@
 
   // ---------- sort tabs ----------
   const FUNNEL = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4.5h14l-5.4 6.3v4.6l-3.2 1.6v-6.2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>';
+  // RES's "show images": every picture on the page opens in place; pressed again, they close.
+  const showImagesBtn = () => {
+    const all = el('button', { type: 'button', class: 'rs-expand-all', text: 'Show images' });
+    all.onclick = () => {
+      const open = all.textContent === 'Show images';
+      for (const b of document.querySelectorAll('.rs-row:not(.rs-filtered) .rs-x[data-kind="image"], .rs-row:not(.rs-filtered) .rs-x[data-kind="gallery"]')) if ((b.getAttribute('aria-expanded') === 'true') !== open) b.click();
+      all.textContent = open ? 'Hide images' : 'Show images';
+    };
+    return all;
+  };
+  const funnelBtn = () => {
+    const funnel = el('button', { type: 'button', class: 'rs-funnel', title: 'Filter bar', 'aria-label': 'Show or hide the filter bar', 'aria-pressed': String(!!cfg.filterline), html: FUNNEL });
+    funnel.onclick = () => { saveCfg({ filterline: !cfg.filterline }); applyEnabled(); };
+    return funnel;
+  };
   const sortTabs = () => {
     const old = document.getElementById('rs-sortbar');
     if (old?.isConnected && old.dataset.url === location.href) return;
+    if (html.classList.contains('rs-classic')) { if (old && !old.closest('#rs-classic')) old.remove(); return; } // old Reddit's list has its own bar
     old?.remove(); document.getElementById('rs-filterline')?.remove();
     if (isCommentsPage()) return;
     // Subreddits and the home "Following" feed have a "Sort by" menu; "For You" only has the "View" menu.
@@ -1034,16 +1057,7 @@
       }
       tabs.append(tab);
     }
-    // RES's "show images": every picture on the page opens in place; pressed again, they close.
-    const all = el('button', { type: 'button', class: 'rs-expand-all', text: 'Show images' });
-    all.onclick = () => {
-      const open = all.textContent === 'Show images';
-      for (const b of document.querySelectorAll('.rs-row:not(.rs-filtered) .rs-x[data-kind="image"], .rs-row:not(.rs-filtered) .rs-x[data-kind="gallery"]')) if ((b.getAttribute('aria-expanded') === 'true') !== open) b.click();
-      all.textContent = open ? 'Hide images' : 'Show images';
-    };
-    const funnel = el('button', { type: 'button', class: 'rs-funnel', title: 'Filter bar', 'aria-label': 'Show or hide the filter bar', 'aria-pressed': String(!!cfg.filterline), html: FUNNEL });
-    funnel.onclick = () => { saveCfg({ filterline: !cfg.filterline }); applyEnabled(); };
-    tabs.append(funnel, all);
+    tabs.append(funnelBtn(), showImagesBtn());
     const wrap = el('div', { id: 'rs-sortbar', 'data-url': location.href }, [tabs]);
     const holder = dd ? (dd.closest('div') || dd.parentElement) : (view.closest('shreddit-layout-event-setter') || view);
     holder.parentElement.insertBefore(wrap, holder);
@@ -1234,7 +1248,7 @@
   const LOADER = ':scope > faceplate-partial[slot="load-after"]';
   const releaseHolds = () => { for (const b of document.querySelectorAll('.rs-pause button')) b.click(); };
   const pager = () => {
-    const feed = isCommentsPage() ? null : document.querySelector('shreddit-feed');
+    const feed = isCommentsPage() || html.classList.contains('rs-classic') ? null : document.querySelector('shreddit-feed');
     const p = feed?.querySelector(LOADER);
     if (!p || p.id === feed.rsLoader) return;
     const first = feed.rsLoader === undefined;
@@ -1337,6 +1351,7 @@
     return '';
   };
   const kindOf = (post) => {
+    if (post.rsJson) return clKind(post.rsJson);
     const type = post.getAttribute('post-type') || '';
     const href = post.getAttribute('content-href') || '';
     const media = post.querySelector(':scope > [slot="post-media-container"]');
@@ -1363,6 +1378,7 @@
     box.append(f);
   };
   const fillBox = (box, post, kind, close) => {
+    if (post.rsJson) { clFill(box, post, kind, close); box.dataset.filled = '1'; return; }
     const href = post.getAttribute('content-href') || '';
     const title = post.getAttribute('post-title') || 'Video';
     if (kind === 'text') {
@@ -1418,6 +1434,7 @@
   // do nothing while the original post is hidden, so pressing them is not enough.)
   const csrf = () => (document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/) || [])[1] || '';
   const voteStateOf = (post) => {
+    if (post.rsJson) return post.rsJson.likes === true ? 'UP' : post.rsJson.likes === false ? 'DOWN' : 'NONE';
     const up = post.shadowRoot?.querySelector('button[upvote]'), down = post.shadowRoot?.querySelector('button[downvote]');
     return up?.getAttribute('aria-pressed') === 'true' ? 'UP' : down?.getAttribute('aria-pressed') === 'true' ? 'DOWN' : 'NONE';
   };
@@ -1461,13 +1478,13 @@
   };
   const saveBtn = (post) => {
     const menu = () => post.querySelector('shreddit-post-overflow-menu'); // Reddit marks saved posts on its own "..." menu
-    let saved = !!menu()?.hasAttribute('is-post-saved');
+    let saved = post.rsJson ? !!post.rsJson.saved : !!menu()?.hasAttribute('is-post-saved');
     const b = el('button', { type: 'button', class: 'rs-save' });
     const paint = () => { b.textContent = saved ? 'unsave' : 'save'; b.title = saved ? 'Remove from your saved posts' : 'Save this post'; };
     b.onclick = async () => {
       if (needLogin('save posts')) return;
       saved = !saved; paint(); b.disabled = true;
-      try { await gql('UpdatePostSaveState', { postId: post.id, saveState: saved ? 'SAVED' : 'NONE' }); menu()?.toggleAttribute('is-post-saved', saved); }
+      try { await gql('UpdatePostSaveState', { postId: post.id, saveState: saved ? 'SAVED' : 'NONE' }); if (post.rsJson) post.rsJson.saved = saved; else menu()?.toggleAttribute('is-post-saved', saved); }
       catch { saved = !saved; paint(); toast('Reddit did not take that. Try again.'); }
       b.disabled = false;
     };
@@ -1541,6 +1558,7 @@
   // When Reddit redraws a feed in a new order (For You / Following, or Home fetched fresh after Back) the kept numbers
   // stop running in order: then count again from the top. A post Reddit shows twice keeps its first number.
   const rankCheck = () => {
+    if (html.classList.contains('rs-classic')) return;
     const rows = [], seen = new Set();
     for (const r of document.querySelectorAll('.rs-row')) {
       const id = r.rsPost?.id, f = r.closest('shreddit-feed');
@@ -1567,7 +1585,7 @@
       if (scorePaint.n === -1) { scorePaint.n = 0; document.querySelectorAll('.rs-row .rs-score').forEach(scoreTip); } // just switched off
       return;
     }
-    const S = [...document.querySelectorAll('.rs-row .rs-score')];
+    const S = [...document.querySelectorAll(html.classList.contains('rs-classic') ? '#rs-classic .rs-row .rs-score' : '.rs-row .rs-score')];
     if (S.length === scorePaint.n && S[0] === scorePaint.first) return;
     scorePaint.n = S.length; scorePaint.first = S[0];
     const vals = S.map((x) => +x.dataset.v || 0).sort((a, b) => b - a);
@@ -1579,21 +1597,20 @@
       scoreTip(x);
     }
   };
-  const densify = () => {
-    if (isCommentsPage()) return;
-    for (const post of document.querySelectorAll('shreddit-post')) {
-      if (post.rsRow?.isConnected || post.hasAttribute('data-rs-failed')) continue; // already has its row (a post Reddit brings back after Back gets a new one)
-      try {
-      post.setAttribute('data-rs', '1');
+  // One compact row for a post: Reddit's own post card, or a post from old Reddit's list (classic HOME and ALL), which
+  // carries the same details as attributes plus its list data in rsJson.
+  const makeRow = (post, rank) => {
       const g = (k) => post.getAttribute(k) || '';
       const link = g('content-href'), perma = g('permalink');
       const isSelf = /^self\./.test(g('domain'));
-      const img = post.querySelector('[slot="post-media-container"] img[src*="redd.it"], [slot="thumbnail"] img, [slot="post-media-container"] img');
-      const flair = post.querySelector('shreddit-post-flair')?.innerText.trim();
+      const J = post.rsJson;
+      const img = J ? null : post.querySelector('[slot="post-media-container"] img[src*="redd.it"], [slot="thumbnail"] img, [slot="post-media-container"] img');
+      const thumbSrc = J ? clThumb(J) : img && (img.currentSrc || img.src);
+      const flair = J ? (J.link_flair_text || '').trim() : post.querySelector('shreddit-post-flair')?.innerText.trim();
       const kind = kindOf(post);
       const row = el('div', { class: 'rs-row', 'data-rs-id': g('id') });
       row.rsPost = post;
-      const thumbKids = img ? [el('img', { src: img.currentSrc || img.src, alt: '', loading: 'lazy' })] : [el('span', { html: isSelf ? ICON.text : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 12l4-4M7 9l-1.5 1.5a2.5 2.5 0 0 0 3.5 3.5L10.5 12.5M13 11l1.5-1.5a2.5 2.5 0 0 0-3.5-3.5L9.5 7.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>' })];
+      const thumbKids = thumbSrc ? [el('img', { src: thumbSrc, alt: '', loading: 'lazy' })] : [el('span', { html: isSelf ? ICON.text : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 12l4-4M7 9l-1.5 1.5a2.5 2.5 0 0 0 3.5 3.5L10.5 12.5M13 11l1.5-1.5a2.5 2.5 0 0 0-3.5-3.5L9.5 7.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>' })];
       const thumb = el('a', { class: 'rs-thumb', href: isSelf ? perma : link, tabindex: '-1', 'aria-hidden': 'true' }, thumbKids);
       const titleLine = el('div', { class: 'rs-tline' }, [
         el('a', { class: 'rs-title', href: isSelf ? perma : link, text: g('post-title') }),
@@ -1619,12 +1636,337 @@
         isSelf ? null : el('a', { href: link, target: '_blank', rel: 'noopener', title: 'Open link and comments', text: '[l+c]' }),
       ]);
       const main = el('div', { class: 'rs-main' }, [titleLine, meta, acts]);
-      row.append(el('div', { class: 'rs-rank', text: String(rankOf(post)) }), voteBox(post), thumb, main);
-      post.rsRow = row;
-      (post.closest('article') || post).before(row);
+      row.append(el('div', { class: 'rs-rank', text: String(rank) }), voteBox(post), thumb, main);
+      return row;
+  };
+  const densify = () => {
+    if (isCommentsPage() || html.classList.contains('rs-classic')) return;
+    for (const post of document.querySelectorAll('shreddit-post')) {
+      if (post.rsRow?.isConnected || post.hasAttribute('data-rs-failed')) continue; // already has its row (a post Reddit brings back after Back gets a new one)
+      try {
+        post.setAttribute('data-rs', '1');
+        const row = makeRow(post, rankOf(post));
+        post.rsRow = row;
+        (post.closest('article') || post).before(row);
       } catch (e) { post.removeAttribute('data-rs'); post.setAttribute('data-rs-failed', ''); post.rsRow?.remove(); post.rsRow = null; } // Reddit's own card stays
     }
   };
+
+  // ---------- old Reddit's lists: HOME and ALL ----------
+  // Reddit's new Home is its own pick of posts, and the new site has dropped r/all (its address now opens Home). So HOME
+  // shows the list old Reddit shows (setting "HOME shows old Reddit's list", on by default) and ALL always shows old
+  // Reddit's r/all, in RESpawn's rows with old Reddit's sorts. Addresses: / is Home (best); /#hot, /#top/week ... its
+  // other sorts; /#all, /#all/new, /#all/top/week is r/all. Reddit's own Home stays at /?feed=home and /?feed=following.
+  // Best, hot, top and controversial come as list data. Reddit refuses that for new and rising, so those are read from
+  // old Reddit's ordinary page, and such a post's full details are fetched when you open it.
+  const CL_SORTS = { home: ['best', 'hot', 'new', 'rising', 'controversial', 'top'], all: ['hot', 'new', 'rising', 'controversial', 'top'] };
+  const CL_TIMES = [['hour', 'Past hour'], ['day', 'Past 24 hours'], ['week', 'Past week'], ['month', 'Past month'], ['year', 'Past year'], ['all', 'All time']];
+  const CL_LABEL = { best: 'Best', hot: 'Hot', new: 'New', rising: 'Rising', controversial: 'Controversial', top: 'Top' };
+  const clRoute = () => {
+    if (!isClassicUrl(cfg)) return null;
+    const parts = location.hash.replace(/^#/, '').split('/').filter(Boolean);
+    const list = parts[0] === 'all' ? 'all' : 'home';
+    if (list === 'all') parts.shift();
+    const sort = CL_SORTS[list].includes(parts[0]) ? parts[0] : list === 'all' ? 'hot' : 'best';
+    const timed = sort === 'top' || sort === 'controversial';
+    return { list, sort, t: timed ? (CL_TIMES.some(([v]) => v === parts[1]) ? parts[1] : 'day') : '' };
+  };
+  const clHref = (r) => {
+    const tail = `${r.sort}${r.t ? `/${r.t}` : ''}`;
+    if (r.list === 'all') return r.sort === 'hot' ? '/#all' : `/#all/${tail}`;
+    return r.sort === 'best' ? '/' : `/#${tail}`;
+  };
+  const clMedia = (d) => d.crosspost_parent_list?.[0] || d;
+  const clUrl = (x) => x.url_overridden_by_dest || x.url || '';
+  const clThumb = (d) => {
+    const x = clMedia(d), im = x.preview?.images?.[0];
+    const pick = (list) => (list || []).find((r) => r.width >= 140) || (list || []).at(-1);
+    if (d.over_18 || x.over_18) return pick(im?.variants?.nsfw?.resolutions)?.url || ''; // blurred, as Reddit shows it
+    if (d.spoiler) return pick(im?.variants?.obfuscated?.resolutions)?.url || '';
+    if (/^https:\/\//.test(d.thumbnail || '')) return d.thumbnail;
+    return pick(im?.resolutions)?.url || '';
+  };
+  const clKind = (d) => {
+    const x = clMedia(d), href = clUrl(x);
+    if (x.is_self) return x.selftext_html || x._hasText ? 'text' : null;
+    if (ytId(href)) return 'youtube';
+    if (x.is_video || /^https:\/\/v\.redd\.it\//.test(href)) return 'video';
+    if (x.is_gallery) return 'gallery';
+    if (embedOf(href, x.name)) return 'embed';
+    if (picOf(href)) return 'image';
+    if (x.post_hint === 'image' && x.preview?.images?.[0]?.source?.url) return 'image';
+    if (x.secure_media_embed?.content || x.media_embed?.content) return 'rembed';
+    if (x._partial && /^\/r\/[^/]+\/comments\//.test(href)) return 'gallery'; // a crosspost from old Reddit's page: details on opening
+    return null;
+  };
+  // A post from old Reddit's list, dressed like Reddit's own post card so the same row, votes, filters and keys work.
+  const clPost = (d) => {
+    const p = document.createElement('rs-post');
+    const set = (k, v) => { if (v !== undefined && v !== null && v !== false && v !== '') p.setAttribute(k, v === true ? '' : String(v)); };
+    const x = d.crosspost_parent_list?.[0], url = clUrl(d);
+    const xpost = !!x || (!!d._partial && !d.is_self && /^\/r\/[^/]+\/comments\//.test(url));
+    p.id = d.name;
+    set('post-title', d.title); set('permalink', d.permalink);
+    set('content-href', d.is_self ? d.permalink : x ? x.permalink : url);
+    set('domain', d.domain); set('author', d.author); set('subreddit-prefixed-name', d.subreddit_name_prefixed);
+    set('created-timestamp', new Date((d.created_utc || 0) * 1000).toISOString());
+    set('comment-count', d.num_comments ?? 0); set('score', d.score ?? 0); set('upvote-ratio', d.upvote_ratio);
+    set('nsfw', !!d.over_18); set('spoiler', !!d.spoiler); set('is-crosspost', xpost);
+    p.rsJson = d;
+    return p;
+  };
+  // old Reddit's ordinary page, read for new and rising: each post row carries its details as data- attributes
+  const clFromPage = (text) => {
+    // its inline onclick= bits are dropped first: nothing runs in a parsed page, but Reddit's page rules would complain
+    const doc = new DOMParser().parseFromString(String(text).replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, ''), 'text/html');
+    const children = [];
+    for (const t of doc.querySelectorAll('#siteTable > .thing.link')) {
+      const a = (k) => t.getAttribute(`data-${k}`) || '';
+      if (a('promoted') === 'true' || !/^t3_[a-z0-9]+$/.test(a('fullname'))) continue;
+      const domain = a('domain'), th = t.querySelector('a.thumbnail img')?.getAttribute('src') || '', mid = t.querySelector('.midcol');
+      children.push({ kind: 't3', data: {
+        _partial: true, name: a('fullname'), id: a('fullname').slice(3), title: t.querySelector('a.title')?.textContent || '',
+        permalink: a('permalink'), url: a('url'), domain, author: a('author'), subreddit_name_prefixed: a('subreddit-prefixed'),
+        created_utc: (+a('timestamp') || 0) / 1000, num_comments: +a('comments-count') || 0, score: +a('score') || 0,
+        over_18: a('nsfw') === 'true', spoiler: a('spoiler') === 'true', is_self: /^self\./.test(domain), is_gallery: a('is-gallery') === 'true',
+        is_video: domain === 'v.redd.it', thumbnail: th.startsWith('//') ? `https:${th}` : th,
+        _hasText: !!t.querySelector('.expando-button.selftext'), // old Reddit gives a text post with a body its own open button
+        link_flair_text: t.querySelector('.linkflairlabel')?.textContent || '',
+        likes: mid?.classList.contains('likes') ? true : mid?.classList.contains('dislikes') ? false : null, saved: t.classList.contains('saved'),
+      } });
+    }
+    const next = doc.querySelector('.next-button a')?.getAttribute('href') || '';
+    return { after: (next.match(/[?&]after=(t3_[a-z0-9]+)/) || [])[1] || null, children };
+  };
+  // The background helper reads old.reddit.com (a page on www.reddit.com can't).
+  const clAsk = (msg) => new Promise((res, rej) => {
+    const rt = typeof chrome !== 'undefined' && chrome.runtime;
+    if (!rt?.sendMessage) { rej(new Error('no helper')); return; }
+    try { rt.sendMessage(msg, (a) => { const e = rt.lastError; if (e) rej(new Error(e.message)); else res(a); }); } catch (e) { rej(e); }
+  });
+  const clFetch = async (r, after, count) => {
+    // Home's best, hot, top and controversial come straight from this site, signed in; the rest through the helper.
+    if (r.list === 'home' && !['new', 'rising'].includes(r.sort)) {
+      const u = new URL(r.sort === 'hot' ? '/.json' : `/${r.sort}/.json`, location.origin);
+      u.searchParams.set('limit', '25'); u.searchParams.set('raw_json', '1');
+      if (r.t) u.searchParams.set('t', r.t);
+      if (after) { u.searchParams.set('after', after); u.searchParams.set('count', String(count)); }
+      try {
+        const res = await fetch(u, { credentials: 'include', headers: { accept: 'application/json' } });
+        if (res.ok) { const j = await res.json(); if (j?.data) return { after: j.data.after || null, children: j.data.children || [] }; }
+      } catch { /* the helper below */ }
+    }
+    const a = await clAsk({ type: 'rs-list', list: r.list, sort: r.sort, t: r.t, after, count });
+    if (a?.data) return a.data;
+    if (a?.html) return clFromPage(a.html);
+    throw new Error(a?.error || 'no answer');
+  };
+  const clFull = async (d) => {
+    const res = await fetch(`/comments/${d.id || d.name.replace(/^t3_/, '')}/.json?limit=1&raw_json=1`, { credentials: 'include', headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(String(res.status));
+    const j = await res.json();
+    const full = j?.[0]?.data?.children?.[0]?.data;
+    if (!full) throw new Error('no post');
+    return full;
+  };
+  // Post text from Reddit, copied in tag by tag: only plain formatting and links survive.
+  const SAFE_TAGS = new Set(['P', 'A', 'EM', 'STRONG', 'B', 'I', 'U', 'DEL', 'S', 'SUP', 'SUB', 'CODE', 'PRE', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'BR', 'HR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN', 'DIV']);
+  const safeHtml = (src) => {
+    const doc = new DOMParser().parseFromString(src || '', 'text/html');
+    const clean = (n) => {
+      for (const c of [...n.childNodes]) {
+        if (c.nodeType === 3) continue;
+        if (c.nodeType !== 1) { c.remove(); continue; }
+        if (!SAFE_TAGS.has(c.tagName)) { if (/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|TEMPLATE|SVG|MATH|FORM|INPUT|BUTTON|IMG|VIDEO|AUDIO)$/.test(c.tagName)) c.remove(); else { clean(c); c.replaceWith(...c.childNodes); } continue; }
+        for (const at of [...c.attributes]) {
+          const ok = (c.tagName === 'A' && at.name === 'href' && /^(https?:\/\/|\/(?!\/))/i.test(at.value.trim())) || (at.name === 'class' && at.value === 'md-spoiler-text');
+          if (!ok) c.removeAttribute(at.name);
+        }
+        if (c.tagName === 'A') { c.setAttribute('target', '_blank'); c.setAttribute('rel', 'noopener nofollow'); }
+        clean(c);
+      }
+    };
+    clean(doc.body);
+    const frag = document.createDocumentFragment();
+    for (const c of [...doc.body.childNodes]) frag.append(document.importNode(c, true));
+    return frag;
+  };
+  const picture = (box, src, href, alt) => {
+    const img = el('img', { class: 'rs-media-img', src, alt: alt || '' });
+    const a = el('a', { href: href || src, target: '_blank', rel: 'noopener' }, [img]);
+    img.onerror = () => a.replaceWith(el('p', { class: 'rs-media-err' }, ['That picture would not load here. ', el('a', { href: href || src, target: '_blank', rel: 'noopener', text: 'Open it' })]));
+    box.append(a);
+  };
+  const clGallery = (box, x) => {
+    const order = (x.gallery_data?.items || []).map((g) => g.media_id);
+    const urls = (order.length ? order : Object.keys(x.media_metadata || {})).map((id) => { const s = x.media_metadata?.[id]?.s; return s && (s.u || s.gif); }).filter(Boolean);
+    if (!urls.length) { box.append(el('p', { class: 'rs-media-err' }, ['These pictures would not load here. ', el('a', { href: x.permalink, text: 'Open the post' })])); return; }
+    let i = 0;
+    const img = el('img', { class: 'rs-media-img', alt: x.title || '' });
+    const link = el('a', { target: '_blank', rel: 'noopener' }, [img]);
+    const prev = el('button', { type: 'button', class: 'rs-btn', 'aria-label': 'Previous picture', text: '‹' });
+    const next = el('button', { type: 'button', class: 'rs-btn', 'aria-label': 'Next picture', text: '›' });
+    const n = el('span', { class: 'rs-gal-n' });
+    const show = () => { img.src = urls[i]; link.href = urls[i]; n.textContent = `${i + 1} / ${urls.length}`; prev.disabled = !i; next.disabled = i === urls.length - 1; };
+    prev.onclick = () => { if (i) { i--; show(); } };
+    next.onclick = () => { if (i < urls.length - 1) { i++; show(); } };
+    box.append(link, urls.length > 1 ? el('div', { class: 'rs-gal-nav' }, [prev, n, next]) : null);
+    show();
+  };
+  // Reddit's own videos: the picture track and the sound track are separate files, played together.
+  const redditVideo = (box, x, title) => {
+    const rv = x.secure_media?.reddit_video || x.media?.reddit_video;
+    const src = rv?.fallback_url || '';
+    if (!src) { box.append(el('p', { class: 'rs-media-err' }, ['This video would not load here. ', el('a', { href: x.permalink, text: 'Open the post' })])); return; }
+    const v = el('video', { class: 'rs-media-video', controls: true, playsinline: true, preload: 'metadata', poster: x.preview?.images?.[0]?.source?.url || null, title });
+    v.src = src;
+    if (rv.has_audio !== false) {
+      const base = src.replace(/\?.*$/, '').replace(/\/[^/]*$/, '');
+      const names = ['CMAF_AUDIO_128.mp4', 'CMAF_AUDIO_64.mp4', 'DASH_AUDIO_128.mp4', 'DASH_AUDIO_64.mp4', 'DASH_audio.mp4']; // newer videos keep it in CMAF_ files
+      const tries = (/\/CMAF_/.test(src) ? names : names.slice(2).concat(names.slice(0, 2))).map((f) => `${base}/${f}`);
+      const a = new Audio();
+      let i = 0;
+      a.preload = 'auto';
+      a.onerror = () => { if (i < tries.length) a.src = tries[i++]; };
+      a.src = tries[i++];
+      const sync = () => { if (Math.abs(a.currentTime - v.currentTime) > 0.3) a.currentTime = v.currentTime; };
+      v.addEventListener('play', () => { sync(); a.play().catch(() => {}); });
+      v.addEventListener('playing', () => { sync(); if (a.paused) a.play().catch(() => {}); });
+      for (const ev of ['pause', 'waiting', 'ended']) v.addEventListener(ev, () => a.pause());
+      v.addEventListener('seeked', sync);
+      v.addEventListener('timeupdate', sync);
+      v.addEventListener('volumechange', () => { a.volume = v.volume; a.muted = v.muted; });
+      v.addEventListener('ratechange', () => { a.playbackRate = v.playbackRate; });
+      v.rsAudio = a;
+    }
+    box.append(v);
+    v.play().catch(() => {}); // opened with a click, so it starts like Reddit's own player
+    setTimeout(watchVideos, 100); // counts toward "Videos playing at once"
+  };
+  const clFill = async (box, post, kind, close) => {
+    let d = post.rsJson;
+    if (d._partial) {
+      box.append(el('p', { class: 'rs-media-wait', text: 'Loading…' }));
+      try { d = post.rsJson = await clFull(d); } catch {
+        box.replaceChildren(el('p', { class: 'rs-media-err' }, ['Reddit did not send this post. ', el('a', { href: d.permalink, text: 'Open it' })]));
+        return;
+      }
+      box.replaceChildren();
+      kind = clKind(d) || kind;
+    }
+    const x = clMedia(d), href = clUrl(x), title = d.title || 'Video';
+    if (kind === 'text') {
+      const body = el('div', { class: 'rs-text md' });
+      body.append(x.selftext_html ? safeHtml(x.selftext_html) : el('p', { text: 'No text.' }));
+      box.append(body);
+    } else if (kind === 'youtube') player(box, `${YT_ORIGIN}/embed/${ytId(href)}?autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, { origin: YT_ORIGIN }, close, title);
+    else if (kind === 'embed') { const e = embedOf(href, x.name); player(box, e.src, e, close, title); }
+    else if (kind === 'video') redditVideo(box, x, title);
+    else if (kind === 'gallery' && x.is_gallery) clGallery(box, x);
+    else if (kind === 'image' || kind === 'gallery') {
+      const src = picOf(href) || x.preview?.images?.[0]?.source?.url;
+      if (src) picture(box, src, href, title);
+      else box.append(el('p', { class: 'rs-media-err' }, ['Nothing to show here. ', el('a', { href: d.permalink, text: 'Open the post' })]));
+    } else if (kind === 'rembed') player(box, `https://www.redditmedia.com/mediaembed/${x.id || x.name.replace(/^t3_/, '')}`, {}, close, title);
+  };
+  const clBar = (r) => {
+    const tabs = el('div', { id: 'rs-sorts', role: 'tablist', 'aria-label': 'Sort' });
+    if (r.list === 'home') tabs.append(el('a', { href: '/?feed=home', class: 'rs-cl-feed', text: 'For You' }), el('a', { href: '/?feed=following', class: 'rs-cl-feed', text: 'Following' }), el('span', { class: 'rs-cl-div', 'aria-hidden': 'true' }));
+    for (const s of CL_SORTS[r.list]) {
+      const on = s === r.sort, timed = s === 'top' || s === 'controversial';
+      tabs.append(el('a', { href: clHref({ ...r, sort: s, t: timed ? (r.t || 'day') : '' }), role: 'tab', 'aria-selected': String(on), class: on ? 'rs-cur' : null, text: CL_LABEL[s] }));
+    }
+    if (r.t) {
+      const sel = el('select', { class: 'rs-cl-time', 'aria-label': 'Time range' });
+      for (const [v, t] of CL_TIMES) { const o = el('option', { value: v, text: t }); o.selected = v === r.t; sel.append(o); }
+      sel.onchange = () => clGo(clHref({ ...r, t: sel.value }));
+      tabs.append(sel);
+    }
+    tabs.append(funnelBtn(), showImagesBtn());
+    return el('div', { id: 'rs-sortbar', class: 'rs-cl-bar' }, [tabs]);
+  };
+  let cl = null;
+  const clBuild = (r, key) => {
+    const st = { r, key, after: null, count: 0, page: 0, loading: false, done: false, scroll: null, seen: new Set(), resume: false };
+    st.list = el('div', { class: 'rs-cl-list' });
+    st.more = el('div', { class: 'rs-cl-more' });
+    st.root = el('div', { id: 'rs-classic', 'data-list': r.list }, [clBar(r), filterLine(), st.list, st.more]);
+    st.io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) clLoad(st); }, { rootMargin: '0px 0px 1500px 0px' });
+    st.io.observe(st.more);
+    return st;
+  };
+  const clLoad = async (st) => {
+    if (st.loading || st.done || st !== cl || !st.root.isConnected) return;
+    const every = +cfg.pauseEvery || 0;
+    if (st.page && every && st.page % every === 0 && !st.resume) { // RES's pause every few pages
+      if (!st.more.querySelector('.rs-pause')) {
+        const go = el('button', { type: 'button', class: 'rs-btn', text: 'Load more' });
+        go.onclick = () => { st.resume = true; clLoad(st); };
+        st.more.replaceChildren(el('div', { class: 'rs-pause', role: 'status' }, [el('span', { text: `Paused after ${st.page} pages.` }), go]));
+      }
+      return;
+    }
+    st.loading = true; st.resume = false;
+    st.more.replaceChildren(el('div', { class: 'rs-cl-wait', role: 'status', text: 'Loading…' }));
+    let d;
+    try { d = await clFetch(st.r, st.after, st.count); } catch {
+      st.loading = false;
+      const again = el('button', { type: 'button', class: 'rs-btn', text: 'Try again' });
+      again.onclick = () => clLoad(st);
+      st.more.replaceChildren(el('div', { class: 'rs-cl-err', role: 'status' }, [el('span', { text: 'Reddit did not send the list.' }), again]));
+      return;
+    }
+    st.loading = false;
+    if (st !== cl) return; // another list was opened meanwhile
+    const posts = (d.children || []).filter((c) => c?.kind === 't3' && /^t3_[a-z0-9]+$/.test(c.data?.name || '') && !c.data.promoted && !st.seen.has(c.data.name));
+    if (st.page && posts.length) st.list.append(el('div', { class: 'rs-page', 'aria-hidden': 'true', text: `Page ${st.page + 1}` }));
+    for (const c of posts) { st.seen.add(c.data.name); try { st.list.append(makeRow(clPost(c.data), st.count + 1)); st.count++; } catch { /* a post that won't draw is left out */ } }
+    st.page++; st.after = d.after; st.done = !d.after || !posts.length;
+    st.more.replaceChildren(st.done ? el('div', { class: 'rs-cl-end', text: st.count ? 'No more posts.' : 'No posts here.' }) : '');
+    if (!st.done && st.more.getBoundingClientRect().top < innerHeight + 1500) setTimeout(() => clLoad(st), 60); // still near the end
+  };
+  // Shows, keeps or puts away old Reddit's list for the address now. A list you leave (opening a post) is kept, and
+  // Back brings it back where you were, without loading it again.
+  const clMount = () => {
+    const r = clRoute();
+    html.classList.toggle('rs-classic', !!r);
+    if (!r) { if (cl?.root.isConnected) { cl.scroll = scrollY; cl.root.remove(); } return; }
+    const main = document.getElementById('main-content');
+    if (!main) return;
+    const key = clHref(r);
+    let fresh = false;
+    if (!cl || cl.key !== key) { if (cl) { cl.io.disconnect(); cl.root.remove(); } cl = clBuild(r, key); fresh = true; }
+    if (cl.root.parentElement === main) return;
+    main.prepend(cl.root);
+    paintFilters();
+    if (cl.scroll != null) { const y = cl.scroll; cl.scroll = null; requestAnimationFrame(() => scrollTo(0, y)); setTimeout(() => scrollTo(0, y), 400); }
+    else if (fresh && scrollY > 200) scrollTo(0, 0);
+    if (!cl.page) clLoad(cl);
+  };
+  // On Home only the part after # changes: Reddit re-routes any other change of address made on its page (to its own
+  // Home), but leaves # alone. Coming from Reddit's own Home (/?feed=...) the list opens fresh.
+  const clGo = (href) => {
+    if (new URLSearchParams(location.search).has('feed')) { location.assign(href); return; }
+    const h = href.includes('#') ? href.slice(href.indexOf('#')) : location.hash ? '#best' : '';
+    if (h !== location.hash) location.hash = h; // hashchange then shows the list
+    else clMount();
+  };
+  window.addEventListener('popstate', () => clMount());
+  window.addEventListener('hashchange', () => clMount());
+  // Links to these lists (HOME, ALL, the sort tabs) switch the list in place on Home, or open it fresh from other pages
+  // (Reddit's own page change would drop the part after #). Listened for on the window, ahead of Reddit's own link
+  // handling, which would otherwise turn them into its own Home.
+  window.addEventListener('click', (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !cfg.enabled) return;
+    const a = e.target.closest?.('a[href]');
+    if (!a || a.target === '_blank') return;
+    const u = new URL(a.getAttribute('href'), location.href);
+    if (u.origin !== location.origin || u.pathname !== '/' || u.search) return;
+    if (!/^#all(\/|$)/.test(u.hash) && !cfg.classicHome) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (location.pathname === '/') clGo(u.pathname + u.hash);
+    else location.assign(u.pathname + u.hash);
+  }, true);
 
   // ---------- page header + side clutter ----------
   const tidy = () => {
@@ -2527,7 +2869,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    densify(); rankCheck(); scorePaint(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    clMount(); densify(); rankCheck(); scorePaint(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };

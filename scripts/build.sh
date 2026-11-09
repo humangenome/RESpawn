@@ -14,6 +14,7 @@ for target in chrome firefox; do
   out="$base/$target"
   mkdir -p "$out"
   cp src/content/respawn.js src/content/respawn.css "$out"/
+  cp src/background/background.js "$out"/
   [ -d extension/icons ] && cp -r extension/icons "$out"/
   python3 - "$target" "$out" "$store" <<'PY'
 import json, os, sys
@@ -29,6 +30,9 @@ if target == "firefox":
     # Firefox allows names up to 45 characters
     if len(m["name"]) > 45:
         m["name"] = m.get("firefox_name") or m["short_name"]
+    # Firefox runs the background helper as a background script, not a service worker
+    if "background" in m:
+        m["background"] = {"scripts": [m["background"]["service_worker"]]}
 m.pop("firefox_name", None)
 if not store and os.path.isfile("local/defaults.json"):
     with open(os.path.join(out, "defaults.js"), "w") as f:
@@ -36,7 +40,7 @@ if not store and os.path.isfile("local/defaults.json"):
     m["content_scripts"][0]["js"] = ["defaults.js"] + m["content_scripts"][0]["js"]
 json.dump(m, open(os.path.join(out, "manifest.json"), "w"), indent=2)
 PY
-  node --check "$out/respawn.js"
+  node --check "$out/respawn.js"; node --check "$out/background.js"
 done
 
 if [ $store = 1 ]; then

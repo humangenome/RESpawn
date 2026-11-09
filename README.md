@@ -3,7 +3,7 @@
 **Reddit Enhancement Suite features for New Reddit.**
 
 RESpawn keeps the new Reddit look and brings back the way old Reddit and Reddit Enhancement Suite (RES)
-worked: more posts on a screen, sort tabs in the open, RES's filter bar, one-click comments, save and
+worked: HOME and ALL showing old Reddit's lists (the new site has dropped r/all), more posts on a screen, sort tabs in the open, RES's filter bar, one-click comments, save and
 hide, a subreddit shortcut bar with groups and DASHBOARD / FRIENDS / MOD / MODQUEUE links, a switch for
 subreddit styles, keyboard shortcuts, hover cards for users and subreddits, images and videos that open
 in place (including Streamable, Vimeo, Twitch clips, TikTok, Imgur and Giphy), a limit on videos playing at once,
