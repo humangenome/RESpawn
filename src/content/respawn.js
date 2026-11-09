@@ -34,6 +34,9 @@
     if (s < 86400) return `${Math.round(s / 3600)} hr`;
     return `${Math.round(s / 86400)} d`;
   };
+  // Writing the same words again still counts as a page change to the watcher below, which would start another pass,
+  // which writes them again: so words that are redrawn on every pass are only written when they change.
+  const setText = (e, t) => { if (e && e.textContent !== t) e.textContent = t; };
   const num = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M` : n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
   const subOf = () => (location.pathname.match(/^\/r\/([^/]+)/) || [])[1];
   const isCommentsPage = () => !!document.querySelector('shreddit-post[view-context="CommentsPage"]');
@@ -2144,6 +2147,7 @@
   document.addEventListener('toggle', (e) => {
     const d = e.target;
     if (d?.tagName !== 'DETAILS' || d.parentElement?.tagName !== 'SHREDDIT-COMMENT' || !cfg.enabled) return;
+    if (!d.open) foldInfo(d.parentElement);
     if (d.parentElement.rsQuiet) { d.parentElement.rsQuiet = false; return; }
     const id = d.parentElement.getAttribute('thingid');
     if (!id) return;
@@ -2168,12 +2172,69 @@
     };
     return a;
   };
+  // Author flair right after the name, in old Reddit's small grey box. Reddit draws it on a second line and leaves it
+  // out on some comments (often a person's later comments in the same thread, and picture-only flair), so the post's
+  // comments are read once per post page (one request) and every comment by that person gets it.
+  const aflair = { post: '', byId: new Map(), byName: new Map(), done: false };
+  const aflairBox = (rich, text) => {
+    const s = el('span', { class: 'rs-aflair' });
+    const parts = Array.isArray(rich) && rich.length ? rich : [{ e: 'text', t: text || '' }];
+    for (const p of parts) {
+      if (p?.e === 'text' && p.t) s.append(p.t);
+      else if (p?.e === 'emoji' && FLAIR_IMG.test(p.u || '')) s.append(el('img', { class: 'rs-flair-emoji', src: p.u, alt: '', loading: 'lazy' }));
+    }
+    s.normalize();
+    if (s.firstChild?.nodeType === 3) s.firstChild.textContent = s.firstChild.textContent.trimStart();
+    if (s.lastChild?.nodeType === 3) s.lastChild.textContent = s.lastChild.textContent.trimEnd();
+    if (!s.textContent.trim() && !s.querySelector('img')) return null;
+    s.title = s.textContent.trim();
+    return s;
+  };
+  const paintFlair = (c) => {
+    if (c.hasAttribute('rs-aflair')) return;
+    const trig = c.querySelector(':scope > details > summary [slot="commentMeta"] .author-hovercard-trigger');
+    if (!trig) return;
+    const own = [...c.querySelectorAll('author-flair-event-handler')].find((f) => f.closest('shreddit-comment') === c);
+    const j = aflair.byId.get(c.getAttribute('thingid')) || aflair.byName.get(String(c.getAttribute('author')).toLowerCase());
+    // Reddit's own words when it drew them (text only), else the post's comment list; pictures only from the list
+    const domText = own && !own.querySelector('img') ? own.textContent.replace(/\s+/g, ' ').trim() : '';
+    const box = j ? aflairBox(j.rich, j.text) : domText ? aflairBox(null, domText) : null;
+    if (!box) return;
+    trig.after(box);
+    c.setAttribute('rs-aflair', '');
+  };
+  const loadFlairs = (postId) => {
+    if (aflair.post === postId) return;
+    aflair.post = postId; aflair.byId = new Map(); aflair.byName = new Map(); aflair.done = false;
+    fetch(`/comments/${postId.replace(/^t3_/, '')}/.json?limit=500&raw_json=1`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null)).then((d) => {
+        if (aflair.post !== postId || !Array.isArray(d)) return;
+        const walk = (L) => {
+          for (const k of L || []) {
+            const x = k?.kind === 't1' && k.data;
+            if (!x) continue;
+            if (x.author_flair_text || x.author_flair_richtext?.length) {
+              const f = { text: String(x.author_flair_text || ''), rich: x.author_flair_richtext };
+              aflair.byId.set(`t1_${x.id}`, f);
+              if (validUser(x.author)) aflair.byName.set(x.author.toLowerCase(), f);
+            }
+            walk(x.replies?.data?.children);
+          }
+        };
+        walk(d[1]?.data?.children);
+        aflair.done = true;
+        for (const c of document.querySelectorAll('shreddit-comment[data-rs]:not([rs-aflair])')) paintFlair(c);
+      }).catch(() => { /* Reddit's own flair stays */ });
+  };
   const comments = () => {
     const page = document.querySelector('shreddit-post[view-context="CommentsPage"]');
     if (!page) return;
     const op = page.getAttribute('author');
     const pa = page.querySelector('[slot="authorName"] a.author-name');
     if (pa && validUser(op) && !page.querySelector('[slot="authorName"] .rs-ut')) (pa.closest('faceplate-hovercard') || pa).after(nameTag(op));
+    // Reddit has its own small card on the post's author: with RESpawn's hover cards on, only ours opens there
+    pa?.closest('faceplate-hovercard')?.classList.toggle('rs-own-card', !!cfg.hoverCards);
+    if (cfg.enabled && page.id) loadFlairs(page.id);
     const key = `rs-visit-${page.getAttribute('id')}`;
     if (comments.started !== key) {
       nav?.remove(); nav = null; navI = -1;
@@ -2184,12 +2245,13 @@
       addNavigator();
       html.classList.toggle('rs-kids-hidden', !!cfg.hideKids);
     }
-    const folded = collapsedMap(), me = myName();
+    let folded = null; // your folded comments, read only when there are new comments to look at
+    const me = myName();
     for (const c of document.querySelectorAll('shreddit-comment:not([data-rs])')) {
       const meta = c.querySelector('[slot="commentMeta"]');
       if (!meta) continue;
       c.setAttribute('data-rs', '1');
-      if (folded[c.getAttribute('thingid')]) { const d = c.querySelector(':scope > details'); if (d?.open) d.open = false; }
+      if ((folded ||= collapsedMap())[c.getAttribute('thingid')]) { const d = c.querySelector(':scope > details'); if (d?.open) d.open = false; }
       const author = c.getAttribute('author') || '';
       if (author === op || c.getAttribute('is-op') === 'true') c.setAttribute('rs-op', '');
       if (me && author.toLowerCase() === me) c.setAttribute('rs-me', '');
@@ -2197,11 +2259,15 @@
       if (friendSet().has(author.toLowerCase())) c.setAttribute('rs-friend', '');
       const nm = meta.querySelector('.author-name-meta');
       if (nm && validUser(author)) (nm.closest('.author-hovercard-trigger') || nm).after(nameTag(author));
+      paintFlair(c);
+      // Reddit's "Top 1% Commenter" now sits in its own box under the name, outside the badges the setting hides
+      for (const b of meta.querySelectorAll('.author-hovercard-trigger img[alt^="Profile Badge"]')) b.closest('.author-hovercard-trigger').classList.add('rs-pbadge');
       if (ignored(author)) ignoreComment(c, true);
       if (comments.last && Date.parse(c.getAttribute('created')) > comments.last) { c.setAttribute('rs-new', ''); meta.append(el('span', { class: 'rs-badge rs-is-new', text: 'new' })); }
       const links = el('span', { class: 'rs-cacts' }, [el('a', { href: c.getAttribute('permalink') || '#', text: 'permalink' })]);
       if (+c.getAttribute('depth') > 0 && c.getAttribute('parentid')) links.append(parentLink(c));
       (c.querySelector(':scope > details [slot="actionRow"]') || meta).append(links);
+      if (c.querySelector(':scope > details:not([open])')) foldInfo(c);
     }
     kids(); updateNav(); moreReplies();
   };
@@ -2213,9 +2279,31 @@
     for (const b of c.querySelectorAll('faceplate-partial[loading="action"] button')) n += +(b.textContent.match(/(\d+)\s+more repl/i) || [])[1] || 0;
     return n;
   };
+  // A folded comment still says its points and how many replies sit under it, like RES ("-14 points ... (3 children)").
+  // Drawn into Reddit's name line, shown only while the comment is folded, and brought up to date each time it folds.
+  const foldInfo = (c) => {
+    const meta = c.querySelector(':scope > details > summary [slot="commentMeta"]');
+    const trig = meta?.querySelector('.author-hovercard-trigger');
+    const row = trig?.parentElement || meta?.querySelector('faceplate-timeago')?.closest('div'); // deleted comments have no name link
+    if (!row) return;
+    let pts = c.rsFoldPts, n = c.rsFoldKids;
+    if (!pts?.isConnected) {
+      pts = c.rsFoldPts = el('span', { class: 'rs-fold rs-fold-pts' });
+      n = c.rsFoldKids = el('span', { class: 'rs-fold rs-fold-kids' });
+      let at = trig;
+      while (at?.nextElementSibling?.matches('.rs-ut, .rs-aflair')) at = at.nextElementSibling;
+      if (at) at.after(pts); else row.append(pts);
+      row.append(n);
+    }
+    // Reddit gives no score for deleted comments; those show only their replies, as on old Reddit
+    const s = c.getAttribute('score');
+    pts.textContent = s === null || s === '' || Number.isNaN(+s) ? '' : `${(+s).toLocaleString()} point${Math.abs(+s) === 1 ? '' : 's'}`;
+    const k = kidsCount(c);
+    n.textContent = `(${k.toLocaleString()} ${k === 1 ? 'child' : 'children'})`;
+  };
   const kidsPaint = () => {
     const b = document.getElementById('rs-kids');
-    if (b) { const on = html.classList.contains('rs-kids-hidden'); b.textContent = on ? 'Show all replies' : 'Hide all replies'; b.setAttribute('aria-pressed', String(on)); }
+    if (b) { const on = html.classList.contains('rs-kids-hidden'); setText(b, on ? 'Show all replies' : 'Hide all replies'); b.setAttribute('aria-pressed', String(on)); }
   };
   const kids = () => {
     const sort = document.querySelector('shreddit-comments-sort-dropdown');
@@ -2240,7 +2328,7 @@
         c.rsKids = t;
       }
       const n = kidsCount(c);
-      t.textContent = c.hasAttribute('rs-kids-open') ? 'hide replies' : `show ${n} repl${n === 1 ? 'y' : 'ies'}`;
+      setText(t, c.hasAttribute('rs-kids-open') ? 'hide replies' : `show ${n} repl${n === 1 ? 'y' : 'ies'}`);
     }
   };
   // Comment navigator (RES): jump between new comments, the poster's, mods', friends', your own, people you tagged.
@@ -2272,7 +2360,7 @@
   const updateNav = () => {
     if (!nav) return;
     const L = navList(nav.querySelector('select').value);
-    nav.querySelector('.rs-count').textContent = `${L.length ? Math.max(Math.min(navI, L.length - 1) + 1, 0) : 0} / ${L.length}`;
+    setText(nav.querySelector('.rs-count'), `${L.length ? Math.max(Math.min(navI, L.length - 1) + 1, 0) : 0} / ${L.length}`);
   };
   // Your Reddit name, for "Your comments". Asked of Reddit once a day.
   const myName = () => {
@@ -2618,12 +2706,16 @@
   const HC_DELAY = 450, HC_LINGER = 250;
   const hcCache = new Map();
   let hc = null, hcLink = null, hcT = 0;
+  // Names in our rows (relative addresses), and on a post page the comment authors and the post's own author (Reddit
+  // writes those as full www.reddit.com addresses).
+  const HC_PEOPLE = 'shreddit-comment .author-hovercard-trigger, shreddit-post[view-context="CommentsPage"] [slot="authorName"]';
   const hcTarget = (a) => {
-    if (!a?.closest?.('.rs-row .rs-meta')) return null;
-    const h = a.getAttribute('href') || '';
-    let m = h.match(/^\/user\/([A-Za-z0-9_-]{3,20})\/?$/);
+    const row = a?.closest?.('.rs-row .rs-meta');
+    if (!row && !a?.closest?.(HC_PEOPLE)) return null;
+    const h = (a.getAttribute('href') || '').replace(/^https:\/\/(www\.)?reddit\.com(?=\/)/i, '');
+    let m = h.match(/^\/(?:user|u)\/([A-Za-z0-9_-]{3,20})\/?$/);
     if (m) return { kind: 'user', name: m[1] };
-    m = h.match(/^\/r\/([A-Za-z0-9_]{2,21})\/?$/);
+    m = row && h.match(/^\/r\/([A-Za-z0-9_]{2,21})\/?$/);
     return m ? { kind: 'sub', name: m[1] } : null;
   };
   const hcData = ({ kind, name }) => {
@@ -2638,7 +2730,6 @@
   const unamp = (u) => String(u || '').replace(/&amp;/g, '&');
   const imgUrl = (u) => { const x = unamp(u); return /^https:\/\/([a-z0-9-]+\.)*(redd\.it|redditmedia\.com|redditstatic\.com)\//i.test(x) ? x : ''; };
   const dateOf = (sec) => new Date(sec * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const yearsOf = (sec) => { const y = Math.floor((Date.now() / 1000 - sec) / 31557600); return y < 1 ? 'under a year' : `${y} yr${y === 1 ? '' : 's'}`; };
   const closeHover = () => { clearTimeout(hcT); hc?.remove(); hc = null; hcLink = null; };
   const placeHover = (card, a) => {
     const r = a.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
@@ -2646,29 +2737,57 @@
     card.style.left = `${Math.max(8, Math.min(Math.round(r.left), innerWidth - w - 16))}px`;
     card.style.top = `${Math.round(below ? r.bottom + 8 : r.top - 8 - h)}px`;
   };
+  // People you highlight from their card (RES's "Highlight"): their name stands out everywhere on the page until you
+  // reload. Drawn as one style rule per name, so comments and rows that load later are covered too.
+  const hlUsers = new Set();
+  const paintHlUsers = () => {
+    let st = document.getElementById('rs-hl-users');
+    if (!hlUsers.size) { st?.remove(); return; }
+    if (!st) { st = el('style', { id: 'rs-hl-users' }); document.head.append(st); }
+    const names = [...hlUsers];
+    st.textContent = `${names.map((n) => `html.rs-on shreddit-comment[author="${n}" i] > details > summary > [slot="commentMeta"] .author-name-meta a, html.rs-on .rs-by a.rs-author[href="/user/${n}/" i]`).join(', ')} { padding: 0 5px; border-radius: 4px; background: var(--rs-hluser) !important; color: #fff !important; text-decoration: none; }`;
+  };
+  const toggleHlUser = (name) => { const k = name.toLowerCase(); if (hlUsers.has(k)) hlUsers.delete(k); else hlUsers.add(k); paintHlUsers(); return hlUsers.has(k); };
+  const sinceOf = (sec) => {
+    const d = new Date(sec * 1000), y = Math.floor((Date.now() / 1000 - sec) / 31557600);
+    return `${d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })} (${y < 1 ? 'under a year' : `${y} year${y === 1 ? '' : 's'}`})`;
+  };
   const userCard = (d, name) => {
     if (d.gone !== undefined) return [el('p', { class: 'rs-hc-note', text: d.gone === 403 && !loggedIn() ? 'Log in to Reddit to see who this is.' : d.gone === 404 ? `u/${name} was deleted or does not exist.` : 'Reddit did not answer. Try again in a moment.' })];
     if (d.is_suspended) return [el('div', { class: 'rs-hc-head' }, [el('b', { text: `u/${d.name || name}` })]), el('p', { class: 'rs-hc-note', text: 'This account is suspended.' })];
+    const who = d.name || name;
     const icon = imgUrl(d.icon_img);
     const about = String(d.subreddit?.public_description || '').trim();
-    const flags = [d.is_employee ? 'Reddit admin' : '', d.is_mod ? 'Moderator' : '', d.is_gold ? 'Premium' : ''].filter(Boolean);
+    const flags = [d.is_employee ? 'Reddit admin' : '', d.is_mod ? 'Moderator' : '', d.is_gold ? 'Premium' : '', friendSet().has(who.toLowerCase()) ? 'Friend' : ''].filter(Boolean);
+    // Ignore and Highlight work like RES's buttons: Ignore hides their posts and comments (the same switch as in their tag)
+    const ign = el('button', { type: 'button', class: 'rs-btn' });
+    const paintIgn = () => { const on = ignored(who); ign.textContent = on ? 'Unignore' : 'Ignore'; ign.setAttribute('aria-pressed', String(on)); ign.title = on ? `Show u/${who}'s posts and comments again` : `Hide u/${who}'s posts and comments`; };
+    ign.onclick = () => { const t = tagOf(who) || {}, on = !t.ignore; setTag(who, { text: t.text || '', color: t.color || 'blue', ignore: on }); paintIgn(); if (on) toast(`Hiding posts and comments from u/${who}.`); };
+    const hl = el('button', { type: 'button', class: 'rs-btn', title: `Make u/${who}'s name stand out on this page` });
+    const paintHl = () => { const on = hlUsers.has(who.toLowerCase()); hl.textContent = on ? 'Unhighlight' : 'Highlight'; hl.setAttribute('aria-pressed', String(on)); };
+    hl.onclick = () => { toggleHlUser(who); paintHl(); };
+    paintIgn(); paintHl();
     return [
       el('div', { class: 'rs-hc-head' }, [
         icon ? el('img', { class: 'rs-hc-icon rs-hc-round', src: icon, alt: '' }) : el('span', { class: 'rs-hc-icon rs-hc-round rs-ms-noicon', text: 'u/' }),
-        el('div', {}, [el('b', { text: `u/${d.name || name}` }), el('span', { class: 'rs-hc-sub', text: `Redditor for ${yearsOf(d.created_utc)}, since ${dateOf(d.created_utc)}` })]),
+        el('div', { class: 'rs-hc-who' }, [
+          el('a', { class: 'rs-hc-name', href: `/user/${who}/`, text: `u/${who}` }),
+          el('span', { class: 'rs-hc-sub' }, [
+            el('a', { href: `/user/${who}/submitted/`, text: 'Posts' }), el('a', { href: `/user/${who}/comments/`, text: 'Comments' }),
+            /^[a-z0-9]{1,13}$/i.test(d.id || '') ? el('a', { href: `https://chat.reddit.com/user/t2_${d.id}/`, target: '_blank', rel: 'noopener', text: 'Chat' }) : null,
+          ]),
+        ]),
       ]),
-      el('div', { class: 'rs-hc-stats' }, [
-        el('span', {}, [el('b', { text: num(d.link_karma || 0) }), ' post karma']),
-        el('span', {}, [el('b', { text: num(d.comment_karma || 0) }), ' comment karma']),
+      el('dl', { class: 'rs-hc-facts' }, [
+        el('dt', { text: 'Redditor since' }), el('dd', { text: sinceOf(d.created_utc) }),
+        el('dt', { text: 'Post karma' }), el('dd', { text: (+d.link_karma || 0).toLocaleString() }),
+        el('dt', { text: 'Comment karma' }), el('dd', { text: (+d.comment_karma || 0).toLocaleString() }),
+        el('dt', { text: 'Your tag' }), el('dd', {}, [nameTag(who)]),
       ]),
       flags.length ? el('div', { class: 'rs-hc-flags' }, flags.map((f) => el('span', { class: 'rs-hc-flag', text: f }))) : null,
       about ? el('p', { class: 'rs-hc-about', text: about }) : null,
-      el('div', { class: 'rs-hc-links' }, [
-        el('a', { href: `/user/${d.name || name}/`, text: 'Profile' }),
-        el('a', { href: `/user/${d.name || name}/submitted/`, text: 'Posts' }),
-        el('a', { href: `/user/${d.name || name}/comments/`, text: 'Comments' }),
-        nameTag(d.name || name),
-      ]),
+      // Message = Reddit's private message form (RES's "send message"); Chat = the chat Reddit's own profile opens
+      el('div', { class: 'rs-hc-btns' }, [ign, hl, el('a', { class: 'rs-btn', href: `/message/compose/?to=${encodeURIComponent(who)}`, title: `Send u/${who} a private message`, text: 'Message' })]),
     ];
   };
   const subCard = (d, name) => {
@@ -2722,6 +2841,26 @@
   });
   document.addEventListener('mousedown', (e) => { if (hc && !hc.contains(e.target)) closeHover(); }, true);
   window.addEventListener('scroll', () => { if (hc) closeHover(); }, { passive: true });
+
+  // ---------- profile pages: post karma and comment karma apart (old Reddit) ----------
+  // New Reddit's profile card gives one Karma number. Under it go the two old Reddit showed ("1,601 post karma",
+  // "36,377 comment karma"), from the same lookup the hover cards use.
+  const karmaSplit = () => {
+    const m = cfg.enabled && location.pathname.match(/^\/(?:user|u)\/([A-Za-z0-9_-]{3,20})(?:\/|$)/);
+    let box = document.getElementById('rs-karma');
+    if (!m) { box?.remove(); return; }
+    if (box?.isConnected && box.dataset.user === m[1].toLowerCase()) return;
+    const side = document.getElementById('right-sidebar-contents');
+    const label = side && [...side.querySelectorAll('p, span')].find((e) => !e.children.length && e.textContent.trim() === 'Karma');
+    if (!label) return;
+    box?.remove();
+    box = el('div', { id: 'rs-karma', 'data-user': m[1].toLowerCase() });
+    label.after(box);
+    hcData({ kind: 'user', name: m[1] }).then((d) => {
+      if (!box.isConnected || d.gone !== undefined || d.link_karma === undefined) return;
+      box.append(el('span', { text: `${(+d.link_karma || 0).toLocaleString()} post karma` }), el('span', { text: `${(+d.comment_karma || 0).toLocaleString()} comment karma` }));
+    });
+  };
 
   // ---------- dashboard (RES's dashboard): your saved comments, tags and hide lists on one page ----------
   // Opens over the page you are on (DASHBOARD in the shortcut bar, or the settings panel). Saved comments come from your
@@ -3001,12 +3140,15 @@
     clMount(); densify(); rankCheck(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
+    karmaSplit();
   };
   // The page's own parts are read once the page is in; the switches above are already on it.
   const pageIn = new Promise((res) => { if (document.readyState !== 'loading') res(); else document.addEventListener('DOMContentLoaded', () => res(), { once: true }); });
   Promise.all([loadCfg(), pageIn]).then(() => {
     applyEnabled(); leftSlide(); tick();
-    new MutationObserver(() => {
+    // Typing in a comment box, or dragging its corner, changes only that box: nothing there for a pass to do
+    new MutationObserver((L) => {
+      if (L.every((m) => m.target.closest?.('shreddit-composer, comment-composer-host'))) return;
       if (cl && !cl.root.isConnected && html.classList.contains('rs-classic')) clMount(); // Reddit swapped its page under the list: put it straight back
       clearTimeout(tick.t); tick.t = setTimeout(tick, 120);
     }).observe(document.body, { childList: true, subtree: true });

@@ -15,6 +15,7 @@
   --rs-op: #0055df;
   --rs-mod: #228822;
   --rs-friend: #c2410c;
+  --rs-hluser: #7c3aed;
   --rs-font: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
 }
 /* Reddit's dark theme (picked in Reddit, or the computer is in dark mode and Reddit is left on automatic).
@@ -232,6 +233,16 @@ html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-containe
 html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 .rs-badge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font: 700 11px/1.4 var(--rs-font); }
 .rs-badge.rs-is-new { background: color-mix(in srgb, var(--rs-up) 14%, transparent); color: var(--rs-up); }
+/* Author flair right after the name, old Reddit's small grey box; Reddit's own (on a line under the name) gives way */
+.rs-aflair { flex: 0 1 auto; min-width: 0; max-width: 220px; margin-left: 6px; padding: 0 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--rs-line); border-radius: 3px; background: var(--rs-hover); color: var(--rs-weak); font: 400 11px/16px var(--rs-font); }
+.rs-aflair .rs-flair-emoji { height: 14px; margin: 0 1px; vertical-align: -3px; }
+html:not(.rs-on) .rs-aflair { display: none; }
+html.rs-on shreddit-comment[rs-aflair] > details > summary [slot="commentMeta"] author-flair-event-handler { display: none !important; }
+/* Reddit's "Top 1% Commenter" box under the name counts as one of the badges the setting hides */
+html.rs-on.rs-hide-badges .rs-pbadge { display: none !important; }
+/* A folded comment's points and reply count (RES): only while it is folded */
+.rs-fold { display: none; flex: none; margin-left: 6px; color: var(--rs-weak); font: 400 12px/1.2 var(--rs-font); white-space: nowrap; }
+html.rs-on shreddit-comment > details:not([open]) > summary .rs-fold:not(:empty) { display: inline; }
 /* order: Reddit sometimes adds its own buttons after ours; ours always come last */
 .rs-cacts { display: inline-flex; align-items: center; margin-left: 4px; order: 1; }
 .rs-cacts a { padding: 2px 5px; border-radius: 6px; font: 700 12px/1.2 var(--rs-font); color: var(--rs-weak); text-decoration: none; }
@@ -491,6 +502,30 @@ a.rs-ed-feed:hover { color: var(--rs-text); text-decoration: underline; }
 #rs-hover .rs-hc-links a { padding: 6px 10px; border-radius: 999px; color: var(--rs-text); font-weight: 600; text-decoration: none; }
 #rs-hover .rs-hc-links a:hover { background: var(--rs-hover); }
 #rs-hover .rs-hc-links .rs-btn { margin-left: auto; }
+html.rs-on faceplate-hovercard.rs-own-card::part(content-container), html.rs-on faceplate-hovercard.rs-own-card > [slot="content"] { display: none !important; }
+/* The person card: name with their posts and comments, then RES's facts (since, karma, your tag), then its buttons */
+#rs-hover .rs-hc-who { min-width: 0; }
+#rs-hover a.rs-hc-name { display: block; color: var(--rs-text); font: 700 15px/1.3 var(--rs-font); text-decoration: none; overflow-wrap: anywhere; }
+#rs-hover a.rs-hc-name:hover { text-decoration: underline; }
+#rs-hover .rs-hc-who .rs-hc-sub { display: flex; gap: 12px; margin-top: 1px; }
+#rs-hover .rs-hc-who .rs-hc-sub a { color: var(--rs-weak); font-weight: 600; text-decoration: none; }
+#rs-hover .rs-hc-who .rs-hc-sub a:hover { color: var(--rs-text); text-decoration: underline; }
+#rs-hover .rs-hc-facts { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 14px; margin: 12px 0 0; }
+#rs-hover .rs-hc-facts dt { margin: 0; color: var(--rs-weak); font-weight: 400; }
+#rs-hover .rs-hc-facts dd { margin: 0; min-width: 0; min-height: 20px; display: flex; align-items: center; color: var(--rs-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+#rs-hover .rs-hc-facts .rs-ut { margin-left: -4px; }
+/* No tag yet: the tag button says so in words */
+#rs-hover .rs-hc-facts .rs-ut:not(:has(.rs-ut-label)) .rs-ut-btn { width: auto; gap: 4px; padding: 0 8px 0 5px; font: 600 12px/20px var(--rs-font); }
+#rs-hover .rs-hc-facts .rs-ut:not(:has(.rs-ut-label)) .rs-ut-btn::after { content: "Add a tag"; }
+#rs-hover .rs-hc-about { color: var(--rs-weak); }
+#rs-hover .rs-hc-btns { display: flex; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rs-line); }
+#rs-hover .rs-hc-btns .rs-btn { flex: 1; min-width: 0; height: 30px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+#rs-hover .rs-hc-btns .rs-btn[aria-pressed="true"] { background: var(--rs-hover); border-color: var(--rs-text); }
+
+/* Profile card: post and comment karma under Reddit's one Karma number */
+#rs-karma { display: flex; flex-direction: column; margin-top: 4px; color: var(--rs-weak); font: 400 12px/1.4 var(--rs-font); white-space: nowrap; }
+#rs-karma:empty { display: none; }
+html:not(.rs-on) #rs-karma { display: none; }
 
 /* People: your tags, hidden people, colored names */
 .rs-ut { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; vertical-align: middle; flex: none; }
