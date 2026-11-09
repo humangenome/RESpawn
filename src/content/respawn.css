@@ -129,7 +129,13 @@ html:not(.rs-on) #rs-sc-btn { display: none !important; }
 #rs-sorts a, #rs-sorts button { padding: 8px 14px; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); text-decoration: none; font: inherit; cursor: pointer; }
 #rs-sorts a:hover, #rs-sorts button:hover { background: var(--rs-hover); color: var(--rs-text); }
 #rs-sorts .rs-cur, #rs-sorts .rs-cur:hover { background: var(--rs-text); color: var(--rs-bg); }
-#rs-sorts .rs-expand-all { margin-left: auto; border: 1px solid var(--rs-line); }
+#rs-sorts .rs-expand-all { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding: 0 14px 0 11px; height: 32px; border: 1px solid var(--rs-line); white-space: nowrap; }
+/* "Show images" on a profile page: at the right end of the row with Reddit's "Feed options", the same button */
+#rs-profbar { flex: none; margin-left: auto; }
+#rs-profbar .rs-expand-all { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px 0 11px; border: 1px solid var(--rs-line); border-radius: 999px; background: none; color: var(--rs-weak); font: 600 13px/1 var(--rs-font); white-space: nowrap; cursor: pointer; }
+#rs-profbar .rs-expand-all:hover { background: var(--rs-hover); color: var(--rs-text); }
+.rs-expand-all svg { flex: none; width: 16px; height: 16px; }
+html:not(.rs-on) #rs-profbar { display: none !important; }
 html.rs-on.rs-feed shreddit-sort-dropdown[header-text="Sort by"] { display: none !important; }
 
 /* Feed: use the screen, drop clutter */
@@ -223,9 +229,37 @@ html.rs-on.rs-classic #main-content > :not(#rs-classic) { display: none !importa
 .rs-cl-err a.rs-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .rs-media-wait { margin: 0; padding: 10px 0; color: var(--rs-weak); font: 500 13px/1.4 var(--rs-font); }
 .rs-media-video { display: block; max-width: 100%; max-height: 75vh; border-radius: 10px; background: #000; }
-.rs-gal-nav { display: flex; align-items: center; gap: 10px; margin-top: 8px; color: var(--rs-weak); font: 600 13px/1 var(--rs-font); }
-.rs-gal-nav .rs-btn { min-width: 36px; font-size: 18px; line-height: 1; }
-.rs-gal-nav .rs-btn:disabled { opacity: .4; cursor: default; }
+/* A gallery: previous, count and next on a bar above the picture (RES), a picture area as tall as the tallest picture */
+.rs-gal-nav { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: var(--rs-weak); font: 600 13px/1 var(--rs-font); }
+.rs-gal-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--rs-line); border-radius: 999px; background: var(--rs-bg); color: var(--rs-text); cursor: pointer; }
+.rs-gal-btn:hover:not(:disabled) { background: var(--rs-hover); }
+.rs-gal-btn:disabled { opacity: .35; cursor: default; }
+.rs-gal-btn svg { width: 18px; height: 18px; }
+.rs-gal-n { min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; }
+.rs-gal-link { display: block; width: fit-content; }
+.rs-gal-img { display: block; max-width: none; border-radius: 10px; background: var(--rs-hover); }
+.rs-gal-stage img { transition: none; }
+/* a picture that takes more than a moment: the one on screen dims until the next is ready */
+.rs-gal-stage[aria-busy="true"] img { opacity: .55; transition: opacity .15s .12s; }
+.rs-gal-stage .rs-media-err { display: block; }
+/* Drag to resize (RES): a grip and, once resized, a back-to-normal button in the top corner while the pointer is on it */
+.rs-zoom { position: relative; width: fit-content; max-width: 100%; }
+.rs-zoom > a { display: block; }
+.rs-zoom.rs-sized > a > img, .rs-zoom.rs-sized > video { width: 100%; height: auto; max-height: none; }
+.rs-zoom.rs-zoomed { z-index: 4; }
+.rs-zoom.rs-zoomed > a > img, .rs-zoom.rs-zoomed > video { width: 100%; height: auto; max-width: none; max-height: none; }
+.rs-frame { width: min(100%, 854px); }
+.rs-frame > .rs-yt { width: 100%; }
+.rs-zoom-tools { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 6px; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.rs-zoom:hover > .rs-zoom-tools, .rs-zoom:focus-within > .rs-zoom-tools, html.rs-resizing .rs-zoomed > .rs-zoom-tools { opacity: 1; pointer-events: auto; }
+.rs-grip, .rs-zoom-reset { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; background: rgba(15, 20, 25, .62); color: #fff; box-shadow: 0 0 0 1px rgba(255, 255, 255, .28), 0 1px 4px rgba(0, 0, 0, .3); }
+.rs-grip { cursor: nwse-resize; }
+.rs-zoom-reset { cursor: pointer; }
+.rs-zoom-reset:hover, .rs-grip:hover { background: rgba(15, 20, 25, .82); }
+.rs-zoom-reset[hidden] { display: none; }
+.rs-grip svg, .rs-zoom-reset svg { width: 18px; height: 18px; }
+html.rs-resizing, html.rs-resizing * { cursor: nwse-resize !important; user-select: none !important; }
+html.rs-resizing iframe { pointer-events: none; }
 .rs-text .md-spoiler-text { border-radius: 3px; background: var(--rs-text); color: transparent; cursor: pointer; }
 .rs-text .md-spoiler-text:hover { background: none; color: inherit; }
 html:not(.rs-on) #rs-classic { display: none !important; }

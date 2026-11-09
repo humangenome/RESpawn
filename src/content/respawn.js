@@ -1025,15 +1025,49 @@
 
   // ---------- sort tabs ----------
   const FUNNEL = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4.5h14l-5.4 6.3v4.6l-3.2 1.6v-6.2z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>';
-  // RES's "show images": every picture on the page opens in place; pressed again, they close.
+  // RES's "show images": every picture, gallery and video on the page opens in place, videos paused until you press
+  // their play button; pressed again, they all close. Posts open as they come near the screen, so a long page doesn't
+  // load everything at once, and posts loaded further down open too while it is on (it stays on for this page only).
+  let showAll = null; // the page's address while "Show images" is on
+  const SHOW_AHEAD = 1000; // how far below the screen posts already open
+  const showIO = new IntersectionObserver((es) => {
+    // Top to bottom; each one opened pushes the rest down, and those it pushed out of reach wait until you scroll to them
+    for (const e of es.filter((x) => x.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)) {
+      if (showAll !== location.href) return;
+      if (e.target.getBoundingClientRect().top > innerHeight + SHOW_AHEAD) continue;
+      showIO.unobserve(e.target);
+      if (!e.target.closest('.rs-filtered, .rs-gone, .rs-dup')) e.target.rsShow?.(true, true);
+    }
+  }, { rootMargin: `0px 0px ${SHOW_AHEAD}px 0px` }); // not above the screen: opening those would push what you are reading down
+  const paintShowAll = () => { for (const b of document.querySelectorAll('.rs-expand-all')) setText(b.querySelector('span'), showAll === location.href ? 'Hide images' : 'Show images'); };
+  const showAllOff = (close) => {
+    showAll = null; showIO.disconnect();
+    for (const b of document.querySelectorAll('.rs-row .rs-x')) { b.rsSio = false; if (close && b.rsQuiet) b.rsShow?.(false); }
+    paintShowAll();
+  };
+  const showSweep = () => {
+    if (!showAll) return;
+    if (showAll !== location.href) { showAllOff(false); return; }
+    for (const b of document.querySelectorAll('.rs-row .rs-x')) if (b.rsQuiet && !b.rsSio) { b.rsSio = true; showIO.observe(b); }
+  };
   const showImagesBtn = () => {
-    const all = el('button', { type: 'button', class: 'rs-expand-all', text: 'Show images' });
-    all.onclick = () => {
-      const open = all.textContent === 'Show images';
-      for (const b of document.querySelectorAll('.rs-row:not(.rs-filtered) .rs-x[data-kind="image"], .rs-row:not(.rs-filtered) .rs-x[data-kind="gallery"]')) if ((b.getAttribute('aria-expanded') === 'true') !== open) b.click();
-      all.textContent = open ? 'Hide images' : 'Show images';
-    };
+    const all = el('button', { type: 'button', class: 'rs-expand-all', title: 'Open every picture, gallery and video on this page (X)' }, [svgOf(ICON.image), el('span', { text: showAll === location.href ? 'Hide images' : 'Show images' })]);
+    all.onclick = () => { if (showAll === location.href) showAllOff(true); else { showAll = location.href; showSweep(); paintShowAll(); } };
     return all;
+  };
+  // Profile pages (Overview, Posts, Saved ...) have no sort bar: "Show images" goes at the right end of the row with
+  // Reddit's own "Feed options" button. Comments there are left as they are.
+  const profileBar = () => {
+    const old = document.getElementById('rs-profbar');
+    const m = location.pathname.match(/^\/user\/[^/]+\/?(?:([A-Za-z]+)\/?)?$/);
+    if (!cfg.enabled || !m || /^comments$/i.test(m[1] || '') || isCommentsPage()) { old?.remove(); return; }
+    if (old?.isConnected && old.dataset.url === location.href) return;
+    const opts = document.querySelector('main rpl-dropdown[data-faceplate-tracking-context*="feed_options"], main button[aria-label="Feed options"]');
+    const row = opts?.closest('shreddit-layout-event-setter')?.parentElement;
+    old?.remove();
+    if (!row) return;
+    row.classList.add('rs-prof-row');
+    row.append(el('div', { id: 'rs-profbar', 'data-url': location.href }, [showImagesBtn()]));
   };
   const funnelBtn = () => {
     const funnel = el('button', { type: 'button', class: 'rs-funnel', title: 'Filter bar', 'aria-label': 'Show or hide the filter bar', 'aria-pressed': String(!!cfg.filterline), html: FUNNEL });
@@ -1381,42 +1415,272 @@
     if (media?.querySelector('shreddit-embed')) return 'rembed'; // Reddit's own player for another site
     return null;
   };
-  const player = (box, src, opts, close, title) => {
+  // ---------- opened pictures, galleries and videos: sizes, drag to resize ----------
+  // Reddit keeps a few smaller copies of each of its pictures besides the original. The smallest copy that is still sharp
+  // at the size it is shown is used: an original can be a phone photo of several megabytes, which made each picture of a
+  // gallery slow to come up. (sizes: [{ u, w }] smallest first, the original last)
+  const sharp = (sizes, w) => { const need = w * Math.min(devicePixelRatio || 1, 2); return sizes.find((s) => s.w >= need) || sizes[sizes.length - 1]; };
+  const srcsetSizes = (img) => (img?.getAttribute('srcset') || '').split(',').map((s) => s.trim().split(/\s+/))
+    .filter(([u, w]) => FLAIR_IMG.test(u || '') && /^\d+w$/.test(w || '')).map(([u, w]) => ({ u, w: parseInt(w, 10) })).sort((a, b) => a.w - b.w);
+  const mediaMaxH = () => Math.round(innerHeight * 0.75);
+  // How big a w x h picture shows in `room` pixels: never past its own size or 75% of the window's height, unless you
+  // have resized it yourself (then it is exactly as wide as you made it).
+  const fitSize = (w, h, room, zoomed) => {
+    const r = w && h ? h / w : 0.75;
+    let dw = zoomed ? room : Math.min(room, w || room);
+    if (!zoomed && dw * r > mediaMaxH()) dw = mediaMaxH() / r;
+    return { w: Math.round(dw), h: Math.round(dw * r) };
+  };
+  // Drag to resize (RES): dragging on a picture, on a video above its controls, or on the grip in the corner makes it
+  // bigger or smaller as you move, keeping its shape, up to the right edge of the window; the button beside the grip puts
+  // it back. A click without a drag still does what it always did (opens the picture, plays the video), and nothing gets
+  // selected or dragged out as a file. o: width() its width now, set(w), reset(), done() after a drag, surface (where a
+  // drag may start besides the grip), controls (the height of a video's own control bar, left to the video).
+  const GRIP_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11.5 4h4.5v4.5M8.5 16H4v-4.5M16 4l-5 5M4 16l5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const SHRINK_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 3.5V8h4.5M8 16.5V12H3.5M12 8l4.5-4.5M8 12l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const zoomable = (wrap, o) => {
+    const reset = el('button', { type: 'button', class: 'rs-zoom-reset', title: 'Back to normal size', 'aria-label': 'Back to normal size', html: SHRINK_ICON, hidden: true });
+    const grip = el('span', { class: 'rs-grip', title: 'Drag to resize', html: GRIP_ICON });
+    wrap.classList.add('rs-zoom');
+    wrap.append(el('div', { class: 'rs-zoom-tools' }, [reset, grip]));
+    const back = () => { wrap.classList.remove('rs-zoomed'); reset.hidden = true; o.reset(); };
+    reset.onclick = (e) => { e.preventDefault(); e.stopPropagation(); back(); };
+    grip.addEventListener('dblclick', back);
+    const begin = (e, onGrip) => {
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      if (!onGrip && o.controls && e.clientY > o.surface.getBoundingClientRect().bottom - o.controls) return;
+      e.preventDefault();
+      const box = wrap.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY, w0 = o.width();
+      const diag = (x, y) => Math.hypot(Math.max(1, x - box.left), Math.max(1, y - box.top));
+      const d0 = diag(x0, y0);
+      let moved = false, frame = 0, last = e;
+      const apply = () => { frame = 0; const room = document.documentElement.clientWidth - box.left - 12; o.set(Math.round(Math.max(120, Math.min(room, w0 * diag(last.clientX, last.clientY) / d0)))); };
+      const move = (ev) => {
+        if (!(ev.buttons & 1)) { stop(); return; }
+        last = ev;
+        if (!moved) {
+          if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
+          moved = true; html.classList.add('rs-resizing'); wrap.classList.add('rs-zoomed'); reset.hidden = false;
+        }
+        if (!frame) frame = requestAnimationFrame(apply);
+      };
+      const stop = () => {
+        window.removeEventListener('mousemove', move, true); window.removeEventListener('mouseup', stop, true);
+        if (!moved) return;
+        if (frame) { cancelAnimationFrame(frame); apply(); }
+        html.classList.remove('rs-resizing');
+        // the click that ends a drag opens nothing and doesn't start the video
+        const eat = (ev) => { ev.preventDefault(); ev.stopImmediatePropagation(); };
+        window.addEventListener('click', eat, true); setTimeout(() => window.removeEventListener('click', eat, true), 0);
+        o.done?.();
+      };
+      window.addEventListener('mousemove', move, true); window.addEventListener('mouseup', stop, true);
+    };
+    grip.addEventListener('mousedown', (e) => { e.stopPropagation(); begin(e, true); });
+    if (o.surface) { o.surface.addEventListener('mousedown', (e) => begin(e, false)); o.surface.addEventListener('dragstart', (e) => e.preventDefault()); }
+  };
+  // A picture in a row. info { w, h, sizes } (Reddit's own pictures) lets it take its room before it loads, in the copy
+  // that is sharp at that size; a picture made bigger by hand gets a sharper copy once you let go.
+  const picture = (box, src, href, alt, info = {}) => {
+    const { w, h, sizes } = info;
+    const fit = w && h ? fitSize(w, h, box.clientWidth || 700, false) : null;
+    let cur = fit && sizes?.length ? sharp(sizes, fit.w) : null;
+    const img = el('img', { class: 'rs-media-img', src: cur ? cur.u : src, alt: alt || '', draggable: 'false' });
+    const a = el('a', { href: href || src, target: '_blank', rel: 'noopener' }, [img]);
+    const wrap = el('div', { class: fit ? 'rs-pic rs-sized' : 'rs-pic' }, [a]);
+    const normal = () => { wrap.style.width = fit ? `min(100%, ${fit.w}px)` : ''; wrap.style.maxWidth = ''; };
+    if (fit) { normal(); img.style.aspectRatio = `${w} / ${h}`; }
+    img.onerror = () => wrap.replaceWith(el('p', { class: 'rs-media-err' }, ['That picture would not load here. ', el('a', { href: href || src, target: '_blank', rel: 'noopener', text: 'Open it' })]));
+    zoomable(wrap, {
+      surface: a, width: () => wrap.getBoundingClientRect().width, reset: normal,
+      set: (px) => { wrap.style.width = `${px}px`; wrap.style.maxWidth = 'none'; },
+      done: () => {
+        if (!cur) return;
+        const want = sharp(sizes, wrap.getBoundingClientRect().width);
+        if (want.w <= cur.w) return;
+        const big = new Image(); big.src = want.u;
+        big.decode().then(() => { img.src = want.u; cur = want; }, () => { /* keeps the copy it has */ });
+      },
+    });
+    box.append(wrap);
+  };
+  // A gallery: previous, count and next on a bar above the picture, so they stay put whatever size the pictures are.
+  // Each picture is fetched in the copy that is sharp at the size it shows and is fully drawn before it swaps in: the
+  // next and previous ones ahead of time, the rest one after another once the first is up (opened by "Show images":
+  // once you point at it). The picture area keeps the height of the tallest picture, so the page under it never jumps.
+  // The left and right arrow keys turn it while the pointer is on it or its row is picked.
+  // items: [{ w, h, sizes, full }]
+  const CHEV_L = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const CHEV_R = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  let galHover = null;
+  const gallery = (box, items, title, quiet) => {
+    let i = 0, W = 0, zoomed = false, seq = 0, rest = false, resting = false;
+    const pics = [];
+    const prev = el('button', { type: 'button', class: 'rs-gal-btn', title: 'Previous picture', 'aria-label': 'Previous picture', html: CHEV_L });
+    const next = el('button', { type: 'button', class: 'rs-gal-btn', title: 'Next picture', 'aria-label': 'Next picture', html: CHEV_R });
+    const count = el('span', { class: 'rs-gal-n', 'aria-live': 'polite' });
+    const link = el('a', { class: 'rs-gal-link', target: '_blank', rel: 'noopener' });
+    const stage = el('div', { class: 'rs-gal-stage' }, [link]);
+    const root = el('div', { class: 'rs-gal' }, [items.length > 1 ? el('div', { class: 'rs-gal-nav' }, [prev, count, next]) : null, stage]);
+    // The picture area is as wide as the picture on screen (the grip sits on its corner) and as tall as the tallest
+    // picture when they are all about the same height; when they differ a lot (tall and wide ones mixed) it takes each
+    // picture's own height instead of leaving a big gap under the wide ones (the bar on top stays put either way).
+    let shownK = 0, steady = true, tallest = 0;
+    const sizeOf = (k) => fitSize(items[k].w, items[k].h, zoomed ? W : (box.clientWidth || 700), zoomed);
+    const place = (img, k) => {
+      const s = sizeOf(k);
+      shownK = k;
+      if (img) { img.style.width = `${s.w}px`; img.style.height = `${s.h}px`; }
+      stage.style.width = `${s.w}px`; stage.style.height = `${steady ? tallest : s.h}px`;
+    };
+    const layout = () => {
+      const hs = items.map((_, k) => sizeOf(k).h);
+      tallest = Math.max(...hs); steady = tallest <= Math.min(...hs) * 1.3;
+      stage.style.maxWidth = zoomed ? 'none' : '';
+      place(link.querySelector('img'), shownK);
+    };
+    // picture k in the copy sharp at its size; when it is shown bigger later, a sharper copy takes over once drawn
+    const load = (k) => {
+      if (k < 0 || k >= items.length) return null;
+      const want = sharp(items[k].sizes, sizeOf(k).w), had = pics[k];
+      if (had && (had.bad || had.size.w >= want.w)) return had;
+      const img = new Image();
+      img.decoding = 'async'; img.draggable = false; img.alt = title || ''; img.className = 'rs-gal-img';
+      img.src = want.u;
+      const p = { img, size: want, ok: false, bad: false };
+      p.done = img.decode().then(() => { p.ok = true; }, () => { if (img.complete && img.naturalWidth) p.ok = true; else p.bad = true; });
+      pics[k] = p;
+      return p;
+    };
+    const show = (k) => {
+      i = k;
+      const my = ++seq, p = load(i);
+      setText(count, `${i + 1} / ${items.length}`);
+      prev.disabled = i === 0; next.disabled = i === items.length - 1;
+      link.href = items[i].full;
+      const put = () => {
+        if (my !== seq) return; // turned again meanwhile
+        stage.removeAttribute('aria-busy');
+        if (p.bad) { link.replaceChildren(el('span', { class: 'rs-media-err', text: 'This picture would not load here. Click to open it.' })); return; }
+        place(p.img, i);
+        if (link.firstChild !== p.img) link.replaceChildren(p.img);
+      };
+      if (p.ok || p.bad) put(); else { stage.setAttribute('aria-busy', 'true'); p.done.then(put); }
+      load(i + 1); load(i - 1);
+    };
+    const preloadRest = async () => {
+      if (resting) return;
+      rest = resting = true;
+      for (let d = 2; d < items.length; d++) {
+        for (const k of [i + d, i - d]) {
+          if (!root.isConnected || box.hidden) { resting = false; return; }
+          const p = load(k);
+          if (p && !p.ok && !p.bad) await p.done;
+        }
+      }
+      resting = false;
+    };
+    const step = (d) => { const k = i + d; if (k >= 0 && k < items.length) show(k); if (!rest) preloadRest(); };
+    prev.onclick = () => step(-1);
+    next.onclick = () => step(1);
+    const api = { root, step, relayout: () => { if (!zoomed) layout(); } };
+    root.rsGal = api;
+    root.addEventListener('mouseenter', () => { galHover = api; if (!rest) preloadRest(); });
+    root.addEventListener('mouseleave', () => { if (galHover === api) galHover = null; });
+    zoomable(stage, {
+      surface: link, width: () => stage.getBoundingClientRect().width,
+      set: (w) => { zoomed = true; W = w; layout(); },
+      reset: () => { zoomed = false; layout(); },
+      done: () => show(i), // a sharper copy if it is bigger now
+    });
+    box.append(root);
+    layout(); show(0);
+    if (!quiet && items.length > 1) pics[0].done.then(() => setTimeout(() => { if (!rest) preloadRest(); }, 150));
+  };
+  window.addEventListener('resize', () => { clearTimeout(gallery.t); gallery.t = setTimeout(() => { for (const g of document.querySelectorAll('.rs-gal')) g.rsGal?.relayout(); }, 150); }, { passive: true });
+  // "Show images" opens a video paused. Reddit's own player (shown when RESpawn can't read the post) may start by itself
+  // when it comes on screen, so for a few seconds it is stopped again unless you pressed something in it.
+  const holdStill = (box) => {
+    box.addEventListener('pointerdown', () => { box.rsTouched = true; }, { capture: true, once: true });
+    const t0 = Date.now(), iv = setInterval(() => {
+      if (box.rsTouched || Date.now() - t0 > 8000) { clearInterval(iv); return; }
+      for (const v of deepVideos(box, [])) if (!v.paused) { v.pause(); try { v.currentTime = 0; } catch { /* not seekable yet */ } }
+    }, 200);
+  };
+  const player = (box, src, opts, close, title, quiet) => {
+    // opened by "Show images": the player waits for its play button
+    if (quiet) src = src.replace(/([?&])autoplay=1(&|$)/, (m, a, b) => (b ? a : '')).replace(/[?&]$/, '');
     const f = el('iframe', { class: `rs-yt${opts.tall ? ' rs-tall' : ''}`, src, title, allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen', allowfullscreen: true });
     f.rsOrigin = opts.origin || '';
     if (opts.origin === YT_ORIGIN) f.rsPause = () => frameSay(f, { event: 'command', func: 'pauseVideo', args: [] });
     else if (opts.origin === VIMEO_ORIGIN) f.rsPause = () => frameSay(f, { method: 'pause' });
     f.addEventListener('load', () => {
       if (opts.origin === YT_ORIGIN) frameSay(f, { event: 'listening', id: 1, channel: 'widget' });
-      else if (opts.plays) vStart(f, close); // plays by itself and can't be paused from here: closed when over the limit
+      else if (opts.plays && !quiet) vStart(f, close); // plays by itself and can't be paused from here: closed when over the limit
     });
-    box.append(f);
+    // one that can't say when it plays, opened paused: pressing into it counts as starting it
+    if (opts.plays && quiet) f.rsClose = close;
+    if (opts.tall) { box.append(f); return; }
+    const wrap = el('div', { class: 'rs-frame' }, [f]);
+    const normal = () => { wrap.style.width = ''; wrap.style.maxWidth = ''; };
+    zoomable(wrap, { width: () => wrap.getBoundingClientRect().width, reset: normal, set: (px) => { wrap.style.width = `${px}px`; wrap.style.maxWidth = 'none'; } });
+    box.append(wrap);
   };
-  const fillBox = (box, post, kind, close) => {
-    if (post.rsJson) { clFill(box, post, kind, close); box.dataset.filled = '1'; return; }
+  window.addEventListener('blur', () => setTimeout(() => {
+    const f = document.activeElement;
+    if (f?.tagName === 'IFRAME' && f.rsClose && !playing.some((x) => x.key === f)) vStart(f, f.rsClose);
+  }, 0));
+  // The address a post's content comes from (its link, or for a crosspost the original's)
+  const hrefOf = (post) => (post.rsJson ? clUrl(clMedia(post.rsJson)) : post.getAttribute('content-href') || '');
+  // What "Show images" may open: pictures, galleries, Reddit's videos and the outside players that wait for their play
+  // button (not ones that start by themselves, such as RedGifs, or players RESpawn knows nothing about).
+  const quietOk = (post, kind) => {
+    if (kind === 'image' || kind === 'gallery' || kind === 'video' || kind === 'youtube') return true;
+    if (kind !== 'embed') return false;
+    const e = embedOf(hrefOf(post), post.rsJson ? clMedia(post.rsJson).name : post.id);
+    return !!e && !/redgifs\.com|redditmedia\.com/.test(e.src);
+  };
+  const fillBox = (box, post, kind, close, quiet) => {
+    if (post.rsJson) { clFill(box, post, kind, close, quiet); box.dataset.filled = '1'; return; }
     const href = post.getAttribute('content-href') || '';
     const title = post.getAttribute('post-title') || 'Video';
+    const media = post.querySelector(':scope > [slot="post-media-container"]');
+    // Reddit's own player or carousel, moved into the row
+    const moved = () => {
+      const m = post.querySelector(':scope > [slot="post-media-container"]');
+      if (!m) { box.append(el('p', { class: 'rs-media-err' }, ['Nothing to show here. ', el('a', { href: post.getAttribute('permalink') || '/', text: 'Open the post' })])); return; }
+      if (quiet) for (const pl of m.querySelectorAll('shreddit-player, shreddit-player-2')) pl.removeAttribute('autoplay');
+      m.classList.add('rs-moved-media'); box.append(m);
+      if (quiet) holdStill(box);
+      for (const t of [300, 1200, 3000]) setTimeout(watchVideos, t); // Reddit's player builds its video a moment later
+    };
     if (kind === 'text') {
       const md = post.querySelector('shreddit-post-text-body [id$="-post-rtjson-content"], shreddit-post-text-body .md');
       const copy = md ? md.cloneNode(true) : el('p', { text: 'No text.' });
       copy.removeAttribute('id'); copy.className = 'rs-text md';
       box.append(copy);
     } else if (kind === 'youtube') {
-      player(box, `${YT_ORIGIN}/embed/${ytId(href)}?autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, { origin: YT_ORIGIN }, close, title);
+      player(box, `${YT_ORIGIN}/embed/${ytId(href)}?autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, { origin: YT_ORIGIN }, close, title, quiet);
     } else if (kind === 'embed') {
       const e = embedOf(href, post.id);
-      player(box, e.src, e, close, title);
+      player(box, e.src, e, close, title, quiet);
     } else if (kind === 'image' && picOf(href)) {
-      const img = el('img', { class: 'rs-media-img', src: picOf(href), alt: post.getAttribute('post-title') || '' });
-      const a = el('a', { href, target: '_blank', rel: 'noopener' }, [img]);
-      img.onerror = () => a.replaceWith(el('p', { class: 'rs-media-err' }, ['That picture would not load here. ', el('a', { href, target: '_blank', rel: 'noopener', text: 'Open it' })]));
-      box.append(a);
-    } else {
-      // video, gallery, crosspost, other images: show Reddit's own player or carousel
-      const media = post.querySelector(':scope > [slot="post-media-container"]');
-      if (media) { media.classList.add('rs-moved-media'); box.append(media); }
-      for (const t of [300, 1200, 3000]) setTimeout(watchVideos, t); // Reddit's player builds its video a moment later
-    }
+      // Reddit's own pictures list their smaller copies on the post's picture
+      const pic = picOf(href), im = media?.querySelector('img[srcset]:not(.post-background-image-filter)');
+      const w = +im?.getAttribute('width') || 0, h = +im?.getAttribute('height') || 0, sizes = srcsetSizes(im);
+      const own = /^https:\/\/i\.redd\.it\//.test(pic) && !/\.gif$/i.test(pic) && w && h && sizes.length;
+      picture(box, pic, href, title, own ? { w, h, sizes: [...sizes.filter((s) => s.w < w), { u: pic, w }] } : {});
+    } else if (kind === 'video' || kind === 'gallery') {
+      // Reddit's own videos and galleries open in RESpawn's player and gallery, as on old Reddit's lists, from the post's
+      // details: they then resize, keep the gallery's bar on top and open paused for "Show images". Should Reddit not
+      // send the details, its own player or carousel is shown instead.
+      box.append(el('p', { class: 'rs-media-wait', text: 'Loading…' }));
+      (post.rsFull ||= clFull({ id: post.id.replace(/^t3_/, '') })).then((d) => {
+        const k = clKind(d);
+        if (!(k === 'video' || k === 'image' || (k === 'gallery' && clMedia(d).is_gallery))) throw new Error('not ours');
+        box.replaceChildren(); clFill(box, { rsJson: d }, k, close, quiet);
+      }).catch(() => { post.rsFull = null; box.replaceChildren(); moved(); });
+    } else moved(); // crossposts, other pictures
     box.dataset.filled = '1';
   };
   const XICON = { youtube: 'video', embed: 'video', rembed: 'video' };
@@ -1426,21 +1690,26 @@
     const b = el('button', { type: 'button', class: 'rs-x', 'data-kind': icon, 'aria-expanded': 'false', title: label, html: ICON[icon] });
     let box = null;
     const close = () => { if (b.getAttribute('aria-expanded') === 'true') b.click(); };
-    b.onclick = (ev) => {
-      ev?.preventDefault?.();
-      const open = b.getAttribute('aria-expanded') !== 'true';
+    // quiet: opened by "Show images", so a video waits for its play button
+    const toggle = (open, quiet) => {
       if (!box) { box = el('div', { class: `rs-box rs-box-${kind}` }); row.append(box); }
-      if (open && !box.dataset.filled) fillBox(box, post, kind, close);
+      if (open && !box.dataset.filled) fillBox(box, post, kind, close, quiet);
       box.hidden = !open;
+      if (open) box.querySelector('.rs-gal')?.rsGal?.relayout();
       if (!open) {
         for (const v of deepVideos(box, [])) v.pause();
-        for (const f of box.querySelectorAll('iframe.rs-yt')) { vStop(f); f.remove(); }
-        if (kind === 'youtube' || kind === 'embed') { box.replaceChildren(); delete box.dataset.filled; }
+        // an outside player is closed for good (some can't be paused); it loads again when opened again
+        const frames = box.querySelectorAll('iframe.rs-yt');
+        for (const f of frames) vStop(f);
+        if (frames.length) { box.replaceChildren(); delete box.dataset.filled; }
       }
       b.setAttribute('aria-expanded', String(open));
       b.replaceChildren(svgOf(open ? ICON.close : ICON[icon]));
       b.title = open ? 'Close' : label;
     };
+    b.onclick = (ev) => { ev?.preventDefault?.(); toggle(b.getAttribute('aria-expanded') !== 'true', false); };
+    b.rsShow = (open, quiet) => { if ((b.getAttribute('aria-expanded') === 'true') !== open) toggle(open, quiet); };
+    b.rsQuiet = quietOk(post, kind);
     return b;
   };
 
@@ -1857,30 +2126,25 @@
     for (const c of [...doc.body.childNodes]) frag.append(document.importNode(c, true));
     return frag;
   };
-  const picture = (box, src, href, alt) => {
-    const img = el('img', { class: 'rs-media-img', src, alt: alt || '' });
-    const a = el('a', { href: href || src, target: '_blank', rel: 'noopener' }, [img]);
-    img.onerror = () => a.replaceWith(el('p', { class: 'rs-media-err' }, ['That picture would not load here. ', el('a', { href: href || src, target: '_blank', rel: 'noopener', text: 'Open it' })]));
-    box.append(a);
-  };
-  const clGallery = (box, x) => {
+  // A gallery from Reddit's details of the post: each picture's smaller copies and its original, in the post's order
+  // (pictures Reddit could not process are left out; a moving one plays from its original).
+  const clGallery = (box, x, quiet) => {
     const order = (x.gallery_data?.items || []).map((g) => g.media_id);
-    const urls = (order.length ? order : Object.keys(x.media_metadata || {})).map((id) => { const s = x.media_metadata?.[id]?.s; return s && (s.u || s.gif); }).filter(Boolean);
-    if (!urls.length) { box.append(el('p', { class: 'rs-media-err' }, ['These pictures would not load here. ', el('a', { href: x.permalink, text: 'Open the post' })])); return; }
-    let i = 0;
-    const img = el('img', { class: 'rs-media-img', alt: x.title || '' });
-    const link = el('a', { target: '_blank', rel: 'noopener' }, [img]);
-    const prev = el('button', { type: 'button', class: 'rs-btn', 'aria-label': 'Previous picture', text: '‹' });
-    const next = el('button', { type: 'button', class: 'rs-btn', 'aria-label': 'Next picture', text: '›' });
-    const n = el('span', { class: 'rs-gal-n' });
-    const show = () => { img.src = urls[i]; link.href = urls[i]; n.textContent = `${i + 1} / ${urls.length}`; prev.disabled = !i; next.disabled = i === urls.length - 1; };
-    prev.onclick = () => { if (i) { i--; show(); } };
-    next.onclick = () => { if (i < urls.length - 1) { i++; show(); } };
-    box.append(link, urls.length > 1 ? el('div', { class: 'rs-gal-nav' }, [prev, n, next]) : null);
-    show();
+    const items = (order.length ? order : Object.keys(x.media_metadata || {})).map((id) => {
+      const m = x.media_metadata?.[id], s = m?.s;
+      const full = s && (s.u || s.gif);
+      if (!full || m.status === 'failed') return null;
+      const w = +s.x || 0, h = +s.y || 0;
+      const sizes = s.u ? (m.p || []).filter((r) => r?.u && +r.x && (!w || +r.x < w)).map((r) => ({ u: r.u, w: +r.x })).sort((a, b) => a.w - b.w) : [];
+      sizes.push({ u: full, w: w || 99999 });
+      return { w, h, sizes, full };
+    }).filter(Boolean);
+    if (!items.length) { box.append(el('p', { class: 'rs-media-err' }, ['These pictures would not load here. ', el('a', { href: x.permalink, text: 'Open the post' })])); return; }
+    gallery(box, items, x.title || '', quiet);
   };
   // Reddit's own videos: the picture track and the sound track are separate files, played together.
-  const redditVideo = (box, x, title) => {
+  // quiet: opened by "Show images", so it waits for its play button (and fetches its sound only then).
+  const redditVideo = (box, x, title, quiet) => {
     const rv = x.secure_media?.reddit_video || x.media?.reddit_video;
     const src = rv?.fallback_url || '';
     if (!src) { box.append(el('p', { class: 'rs-media-err' }, ['This video would not load here. ', el('a', { href: x.permalink, text: 'Open the post' })])); return; }
@@ -1892,8 +2156,8 @@
       const tries = (/\/CMAF_/.test(src) ? names : names.slice(2).concat(names.slice(0, 2))).map((f) => `${base}/${f}`);
       const a = new Audio();
       let i = 0;
-      a.preload = 'auto';
-      a.onerror = () => { if (i < tries.length) a.src = tries[i++]; };
+      a.preload = quiet ? 'none' : 'auto';
+      a.onerror = () => { if (i < tries.length) { a.src = tries[i++]; if (!v.paused) a.play().catch(() => {}); } };
       a.src = tries[i++];
       const sync = () => { if (Math.abs(a.currentTime - v.currentTime) > 0.3) a.currentTime = v.currentTime; };
       v.addEventListener('play', () => { sync(); a.play().catch(() => {}); });
@@ -1905,11 +2169,17 @@
       v.addEventListener('ratechange', () => { a.playbackRate = v.playbackRate; });
       v.rsAudio = a;
     }
-    box.append(v);
-    v.play().catch(() => {}); // opened with a click, so it starts like Reddit's own player
+    // its own shape from the start, so the page doesn't jump when it loads; drag on it (above its controls) to resize
+    const wrap = el('div', { class: 'rs-vid' }, [v]);
+    const fit = +rv.width && +rv.height ? fitSize(+rv.width, +rv.height, box.clientWidth || 700, false) : null;
+    const normal = () => { wrap.style.width = fit ? `min(100%, ${fit.w}px)` : ''; wrap.style.maxWidth = ''; };
+    if (fit) { wrap.classList.add('rs-sized'); v.style.aspectRatio = `${rv.width} / ${rv.height}`; normal(); }
+    zoomable(wrap, { surface: v, controls: 56, width: () => wrap.getBoundingClientRect().width, reset: normal, set: (px) => { wrap.style.width = `${px}px`; wrap.style.maxWidth = 'none'; } });
+    box.append(wrap);
+    if (!quiet) v.play().catch(() => {}); // opened with a click, so it starts like Reddit's own player
     setTimeout(watchVideos, 100); // counts toward "Videos playing at once"
   };
-  const clFill = async (box, post, kind, close) => {
+  const clFill = async (box, post, kind, close, quiet) => {
     let d = post.rsJson;
     if (d._partial) {
       box.append(el('p', { class: 'rs-media-wait', text: 'Loading…' }));
@@ -1925,13 +2195,16 @@
       const body = el('div', { class: 'rs-text md' });
       body.append(x.selftext_html ? safeHtml(x.selftext_html) : el('p', { text: 'No text.' }));
       box.append(body);
-    } else if (kind === 'youtube') player(box, `${YT_ORIGIN}/embed/${ytId(href)}?autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, { origin: YT_ORIGIN }, close, title);
-    else if (kind === 'embed') { const e = embedOf(href, x.name); player(box, e.src, e, close, title); }
-    else if (kind === 'video') redditVideo(box, x, title);
-    else if (kind === 'gallery' && x.is_gallery) clGallery(box, x);
+    } else if (kind === 'youtube') player(box, `${YT_ORIGIN}/embed/${ytId(href)}?autoplay=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, { origin: YT_ORIGIN }, close, title, quiet);
+    else if (kind === 'embed') { const e = embedOf(href, x.name); player(box, e.src, e, close, title, quiet); }
+    else if (kind === 'video') redditVideo(box, x, title, quiet);
+    else if (kind === 'gallery' && x.is_gallery) clGallery(box, x, quiet);
     else if (kind === 'image' || kind === 'gallery') {
-      const src = picOf(href) || x.preview?.images?.[0]?.source?.url;
-      if (src) picture(box, src, href, title);
+      const im = x.preview?.images?.[0], pic = picOf(href), src = pic || im?.source?.url;
+      // Reddit's own still pictures come in smaller copies too
+      const own = +im?.source?.width && +im.source.height && (!pic || (/^https:\/\/i\.redd\.it\//.test(pic) && !/\.gif$/i.test(pic)));
+      const sizes = own ? [...(im.resolutions || []).filter((r) => r?.url && +r.width < +im.source.width).map((r) => ({ u: r.url, w: +r.width })), { u: im.source.url, w: +im.source.width }] : null;
+      if (src) picture(box, src, href, title, own ? { w: +im.source.width, h: +im.source.height, sizes } : {});
       else box.append(el('p', { class: 'rs-media-err' }, ['Nothing to show here. ', el('a', { href: d.permalink, text: 'Open the post' })]));
     } else if (kind === 'rembed') player(box, `https://www.redditmedia.com/mediaembed/${x.id || x.name.replace(/^t3_/, '')}`, {}, close, title);
   };
@@ -2610,6 +2883,15 @@
     if (e.repeat && !REPEATS.has(e.key)) return;
     fn(e);
   }, true);
+  // Left and right turn a gallery: the one under the pointer, else the picked row's open one. Otherwise they keep
+  // their usual job (scrolling).
+  window.addEventListener('keydown', (e) => {
+    if (!cfg.enabled || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing || skipKey(e)) return;
+    const g = (galHover && shown(galHover.root) && galHover) || (sel?.classList?.contains('rs-row') && [...sel.querySelectorAll('.rs-box:not([hidden]) .rs-gal')].find(shown)?.rsGal);
+    if (!g) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    g.step(e.key === 'ArrowRight' ? 1 : -1);
+  }, true);
   // Clicking a post or comment picks it, like RES
   document.addEventListener('click', (e) => {
     if (!cfg.enabled || !cfg.keys || !e.isTrusted) return;
@@ -3223,7 +3505,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    clMount(); densify(); rankCheck(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
     karmaSplit();
