@@ -140,6 +140,9 @@ html.rs-on main#main-content { max-width: none !important; width: auto !importan
 html.rs-on.rs-no-rail .main-container { grid-template-columns: minmax(0, 1fr) !important; }
 html.rs-on.rs-rail-empty .main-container { grid-template-columns: minmax(0, 1fr) !important; }
 html.rs-on.rs-rail-empty #right-sidebar-container { position: fixed !important; left: 0 !important; top: 0 !important; visibility: hidden !important; pointer-events: none !important; }
+/* Post pages: a comment that starts below the end of the right column runs on under it at the full width, like
+   text flowing around a box (the script marks those comments and measures the column) */
+html.rs-on.rs-comments shreddit-comment.rs-wide { margin-right: calc(-1 * var(--rs-rail-w, 0px)); }
 html.rs-on .rs-hide-icon, html.rs-on .rs-hide-games,
 html.rs-on in-feed-community-recommendations, html.rs-on #mod-recruitment-banner { display: none !important; }
 html.rs-on .masthead { margin-top: 8px !important; }

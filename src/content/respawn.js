@@ -3126,6 +3126,31 @@
     const c = r && (r.querySelector('#right-sidebar-contents') || r);
     const empty = !!c && !gone && ![...c.querySelectorAll('*')].some((e) => { const b = e.getBoundingClientRect(); return b.width > 1 && b.height > 1; });
     html.classList.toggle('rs-rail-empty', empty);
+    // Post pages: a comment that starts below the end of the right column also takes the column's width (it is empty
+    // there), like text flowing around a box. Checked on every pass and whenever the post or the column changes
+    // height (a thread folded or opened, a picture loaded), so a widened comment never ends up beside the column.
+    const rail = !!r && !gone && !empty && isCommentsPage() ? r : null, main = rail && document.querySelector('main#main-content');
+    if (railCheck.el !== rail || railCheck.main !== main) {
+      railCheck.ro?.disconnect(); railCheck.el = rail; railCheck.main = main;
+      if (main) { railCheck.ro ||= new ResizeObserver(() => railWide(railCheck.el)); for (const x of [main, ...rail.children]) railCheck.ro.observe(x); }
+    }
+    railWide(rail);
+  };
+  const railWide = (r) => {
+    if (!r?.isConnected) { for (const c of document.querySelectorAll('shreddit-comment.rs-wide')) c.classList.remove('rs-wide'); return; }
+    const box = r.getBoundingClientRect(), gap = parseFloat(getComputedStyle(r.parentElement).columnGap) || 0;
+    html.style.setProperty('--rs-rail-w', `${Math.ceil(box.width + gap)}px`);
+    const end = Math.max(box.top, ...[...r.children].filter((k) => k.getClientRects().length).map((k) => k.getBoundingClientRect().bottom)); // where its content ends
+    // Read every place first, then mark: widening a comment only moves the ones after it up, and they stay below too
+    const all = [...document.querySelectorAll('main#main-content shreddit-comment')];
+    const tops = all.map((c) => (c.getClientRects().length ? c.getBoundingClientRect().top : null));
+    const wide = new Set(), inWide = new Set(); // replies inside a widened comment are wide already
+    all.forEach((c, i) => {
+      const up = c.parentElement?.closest('shreddit-comment');
+      if (up && inWide.has(up)) inWide.add(c);
+      else if (tops[i] !== null && tops[i] >= end) { wide.add(c); inWide.add(c); }
+    });
+    for (const c of all) if (c.classList.contains('rs-wide') !== wide.has(c)) c.classList.toggle('rs-wide', wide.has(c));
   };
   window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(() => { railCheck(); addGear(); }, 150); }, { passive: true });
   const tick = () => {
