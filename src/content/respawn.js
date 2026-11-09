@@ -1597,6 +1597,21 @@
       scoreTip(x);
     }
   };
+  // A post's tag from old Reddit's list data: its words, with the subreddit's little emoji pictures where the list data
+  // has :codes: (":snoo_hearteyes: Wholesome Moments"). Pictures only from Reddit's own picture addresses.
+  const FLAIR_IMG = /^https:\/\/([a-z0-9-]+\.)*(redditmedia\.com|redd\.it|redditstatic\.com)\//i;
+  const flairOf = (J) => {
+    const rich = Array.isArray(J.link_flair_richtext) ? J.link_flair_richtext : [];
+    if (!rich.some((p) => p?.e === 'emoji')) { const t = (J.link_flair_text || '').trim(); return t ? el('span', { class: 'rs-flair', text: t }) : null; }
+    const s = el('span', { class: 'rs-flair' });
+    for (const p of rich) {
+      if (p?.e === 'text' && p.t) s.append(p.t);
+      else if (p?.e === 'emoji' && FLAIR_IMG.test(p.u || '')) s.append(el('img', { class: 'rs-flair-emoji', src: p.u, alt: '', loading: 'lazy' }));
+    }
+    if (s.firstChild?.nodeType === 3) s.firstChild.textContent = s.firstChild.textContent.trimStart();
+    if (s.lastChild?.nodeType === 3) s.lastChild.textContent = s.lastChild.textContent.trimEnd();
+    return s.childNodes.length && (s.textContent.trim() || s.querySelector('img')) ? s : null;
+  };
   // One compact row for a post: Reddit's own post card, or a post from old Reddit's list (classic HOME and ALL), which
   // carries the same details as attributes plus its list data in rsJson.
   const makeRow = (post, rank) => {
@@ -1606,7 +1621,7 @@
       const J = post.rsJson;
       const img = J ? null : post.querySelector('[slot="post-media-container"] img[src*="redd.it"], [slot="thumbnail"] img, [slot="post-media-container"] img');
       const thumbSrc = J ? clThumb(J) : img && (img.currentSrc || img.src);
-      const flair = J ? (J.link_flair_text || '').trim() : post.querySelector('shreddit-post-flair')?.innerText.trim();
+      const flair = J ? flairOf(J) : post.querySelector('shreddit-post-flair')?.innerText.trim();
       const kind = kindOf(post);
       const row = el('div', { class: 'rs-row', 'data-rs-id': g('id') });
       row.rsPost = post;
@@ -1616,7 +1631,7 @@
         el('a', { class: 'rs-title', href: isSelf ? perma : link, text: g('post-title') }),
         flag(post, 'nsfw') ? el('span', { class: 'rs-tag rs-tag-nsfw', text: 'nsfw' }) : null,
         flag(post, 'spoiler') ? el('span', { class: 'rs-tag rs-tag-spoiler', text: 'spoiler' }) : null,
-        flair ? el('span', { class: 'rs-flair', text: flair }) : null,
+        typeof flair === 'string' ? (flair ? el('span', { class: 'rs-flair', text: flair }) : null) : flair,
         el('span', { class: 'rs-domain', text: `(${g('domain')})` }),
       ]);
       const meta = el('div', { class: 'rs-meta' });
@@ -1732,6 +1747,10 @@
         is_video: domain === 'v.redd.it', thumbnail: th.startsWith('//') ? `https:${th}` : th,
         _hasText: !!t.querySelector('.expando-button.selftext'), // old Reddit gives a text post with a body its own open button
         link_flair_text: t.querySelector('.linkflairlabel')?.textContent || '',
+        // old Reddit draws a tag's emoji as an empty span with the picture as its background
+        link_flair_richtext: [...(t.querySelector('.linkflairlabel')?.childNodes || [])].map((n) => (n.classList?.contains('flairemoji')
+          ? { e: 'emoji', u: ((n.getAttribute('style') || '').match(/url\(\s*["']?([^"')\s]+)/) || [])[1]?.replace(/^\/\//, 'https://') || '' }
+          : { e: 'text', t: n.textContent })),
         likes: mid?.classList.contains('likes') ? true : mid?.classList.contains('dislikes') ? false : null, saved: t.classList.contains('saved'),
       } });
     }
