@@ -17,7 +17,7 @@ Keeps the new Reddit look and brings back RES and old Reddit features: compact p
 RESpawn keeps the new Reddit design and brings back the way old Reddit and Reddit Enhancement Suite (RES) worked.
 
 Posts and feeds
-- HOME and ALL show old Reddit's lists again, with best, hot, new, rising, controversial and top (the new site has dropped r/all)
+- HOME and ALL show old Reddit's lists again, with best, hot, new, rising, controversial and top, when you are logged in to Reddit (the new site has dropped r/all, and old Reddit now needs an account)
 - More posts on a screen, numbered, with votes, comments, share, save and hide on every row
 - Sort tabs in the open, and RES's filter bar: nsfw, spoiler, visited, comments opened, expando, score
 - Hide posts by words in the title, by subreddit or by website

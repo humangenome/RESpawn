@@ -3,6 +3,8 @@
 // actions press Reddit's own buttons. Settings live in the browser (chrome.storage or localStorage).
 (() => {
   if (window.__respawnLoaded) return;
+  // Reddit's raw data and error-text addresses (.json and the like) are not pages: nothing to add there
+  if (document.contentType && document.contentType !== 'text/html') return;
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
@@ -1632,7 +1634,7 @@
         flag(post, 'nsfw') ? el('span', { class: 'rs-tag rs-tag-nsfw', text: 'nsfw' }) : null,
         flag(post, 'spoiler') ? el('span', { class: 'rs-tag rs-tag-spoiler', text: 'spoiler' }) : null,
         typeof flair === 'string' ? (flair ? el('span', { class: 'rs-flair', text: flair }) : null) : flair,
-        el('span', { class: 'rs-domain', text: `(${g('domain')})` }),
+        g('domain') ? el('span', { class: 'rs-domain', text: `(${g('domain')})` }) : null, // old Reddit's page gives some crossposts no site
       ]);
       const meta = el('div', { class: 'rs-meta' });
       if (kind) meta.append(xButton(post, kind, row));
@@ -1681,6 +1683,8 @@
     if (!isClassicUrl(cfg)) return null;
     const parts = location.hash.replace(/^#/, '').split('/').filter(Boolean);
     const list = parts[0] === 'all' ? 'all' : 'home';
+    // Old Reddit needs an account now, so a signed-out visitor keeps Reddit's own Home (ALL explains itself)
+    if (list === 'home' && document.querySelector('shreddit-app') && !loggedIn()) return null;
     if (list === 'all') parts.shift();
     const sort = CL_SORTS[list].includes(parts[0]) ? parts[0] : list === 'all' ? 'hot' : 'best';
     const timed = sort === 'top' || sort === 'controversial';
@@ -1928,8 +1932,15 @@
     st.loading = true; st.resume = false;
     st.more.replaceChildren(el('div', { class: 'rs-cl-wait', role: 'status', text: 'Loading…' }));
     let d;
-    try { d = await clFetch(st.r, st.after, st.count); } catch {
+    try { d = await clFetch(st.r, st.after, st.count); } catch (e) {
       st.loading = false;
+      if (e?.message === 'login' || !loggedIn()) {
+        st.more.replaceChildren(el('div', { class: 'rs-cl-err', role: 'status' }, [
+          el('span', { text: st.r.list === 'all' ? 'r/all is only on old Reddit now, and old Reddit needs you to log in.' : 'This list comes from old Reddit, which needs you to log in.' }),
+          el('a', { class: 'rs-btn', href: '/login/', text: 'Log in' }), el('a', { class: 'rs-btn rs-btn-quiet', href: '/r/popular/', text: 'Popular' }),
+        ]));
+        return;
+      }
       const again = el('button', { type: 'button', class: 'rs-btn', text: 'Try again' });
       again.onclick = () => clLoad(st);
       st.more.replaceChildren(el('div', { class: 'rs-cl-err', role: 'status' }, [el('span', { text: 'Reddit did not send the list.' }), again]));

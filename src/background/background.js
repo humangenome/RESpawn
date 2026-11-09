@@ -29,8 +29,11 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   fetch(u.href, { credentials: 'include', headers: { accept: u.page ? 'text/html' : 'application/json' } })
     .then(async (r) => {
       if (!r.ok) return reply({ error: `Reddit answered ${r.status}` });
-      if (u.page) return reply({ html: (await r.text()).slice(0, 3_000_000) });
-      const j = await r.json();
+      const text = await r.text();
+      // Signed out, old Reddit answers every address with its "Log in to use old Reddit" page instead of the list.
+      const wall = () => reply({ error: /log in/i.test(text.slice(0, 200_000)) ? 'login' : 'no list' });
+      if (u.page) return /id="siteTable"/.test(text) ? reply({ html: text.slice(0, 3_000_000) }) : wall();
+      let j; try { j = JSON.parse(text); } catch { return wall(); }
       reply(j?.data ? { data: { after: j.data.after || null, children: j.data.children || [] } } : { error: 'no list' });
     })
     .catch(() => reply({ error: 'Reddit did not answer' }));
