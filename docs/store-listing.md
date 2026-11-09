@@ -35,9 +35,11 @@ Comments
 - More replies load by themselves as you scroll; hide all replies with one button
 - A navigator to jump between new comments, the poster's, moderators', friends', yours and people you tagged
 - Colored names for the poster, moderators and friends
+- Folded comments keep their points and reply count; author flair next to names; comments use the full width below the sidebar
 
 People
 - Your own tags on anyone, in nine colors, and hiding a person's posts and comments
+- Hover over any name for a RES-style card: account age, post and comment karma, tag, message; profiles show post and comment karma apart
 
 Also
 - RES's keyboard shortcuts (press ? for the list)
