@@ -8,7 +8,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, scoreColors: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -61,7 +61,7 @@
   // RESpawn starts as the page starts, so the sidebar, ads and the rest never appear and then vanish. The add-on's own
   // storage answers a moment too late for that, so a copy of just these on/off switches is kept in the site's storage.
   const BOOT_KEY = 'rs-boot';
-  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'scoreColors', 'classicHome'];
+  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'classicHome'];
   // Old Reddit's lists (see "old Reddit's lists" below) live on / : r/all at /#all..., Home at / unless that is switched off.
   const isClassicUrl = (c) => !!c.enabled && location.pathname === '/' && !new URLSearchParams(location.search).has('feed') && (/^#all(\/|$)/.test(location.hash) || !!c.classicHome);
   const setPageClasses = (c) => {
@@ -69,7 +69,7 @@
       'rs-on': !!c.enabled, 'rs-hide-ads': !!c.hideAds, 'rs-hide-badges': !!c.hideBadges, 'rs-hide-recent': !!c.hideRecent,
       'rs-hide-suggested': !!c.hideSuggested, 'rs-no-shortcuts': !c.showShortcuts, 'rs-left-slide': c.leftNav === 'slide',
       'rs-left-hide': c.leftNav === 'hide', 'rs-fl-hidden': !c.filterline, 'rs-pin-header': !!c.pinHeader, 'rs-hl': !!c.highlight,
-      'rs-no-chat': !!c.hideChat, 'rs-score-colors': !!c.scoreColors,
+      'rs-no-chat': !!c.hideChat,
     };
     for (const [k, v] of Object.entries(on)) html.classList.toggle(k, v);
   };
@@ -112,7 +112,7 @@
     applySubStyle();
     paintGear();
     if (!cfg.enabled) releaseHolds();
-    topButton(); hideMyName(true); scorePaint.n = -1; scorePaint();
+    topButton(); hideMyName(true);
   };
   // On/off lives at the top of the gear's settings panel (the gear stays in Reddit's top bar while RESpawn is off).
   const paintGear = () => {
@@ -166,7 +166,6 @@
       ['hideBadges', 'Hide "Top 1%" badges'],
       ['hideChat', 'Hide chat'],
       ['topButton', 'Back-to-top button'],
-      ['scoreColors', 'Color the highest scores'],
     ]],
     ['Filter bar', [
       ['filterline', 'Show filter bar'],
@@ -290,7 +289,7 @@
   };
   const cleanSettings = (o) => {
     const out = {};
-    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'scoreColors', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome']) if (typeof o[k] === 'boolean') out[k] = o[k];
+    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome']) if (typeof o[k] === 'boolean') out[k] = o[k];
     for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']]]) if (ok.includes(o[k])) out[k] = o[k];
     for (const [k, lo, hi] of [['filterScore', -99999, 99999], ['pauseEvery', 0, 99], ['maxVideos', 0, 99]]) if (Number.isFinite(o[k])) out[k] = Math.max(lo, Math.min(hi, Math.round(o[k])));
     if (Array.isArray(o.shortcuts)) {
@@ -1524,9 +1523,7 @@
       down.setAttribute('aria-pressed', String(state === 'DOWN'));
       const v = start + (state === 'UP' ? 1 : state === 'DOWN' ? -1 : 0);
       score.textContent = num(v);
-      score.dataset.v = String(start); // its place on the page is judged without your own vote (see scorePaint)
-      score.rsTip = `${v.toLocaleString()} point${v === 1 ? '' : 's'}${Number.isFinite(ratio) && ratio > 0 && ratio <= 1 ? `, ${Math.round(ratio * 100)}% upvoted` : ''}`;
-      scoreTip(score);
+      score.title = `${v.toLocaleString()} point${v === 1 ? '' : 's'}${Number.isFinite(ratio) && ratio > 0 && ratio <= 1 ? `, ${Math.round(ratio * 100)}% upvoted` : ''}`;
     };
     const click = async (dir) => {
       if (!document.cookie.includes('csrf_token')) { toast('Log in to Reddit to vote.'); return; }
@@ -1559,11 +1556,19 @@
   };
   // When Reddit redraws a feed in a new order (For You / Following, or Home fetched fresh after Back) the kept numbers
   // stop running in order: then count again from the top. A post Reddit shows twice keeps its first number.
+  // Reddit shows a pinned post twice, in "Community highlights" and again down the feed, which put its number in the
+  // middle of the list a second time. Old Reddit shows it once, so the second copy is hidden while the first one is
+  // on screen (folding the highlights away brings it back).
   const rankCheck = () => {
     if (html.classList.contains('rs-classic')) return;
-    const rows = [], seen = new Set();
+    const rows = [], seen = new Set(), firstRow = new Map();
     for (const r of document.querySelectorAll('.rs-row')) {
       const id = r.rsPost?.id, f = r.closest('shreddit-feed');
+      if (id) {
+        const a = firstRow.get(id), dup = !!a && shown(a);
+        if (!a) firstRow.set(id, r);
+        if (r.classList.contains('rs-dup') !== dup) r.classList.toggle('rs-dup', dup);
+      }
       if (id && !seen.has(id) && rankBook.map.has(id) && (!f || !rankBook.feed || f === rankBook.feed)) { seen.add(id); rows.push(r); }
     }
     if (rows.every((r, i) => i === 0 || rankBook.map.get(r.rsPost.id) > rankBook.map.get(rows[i - 1].rsPost.id))) return;
@@ -1571,32 +1576,6 @@
     for (const r of document.querySelectorAll('.rs-row')) {
       const n = r.rsPost && rankBook.map.get(r.rsPost.id), box = r.querySelector('.rs-rank');
       if (n && box && box.textContent !== String(n)) box.textContent = String(n);
-    }
-  };
-  // Scores colored by where they stand among the posts on this page (setting "Color the highest scores"): the top tenth
-  // stands out, the next fifth is green, the bottom third is faint, below zero is red. A big subreddit and a small one
-  // each get their own scale. Counted again as more posts load.
-  // Pointing at a colored score says what the color means.
-  const SCORE_NOTE = { 3: 'One of the highest scores on this page', 2: 'One of the highest scores on this page', 0: 'One of the lowest scores on this page' };
-  const scoreTip = (x) => {
-    const note = cfg.scoreColors && SCORE_NOTE[x.dataset.size];
-    x.title = note ? `${x.rsTip}\n${note}` : x.rsTip || '';
-  };
-  const scorePaint = () => {
-    if (!cfg.scoreColors) {
-      if (scorePaint.n === -1) { scorePaint.n = 0; document.querySelectorAll('.rs-row .rs-score').forEach(scoreTip); } // just switched off
-      return;
-    }
-    const S = [...document.querySelectorAll(html.classList.contains('rs-classic') ? '#rs-classic .rs-row .rs-score' : '.rs-row .rs-score')];
-    if (S.length === scorePaint.n && S[0] === scorePaint.first) return;
-    scorePaint.n = S.length; scorePaint.first = S[0];
-    const vals = S.map((x) => +x.dataset.v || 0).sort((a, b) => b - a);
-    const at = (f) => vals[Math.min(vals.length - 1, Math.floor(vals.length * f))];
-    const top = at(0.1), good = at(0.3), low = at(0.7);
-    for (const x of S) {
-      const v = +x.dataset.v || 0;
-      x.dataset.size = v < 0 ? 'neg' : v <= low ? '0' : v >= top ? '3' : v >= good ? '2' : '1';
-      scoreTip(x);
     }
   };
   // A post's tag from old Reddit's list data: its words, with the subreddit's little emoji pictures where the list data
@@ -1625,7 +1604,8 @@
       const thumbSrc = J ? clThumb(J) : img && (img.currentSrc || img.src);
       const flair = J ? flairOf(J) : post.querySelector('shreddit-post-flair')?.innerText.trim();
       const kind = kindOf(post);
-      const row = el('div', { class: 'rs-row', 'data-rs-id': g('id') });
+      // Pinned posts get old Reddit's green title, so the ones the mods keep on top read as different
+      const row = el('div', { class: post.hasAttribute('stickied') ? 'rs-row rs-stickied' : 'rs-row', 'data-rs-id': g('id') });
       row.rsPost = post;
       const thumbKids = thumbSrc ? [el('img', { src: thumbSrc, alt: '', loading: 'lazy' })] : [el('span', { html: isSelf ? ICON.text : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 12l4-4M7 9l-1.5 1.5a2.5 2.5 0 0 0 3.5 3.5L10.5 12.5M13 11l1.5-1.5a2.5 2.5 0 0 0-3.5-3.5L9.5 7.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>' })];
       const thumb = el('a', { class: 'rs-thumb', href: isSelf ? perma : link, tabindex: '-1', 'aria-hidden': 'true' }, thumbKids);
@@ -2899,7 +2879,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    clMount(); densify(); rankCheck(); scorePaint(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    clMount(); densify(); rankCheck(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
   };

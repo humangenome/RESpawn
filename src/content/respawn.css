@@ -47,6 +47,8 @@ html:not(.rs-on) .rs-page, html:not(.rs-on) .rs-pause, html:not(.rs-on) .rs-ut, 
   height: 34px; padding: 0 12px 0 16px; background: var(--rs-bg); border-bottom: 1px solid var(--rs-line);
   white-space: nowrap; font: 600 12px/1 var(--rs-font);
 }
+/* Reddit's search suggestions drop down from its top bar over this bar, so its top bar sits above this one */
+html.rs-on reddit-header-large { z-index: 6 !important; }
 #rs-shortcuts a, #rs-shortcuts button { flex: none; padding: 6px 8px; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); text-decoration: none; letter-spacing: .02em; font: inherit; cursor: pointer; text-transform: none; }
 #rs-shortcuts a:hover, #rs-shortcuts a.rs-cur, #rs-shortcuts button:hover { background: var(--rs-hover); color: var(--rs-text); }
 #rs-shortcuts .rs-mine { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; padding: 6px 8px 6px 10px; background: var(--rs-hover); color: var(--rs-text); letter-spacing: 0; }
@@ -152,15 +154,11 @@ html.rs-on.rs-hide-ads shreddit-ad-post, html.rs-on.rs-hide-ads article:has(shre
 html.rs-on.rs-hide-ads shreddit-comments-page-ad, html.rs-on.rs-hide-ads shreddit-comment-tree-ad, html.rs-on.rs-hide-ads shreddit-sidebar-ad { display: none !important; }
 
 .rs-row {
-  display: grid; grid-template-columns: 28px 44px 70px minmax(0, 1fr); column-gap: 10px; align-items: start;
+  display: grid; grid-template-columns: 24px 38px 70px minmax(0, 1fr); column-gap: 6px; align-items: start;
   padding: 6px 8px 6px 0; border-bottom: 1px solid var(--rs-line); font-family: var(--rs-font); color: var(--rs-text);
 }
 .rs-row:hover { background: var(--rs-hover); }
-.rs-rank { padding-top: 12px; text-align: right; font: 500 13px/1 var(--rs-font); color: var(--rs-weak); }
-.rs-vote { display: flex; flex-direction: column; align-items: center; gap: 1px; }
-.rs-vote button { width: 26px; height: 18px; border: 0; border-radius: 6px; background: none; color: var(--rs-weak); cursor: pointer; font-size: 13px; line-height: 1; }
-.rs-vote button:hover { background: var(--rs-strong-bg); color: var(--rs-up); }
-.rs-score { font: 700 12px/1.3 var(--rs-font); }
+.rs-rank { padding-top: 20px; text-align: right; font: 500 13px/1 var(--rs-font); color: var(--rs-weak); } /* level with the score */
 .rs-thumb { width: 70px; height: 52px; border-radius: 8px; overflow: hidden; background: var(--rs-hover); display: flex; align-items: center; justify-content: center; color: var(--rs-weak); }
 .rs-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rs-thumb svg { width: 22px; height: 22px; }
@@ -183,6 +181,7 @@ html.rs-on.rs-hide-ads shreddit-comments-page-ad, html.rs-on.rs-hide-ads shreddi
 .rs-acts > button:disabled { opacity: .55; cursor: default; }
 /* A hidden post leaves a slim line with Undo in its place */
 html.rs-on .rs-row.rs-gone { display: none !important; }
+html.rs-on .rs-row.rs-dup { display: none !important; } /* a pinned post's second copy down the feed */
 html:not(.rs-on) .rs-hidden-note { display: none !important; }
 .rs-hidden-note { display: flex; align-items: center; gap: 10px; margin: 2px 0; padding: 8px 12px; border: 1px dashed var(--rs-line); border-radius: 10px; font: 600 13px/1.3 var(--rs-font); color: var(--rs-weak); }
 .rs-hidden-note button { padding: 3px 10px; border: 1px solid var(--rs-line); border-radius: 999px; background: none; font: 700 12px/1.3 var(--rs-font); color: var(--rs-text); cursor: pointer; }
@@ -246,18 +245,22 @@ html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 #rs-nav select, #rs-nav button { height: 28px; padding: 0 10px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-bg); color: var(--rs-text); font: inherit; cursor: pointer; }
 #rs-nav .rs-count { color: var(--rs-weak); padding: 0 4px; }
 
-/* Votes: orange up, blue down, like old Reddit */
-.rs-vote button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 22px; padding: 0; }
-.rs-vote button svg { width: 18px; height: 18px; }
-.rs-vote button .rs-fill { fill: none; }
-.rs-vote .rs-up:hover { color: var(--rs-up); background: color-mix(in srgb, var(--rs-up) 12%, transparent); }
-.rs-vote .rs-down:hover { color: var(--rs-down); background: color-mix(in srgb, var(--rs-down) 12%, transparent); }
-.rs-vote[data-vote="UP"] .rs-up { color: var(--rs-up); }
-.rs-vote[data-vote="UP"] .rs-up .rs-fill { fill: currentColor; }
-.rs-vote[data-vote="UP"] .rs-score { color: var(--rs-up); }
-.rs-vote[data-vote="DOWN"] .rs-down { color: var(--rs-down); }
-.rs-vote[data-vote="DOWN"] .rs-down .rs-fill { fill: currentColor; }
-.rs-vote[data-vote="DOWN"] .rs-score { color: var(--rs-down); }
+/* Votes like old Reddit with RES: solid arrows tight above and below a bold score, grey until you vote, then orange
+   up or blue down (old Reddit's own colors). The grey is darker than old Reddit's on the light background so it
+   still reads, and lighter on the dark one. Pinned posts get old Reddit's green title. */
+:root { --rs-vote: #878a8c; --rs-vote-up: #ff8b60; --rs-vote-down: #9494ff; --rs-sticky: #228822; }
+:root.theme-dark { --rs-vote: #c6c6c6; --rs-sticky: #52b852; }
+@media (prefers-color-scheme: dark) { :root:not(.theme-light) { --rs-vote: #c6c6c6; --rs-sticky: #52b852; } }
+.rs-vote { display: flex; flex-direction: column; align-items: center; color: var(--rs-vote); }
+.rs-vote button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: none; color: inherit; cursor: pointer; }
+.rs-vote button svg { width: 16px; height: 16px; }
+.rs-vote button .rs-fill { fill: currentColor; }
+.rs-score { font: 700 13px/16px var(--rs-font); white-space: nowrap; }
+.rs-vote .rs-up:hover { color: var(--rs-vote-up); background: color-mix(in srgb, var(--rs-vote-up) 14%, transparent); }
+.rs-vote .rs-down:hover { color: var(--rs-vote-down); background: color-mix(in srgb, var(--rs-vote-down) 14%, transparent); }
+.rs-vote[data-vote="UP"] .rs-up, .rs-vote[data-vote="UP"] .rs-score { color: var(--rs-vote-up); }
+.rs-vote[data-vote="DOWN"] .rs-down, .rs-vote[data-vote="DOWN"] .rs-score { color: var(--rs-vote-down); }
+.rs-row.rs-stickied .rs-title, .rs-row.rs-stickied .rs-title:visited { color: var(--rs-sticky); }
 .rs-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2147483001; padding: 10px 16px; border-radius: 10px; background: var(--rs-text); color: var(--rs-bg); font: 600 13px/1.3 var(--rs-font); box-shadow: 0 6px 24px rgba(0,0,0,.2); }
 
 /* Gear in Reddit's top bar */
@@ -532,15 +535,6 @@ html.rs-on.rs-no-chat reddit-chat-header-button, html.rs-on.rs-no-chat reddit-ch
 #rs-top:hover { background: var(--rs-hover); }
 #rs-top.rs-top-on { opacity: 1; visibility: visible; }
 html.rs-comments #rs-top { bottom: 84px; }
-
-/* Scores colored by where they stand on this page (setting): the top tenth bigger and green, the next fifth green,
-   the bottom third faint, below zero red. A vote you gave keeps its own orange or blue. */
-html.rs-score-colors .rs-score[data-size="neg"] { color: var(--rs-bad); }
-html.rs-score-colors .rs-score[data-size="0"] { color: var(--rs-weak); }
-html.rs-score-colors .rs-score[data-size="2"] { color: var(--rs-good); }
-html.rs-score-colors .rs-score[data-size="3"] { color: var(--rs-good); font-size: 13px; font-weight: 800; }
-.rs-vote[data-vote="UP"] .rs-score[data-size] { color: var(--rs-up); }
-.rs-vote[data-vote="DOWN"] .rs-score[data-size] { color: var(--rs-down); }
 
 /* Hide all replies: only the top comments show, each with "show N replies" */
 #rs-kids { height: 32px; margin-left: 8px; vertical-align: middle; }

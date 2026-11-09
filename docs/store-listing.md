@@ -23,7 +23,7 @@ Posts and feeds
 - Hide posts by words in the title, by subreddit or by website
 - Pictures and videos open right in the feed, including Streamable, Vimeo, Twitch clips, TikTok, Instagram, Imgur and Giphy; a limit on videos playing at once
 - Endless scrolling with page dividers and an optional pause every few pages
-- Scores colored so the top posts on each page stand out; crossposts link to the original
+- Old Reddit's bold scores between the vote arrows and green titles on pinned posts; crossposts link to the original
 
 Subreddits
 - A shortcut bar across the top, with your own order, groups of subreddits and DASHBOARD, FRIENDS, MOD, MODQUEUE and SAVED links

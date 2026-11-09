@@ -78,6 +78,6 @@ userTagger	rebuild	live	Tag or ignore users. Every post and comment carries its 
 userbarHider	drop	-	Old Reddit top bar only
 usernameHider	rebuild	build	Hide your own username on screen
 version	ours	-	Version checks
-voteEnhancements	rebuild	live	Colour scores, show upvote percentage. Posts carry score and upvote ratio
+voteEnhancements	rebuild	live	Upvote percentage when you point at a score. Colouring scores by size was tried and left out: it added noise, not meaning
 wheelBrowse	rebuild	build	Scroll through galleries with the wheel
 xPostLinks	rebuild	build	Links to the original post on crossposts

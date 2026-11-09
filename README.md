@@ -10,8 +10,8 @@ in place (including Streamable, Vimeo, Twitch clips, TikTok, Imgur and Giphy), a
 endless scrolling with page dividers and an optional pause, user tags and hiding people, colored names
 for the poster, mods and friends, hiding posts by word, subreddit or website, more replies that load by
 themselves, hiding all replies at once, a comment navigator, remembered collapsed comments, new-comment
-counts, a dashboard with your saved comments, tags and hide lists, scores colored so the top posts
-stand out, crosspost links, a back-to-top button, hiding chat and your own username, and a settings
+counts, a dashboard with your saved comments, tags and hide lists, old Reddit's bold scores and green
+pinned posts, crosspost links, a back-to-top button, hiding chat and your own username, and a settings
 backup file. A button beside the gear flips light and dark in one click (Auto, which follows your
 computer, is in the settings).
 
