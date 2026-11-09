@@ -8,7 +8,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, classicSubs: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', navHover: false, hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, classicSubs: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -64,7 +64,7 @@
   // RESpawn starts as the page starts, so the sidebar, ads and the rest never appear and then vanish. The add-on's own
   // storage answers a moment too late for that, so a copy of just these on/off switches is kept in the site's storage.
   const BOOT_KEY = 'rs-boot';
-  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'classicHome', 'classicSubs'];
+  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'navHover', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'classicHome', 'classicSubs'];
   // Old Reddit's lists (see "old Reddit's lists" below) live on / : r/all at /#all..., Home at / unless that is switched off;
   // and on a subreddit's own list addresses (/r/kings/, /r/kings/new/, /r/kings/top/?t=week) unless that is switched off.
   // Special lists that only look like subreddits, and Reddit's flair filter (?f=), keep Reddit's own page.
@@ -77,7 +77,7 @@
     const on = {
       'rs-on': !!c.enabled, 'rs-hide-ads': !!c.hideAds, 'rs-hide-badges': !!c.hideBadges, 'rs-hide-recent': !!c.hideRecent,
       'rs-hide-suggested': !!c.hideSuggested, 'rs-no-shortcuts': !c.showShortcuts, 'rs-left-slide': c.leftNav === 'slide',
-      'rs-left-hide': c.leftNav === 'hide', 'rs-fl-hidden': !c.filterline, 'rs-pin-header': !!c.pinHeader, 'rs-hl': !!c.highlight,
+      'rs-left-hide': c.leftNav === 'hide', 'rs-left-hover': !!c.navHover, 'rs-fl-hidden': !c.filterline, 'rs-pin-header': !!c.pinHeader, 'rs-hl': !!c.highlight,
       'rs-no-chat': !!c.hideChat,
     };
     for (const [k, v] of Object.entries(on)) html.classList.toggle(k, v);
@@ -164,122 +164,348 @@
       paintTheme();
     }
   };
+  // ---------- settings window (RES's settings console, in the new look) ----------
+  // RES groups its modules into categories with one search over all of them; this does the same for RESpawn's settings.
+  // Each row says what it is in a few words; the longer "what does this do" sits behind a small (i) and is also what the
+  // search reads, along with a few extra words people might type for it ("dark" finds Light or dark).
+  // Row kinds: an on/off switch (the default), choices, a number, Edit/Show (opens another window), Save/Load (a file).
+  // The functions an Edit row opens are named, not referenced, because they are defined further down this file.
+  const PN_ICON = {
+    look: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.8a7.2 7.2 0 0 0 0 14.4c1.2 0 1.8-.7 1.8-1.5 0-1-.9-1.3-.9-2.2 0-.8.7-1.4 1.5-1.4h1.7a3.2 3.2 0 0 0 3.1-3.2c0-3.4-3.2-6.1-7.2-6.1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6.4" cy="9.6" r="1.1" fill="currentColor"/><circle cx="8.3" cy="6.4" r="1.1" fill="currentColor"/><circle cx="11.9" cy="6.2" r="1.1" fill="currentColor"/></svg>',
+    feed: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3.5" width="14" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="11.5" width="14" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+    bar: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.2h8a1 1 0 0 1 1 1v12.6l-5-3.3-5 3.3V4.2a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+    comments: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.2 3.8h11.6a1.7 1.7 0 0 1 1.7 1.7v7.1a1.7 1.7 0 0 1-1.7 1.7H9.3l-3.8 3v-3H4.2a1.7 1.7 0 0 1-1.7-1.7V5.5a1.7 1.7 0 0 1 1.7-1.7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+    people: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6.8" r="3.3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.6 17c.6-3.3 3.1-5.2 6.4-5.2s5.8 1.9 6.4 5.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    keys: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.3" y="4.8" width="15.4" height="10.4" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.6 8.3h.1M8.6 8.3h.1M11.4 8.3h.1M14.4 8.3h.1M7 11.8h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    backup: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.8" y="3.5" width="14.4" height="4" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.3 7.5v7.8a1.2 1.2 0 0 0 1.2 1.2h9a1.2 1.2 0 0 0 1.2-1.2V7.5M8 11h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    search: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.8" cy="8.8" r="5.3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12.8 12.8l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    info: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 9.2v4.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="10" cy="6.5" r="1" fill="currentColor"/></svg>',
+    edit: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.8 3.9l3.3 3.3L7.4 15.9H4.1v-3.3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+    save: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5v8.8M6.4 8.8l3.6 3.6 3.6-3.6M4 14.4v1.4a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    load: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 12.3V3.5M6.4 7.1 10 3.5l3.6 3.6M4 14.4v1.4a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    dash: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="5.8" height="5.8" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="11.2" y="3" width="5.8" height="5.8" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="11.2" width="5.8" height="5.8" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="11.2" y="11.2" width="5.8" height="5.8" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+    out: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 4.5H5.2a1 1 0 0 0-1 1v9.3a1 1 0 0 0 1 1h9.3a1 1 0 0 0 1-1v-3.3M11.5 4.5h4v4M15.3 4.7 9.5 10.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  };
   const SETTINGS = [
-    ['Layout', [
-      ['theme', 'Light or dark', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], 'Auto follows your computer'],
-      ['leftNav', 'Left sidebar', [['show', 'Show'], ['slide', 'Slide out'], ['hide', 'Hide']]],
-      ['pinHeader', 'Keep top bar on screen when scrolling'],
-      ['hideRecent', 'Hide "Recent posts"'],
-      ['hideSuggested', 'Hide suggestions and games'],
-      ['hideAds', 'Hide ads'],
-      ['hideBadges', 'Hide "Top 1%" badges'],
-      ['hideChat', 'Hide chat'],
-      ['topButton', 'Back-to-top button'],
-    ]],
-    ['Filter bar', [
-      ['filterline', 'Show filter bar'],
-      ['filterScore', 'Score filter: more than', 'number'],
-      ['filterLists', 'Hide by word, sub or site', 'button'],
-    ]],
-    ['Scrolling and videos', [
-      ['pauseEvery', 'Pages before a pause', 'number', '0 = never pause'],
-      ['maxVideos', 'Videos playing at once', 'number', '0 = no limit'],
-    ]],
-    ['Subreddit styles', [
-      ['subStyles', 'Show subreddit styles'],
-    ]],
-    ['Shortcut bar', [
-      ['showShortcuts', 'Show shortcut bar'],
-      ['scMode', 'Bar shows', [['mine', 'My list'], ['visits', 'Most visited']]],
-      ['classicHome', "HOME shows old Reddit's list"],
-      ['classicSubs', "Subreddits show old Reddit's list"],
-      ['linkDashboard', 'DASHBOARD link'],
-      ['linkFriends', 'FRIENDS link'],
-      ['linkMod', 'MOD and MODQUEUE links (moderators)'],
-      ['editShortcuts', 'Your shortcuts', 'button'],
-    ]],
-    ['Hover cards', [
-      ['hoverCards', 'Show when you point at a name'],
-    ]],
-    ['People', [
-      ['highlight', 'Color the poster, mods and friends'],
-      ['tagList', 'Your tags', 'button'],
-      ['hideMyName', 'Hide your username on screen'],
-    ]],
-    ['Comments', [
-      ['autoReplies', 'Load more replies as you scroll'],
-      ['hideKids', 'Start with replies hidden'],
-    ]],
-    ['Keyboard', [
-      ['keys', 'Keyboard shortcuts'],
-      ['keyHelp', 'List of keys (or press ?)', 'button'],
-    ]],
-    ['Backup', [
-      ['settingsFile', 'Settings file', 'file'],
-    ]],
+    { id: 'look', name: 'Appearance', icon: PN_ICON.look, words: 'look style layout clutter', groups: [
+      ['Colors', [
+        { key: 'theme', label: 'Light or dark', choices: [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], tip: "Auto follows your computer. This is Reddit's own Display Mode, so Reddit's menu changes with it.", words: 'theme dark mode light mode night display' },
+        { key: 'subStyles', label: 'Subreddit styles', tip: "Each subreddit's own colors and banner. The switch on a subreddit's side card changes that one subreddit only.", words: 'community theme css custom' },
+      ]],
+      ['Layout', [
+        { key: 'leftNav', label: 'Left sidebar', choices: [['show', 'Show'], ['slide', 'Slide out'], ['hide', 'Hide']], tip: "Reddit's left menu. Slide out keeps it tucked away until you point at the left edge of the window.", words: 'menu navigation communities' },
+        { key: 'navHover', label: 'Open sidebar on hover', child: true, when: () => cfg.leftNav === 'slide', tip: 'When off, a slim tab on the left edge opens the sidebar with a click. When on, it slides out as soon as the mouse reaches the left edge.', words: 'auto open mouse point slide out left menu' },
+        { key: 'pinHeader', label: 'Keep top bar on screen', tip: "When off, Reddit's top bar scrolls away with the page, like old Reddit's header.", words: 'header sticky pinned fixed' },
+        { key: 'topButton', label: 'Back to top button', tip: 'A round button in the bottom right corner once you scroll down. It jumps back to the top.', words: 'scroll up jump' },
+      ]],
+      ['Clutter', [
+        { key: 'hideAds', label: 'Hide ads', tip: 'Promoted posts in the feed and ads beside it.', words: 'promoted sponsored' },
+        { key: 'hideRecent', label: 'Hide "Recent posts"', tip: 'The list of posts you opened lately, on the right side of the feed.', words: 'history recently viewed sidebar' },
+        { key: 'hideSuggested', label: 'Hide suggestions and games', tip: "Reddit's suggested communities and its games, in the feed and the left menu.", words: 'recommended communities' },
+        { key: 'hideBadges', label: 'Hide "Top 1%" badges', tip: 'The Top 1% poster and commenter badges beside names.', words: 'flair award' },
+        { key: 'hideChat', label: 'Hide chat', tip: "Reddit's chat button in the top bar and its chat window.", words: 'messages' },
+      ]],
+    ] },
+    { id: 'feed', name: 'Feed', icon: PN_ICON.feed, words: 'posts list', groups: [
+      ["Old Reddit's lists", [
+        { key: 'classicHome', label: "Old Reddit's list on Home", tip: "Home shows old Reddit's front page, in old Reddit's order. When off, Home is Reddit's own feed.", words: 'front page classic best hot order' },
+        { key: 'classicSubs', label: "Old Reddit's list on subreddits", tip: "A subreddit's Hot, New, Top and other lists come from old Reddit, in old Reddit's order. Its header and sidebar stay.", words: 'classic hot new top rising controversial order' },
+      ]],
+      ['Filters', [
+        { key: 'filterline', label: 'Filter bar', tip: 'Buttons above the feed that show only, or hide, NSFW posts, spoilers, posts you have opened and more.', words: 'filterline visited expando' },
+        { key: 'filterScore', label: 'Score filter', kind: 'number', tip: "The filter bar's score button picks posts with more than this many points.", words: 'points upvotes karma minimum' },
+        { key: 'filterLists', label: 'Hide by word, subreddit or site', kind: 'edit', count: 'filterLists', tip: 'Posts with a word from your list in the title, from a subreddit on your list, or linking to a site on your list never show.', words: 'block mute keyword domain' },
+      ]],
+      ['Scrolling and videos', [
+        { key: 'pauseEvery', label: 'Pages before a pause', kind: 'number', hint: '0 = never pause', tip: 'Endless scrolling stops after this many pages and waits for you to press Load more.', words: 'never ending infinite scroll' },
+        { key: 'maxVideos', label: 'Videos playing at once', kind: 'number', hint: '0 = no limit', tip: 'Starting one more video pauses the one that started first.', words: 'autoplay limit' },
+      ]],
+    ] },
+    { id: 'bar', name: 'Shortcut bar', icon: PN_ICON.bar, words: 'subreddit manager favorites', groups: [
+      ['', [
+        { key: 'showShortcuts', label: 'Show shortcut bar', tip: "Your subreddits in a bar under Reddit's top bar, like RES's subreddit bar.", words: 'subreddit manager' },
+        { key: 'scMode', label: 'Bar shows', choices: [['mine', 'My list'], ['visits', 'Most visited']], tip: 'My list is the shortcuts you pick. Most visited fills the bar with the subreddits you open most.', words: 'frequent' },
+        { key: 'editShortcuts', label: 'Your shortcuts', kind: 'edit', count: 'editShortcuts', tip: 'Add, rename, reorder and group the subreddits on the bar.', words: 'add remove reorder rename groups' },
+      ]],
+      ['Extra links', [
+        { key: 'linkDashboard', label: 'Dashboard link', tip: 'Opens the RESpawn dashboard: your saved comments, tags and hide lists.', words: 'saved' },
+        { key: 'linkFriends', label: 'Friends link', tip: 'A feed of posts from your friends and the people you follow.', words: 'follow following' },
+        { key: 'linkMod', label: 'Mod and Mod queue links', tip: 'Only shows when you moderate a subreddit.', words: 'moderator queue' },
+      ]],
+    ] },
+    { id: 'comments', name: 'Comments', icon: PN_ICON.comments, words: 'post page thread replies', groups: [
+      ['', [
+        { key: 'autoReplies', label: 'Load more replies as you scroll', tip: 'Presses "more replies" for you when you reach it.', words: 'expand continue thread' },
+        { key: 'hideKids', label: 'Start with replies hidden', tip: 'Post pages open with only the top comments. Each one shows how many replies it has.', words: 'collapse fold children threads' },
+      ]],
+    ] },
+    { id: 'people', name: 'People', icon: PN_ICON.people, words: 'users names', groups: [
+      ['', [
+        { key: 'hoverCards', label: 'Hover cards', tip: 'Point at a username or subreddit name for a moment to see a card about it.', words: 'user info popup karma' },
+        { key: 'highlight', label: 'Color the poster, mods and friends', tip: 'In comments, the person who made the post, moderators and your friends get colored names.', words: 'highlight op submitter moderator' },
+        { key: 'tagList', label: 'Your tags', kind: 'edit', count: 'tagList', tip: 'Tag anyone from their hover card. The tag shows beside their name.', words: 'label tagger ignore' },
+        { key: 'hideMyName', label: 'Hide your username', tip: 'Your name shows as "anonymous" on screen, handy for screenshots.', words: 'privacy screenshot anonymous' },
+      ]],
+    ] },
+    { id: 'keys', name: 'Keyboard', icon: PN_ICON.keys, words: 'keys hotkeys keyboard shortcuts', groups: [
+      ['', [
+        { key: 'keys', label: 'Keyboard shortcuts', tip: 'Move through posts and comments, vote, open and save with single keys, like RES.', words: 'navigation' },
+        { key: 'keyHelp', label: 'List of keys', kind: 'show', hint: 'Or press ?' },
+      ]],
+    ] },
+    { id: 'backup', name: 'Backup', icon: PN_ICON.backup, words: 'backup file export import restore', groups: [
+      ['Settings file', [
+        { key: 'saveFile', label: 'Save to a file', kind: 'save', tip: 'Your settings, shortcuts, tags and hide lists, saved to your Downloads folder.', words: 'export download' },
+        { key: 'loadFile', label: 'Load from a file', kind: 'load', tip: 'Replaces your settings with the ones in a file you saved.', words: 'import restore upload' },
+      ]],
+    ] },
   ];
-  let panel = null;
-  const closePanel = () => { panel?.remove(); panel = null; document.removeEventListener('click', outside, true); document.removeEventListener('keydown', esc, true); };
-  // Clicks RESpawn makes itself (pressing Reddit's "more replies") are not yours: they never close a menu or pick a comment.
-  const outside = (e) => { if (e.isTrusted && panel && !panel.contains(e.target) && e.target.id !== 'rs-gear' && !e.target.closest?.('#rs-gear')) closePanel(); };
-  const esc = (e) => { if (e.key === 'Escape') closePanel(); };
-  const togglePanel = () => {
-    if (panel) return closePanel();
-    panel = el('div', { id: 'rs-panel', role: 'dialog', 'aria-label': 'RESpawn settings' });
-    const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close', html: ICON.close });
-    x.onclick = closePanel;
-    const master = el('label', { class: 'rs-set rs-master' }, [el('span', { text: 'RESpawn on' }), toggle('enabled')]);
-    panel.append(el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Settings' }), x]), master);
-    for (const [title, items] of SETTINGS) {
-      panel.append(el('div', { class: 'rs-panel-sec', text: title }));
-      for (const [key, label, choices, hint] of items) {
-        if (choices === 'file') {
-          const save = el('button', { type: 'button', class: 'rs-btn', text: 'Save', title: 'Save your RESpawn settings, shortcuts, tags and hide lists to a file' });
-          const load = el('button', { type: 'button', class: 'rs-btn', text: 'Load', title: 'Load RESpawn settings from a file you saved' });
-          save.onclick = saveSettingsFile; load.onclick = loadSettingsFile;
-          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: label }), el('span', { class: 'rs-set-btns' }, [save, load])]));
-        } else if (choices === 'button') {
-          const keysList = key === 'keyHelp';
-          const b = el('button', { type: 'button', class: 'rs-btn', text: keysList ? 'Show' : 'Edit' });
-          b.onclick = () => { closePanel(); ({ keyHelp: openKeyHelp, editShortcuts: openScEditor, tagList: openTagList, filterLists: openBlockEditor })[key](); };
-          const n = { editShortcuts: () => scList().length, tagList: () => Object.keys(cfg.tags || {}).length, filterLists: blockCount }[key];
-          panel.append(el('div', { class: 'rs-set' }, [el('span', { text: n ? `${label} (${n()})` : label }), b]));
-        } else if (choices === 'number') {
-          const score = key === 'filterScore';
-          const n = el('input', { type: 'number', class: 'rs-num', step: '1', min: score ? null : '0', max: score ? null : '99', 'aria-label': label });
-          n.value = String(cfg[key] ?? 0);
-          n.onchange = () => {
-            saveCfg({ [key]: Math.max(score ? -99999 : 0, Math.min(score ? 99999 : 99, parseInt(n.value, 10) || 0)) }); n.value = String(cfg[key]);
-            if (score) refilter(); else if (key === 'pauseEvery') { if (!cfg.pauseEvery) releaseHolds(); } else vTrim();
-          };
-          panel.append(el('label', { class: hint ? 'rs-set rs-set-2' : 'rs-set' }, [el('span', {}, [label, hint ? el('small', { class: 'rs-set-hint', text: hint }) : null]), n]));
-        } else if (choices) {
-          const seg = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-label': label, 'data-key': key });
-          const now = key === 'theme' ? themeNow() : cfg[key]; // light or dark is Reddit's own setting, not kept in ours
-          for (const [v, t] of choices) {
-            const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(now === v), 'data-v': v, text: t });
-            b.onclick = () => {
-              if (key === 'theme') { setTheme(v); return; }
-              saveCfg({ [key]: v }); applyEnabled(); if (key === 'scMode') shortcutBar(); seg.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
-            };
-            seg.append(b);
-          }
-          panel.append(el('div', { class: hint ? 'rs-set rs-set-2' : 'rs-set' }, [el('span', {}, [label, hint ? el('small', { class: 'rs-set-hint', text: hint }) : null]), seg]));
-        } else panel.append(el('label', { class: 'rs-set' }, [el('span', { text: label }), toggle(key)]));
+  const PN_CAT = 'rs-settings-cat'; // the category you had open, so the window reopens on it
+  const PN_NARROW = matchMedia('(max-width: 699px)'); // categories turn into a row of icons above the settings
+  let panel = null; // the dimmed backdrop holding the window
+  const pn = {}; // the window's parts while it is open
+  const closePanel = (back = true) => {
+    if (!panel) return;
+    const had = panel.contains(document.activeElement);
+    panel.remove(); panel = null;
+    window.removeEventListener('keydown', pnKeys, true);
+    const g = document.getElementById('rs-gear');
+    g?.setAttribute('aria-expanded', 'false');
+    if (back && had) g?.focus({ preventScroll: true }); // keyboard users land back where they started
+  };
+  const pnCatNow = () => { const c = localStorage.getItem(PN_CAT); return SETTINGS.some((s) => s.id === c) ? c : SETTINGS[0].id; };
+  const pnWords = (q) => q.toLowerCase().split(/\s+/).filter(Boolean);
+  // Matched words are marked, built from text nodes (never parsed as HTML)
+  const pnMark = (text, words) => {
+    if (!words?.length) return [text];
+    const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+    return text.split(re).map((p, i) => (i % 2 ? el('mark', { text: p }) : p));
+  };
+  const pnFind = (words) => {
+    const out = [];
+    for (const cat of SETTINGS) for (const [, rows] of cat.groups) for (const s of rows) {
+      const hay = [s.label, s.hint, s.tip, s.words, (s.choices || []).map((c) => c[1]).join(' '), cat.name, cat.words].join(' ').toLowerCase();
+      if ((!s.when || s.when()) && words.every((w) => hay.includes(w))) out.push({ cat, s });
+    }
+    return out;
+  };
+  // One shared tooltip for the (i) buttons. It lives in the window itself so it closes with it, and is kept inside it.
+  const pnTipShow = (b) => {
+    const tip = pn.tip, box = pn.win.getBoundingClientRect(), r = b.getBoundingClientRect();
+    tip.textContent = b.dataset.tip; tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    const left = Math.max(8, Math.min(box.width - w - 8, r.left - box.left + r.width / 2 - w / 2));
+    const above = r.top - box.top - h - 8;
+    tip.style.left = `${left}px`; tip.style.top = `${above >= 8 ? above : r.bottom - box.top + 8}px`;
+    pn.tipFor?.removeAttribute('aria-describedby');
+    pn.tipFor = b; b.setAttribute('aria-describedby', 'rs-pn-tip');
+  };
+  const pnTipHide = () => { if (pn.tip) pn.tip.hidden = true; pn.tipFor?.removeAttribute('aria-describedby'); pn.tipFor = null; };
+  const pnCount = (k) => ({ editShortcuts: () => scList().length, tagList: () => Object.keys(cfg.tags || {}).length, filterLists: blockCount })[k]?.() || 0;
+  // One settings row: the words on the left (label, then a short hint only where it helps), the control on the right.
+  const pnRow = (s, words, why) => {
+    const id = `rs-pn-${s.key}`, hintId = s.hint || why ? `${id}-h` : null;
+    const n = s.count ? pnCount(s.count) : 0;
+    const one = !s.choices && !['edit', 'show', 'save', 'load'].includes(s.kind); // a single box or switch the words can name
+    const name = el(one ? 'label' : 'span', { class: 'rs-pn-label', id: `${id}-l`, for: one ? id : null }, pnMark(s.label, words));
+    const info = s.tip && !why ? el('button', { type: 'button', class: 'rs-pn-i', 'aria-label': `About ${s.label}`, 'data-tip': s.tip, html: PN_ICON.info }) : null;
+    const text = el('div', { class: 'rs-pn-text' }, [
+      el('div', { class: 'rs-pn-name' }, [name, n ? el('span', { class: 'rs-pn-count', text: String(n) }) : null, info]),
+      hintId ? el('div', { class: 'rs-pn-hint', id: hintId }, pnMark(why ? s.tip : s.hint, words)) : null,
+    ]);
+    let ctl;
+    if (s.choices) {
+      ctl = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-labelledby': `${id}-l`, 'data-key': s.key });
+      const now = s.key === 'theme' ? themeNow() : cfg[s.key]; // light or dark is Reddit's own setting, not kept in ours
+      for (const [v, t] of s.choices) {
+        const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(now === v), 'data-v': v, text: t });
+        b.onclick = () => {
+          if (s.key === 'theme') { setTheme(v); return; }
+          saveCfg({ [s.key]: v }); applyEnabled(); if (s.key === 'scMode') shortcutBar(); ctl.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+          pnWhen();
+        };
+        ctl.append(b);
+      }
+    } else if (s.kind === 'number') {
+      const score = s.key === 'filterScore';
+      ctl = el('input', { type: 'number', id, class: 'rs-num', step: '1', min: score ? null : '0', max: score ? null : '99', 'aria-describedby': hintId });
+      ctl.value = String(cfg[s.key] ?? 0);
+      ctl.onchange = () => {
+        saveCfg({ [s.key]: Math.max(score ? -99999 : 0, Math.min(score ? 99999 : 99, parseInt(ctl.value, 10) || 0)) }); ctl.value = String(cfg[s.key]);
+        if (score) refilter(); else if (s.key === 'pauseEvery') { if (!cfg.pauseEvery) releaseHolds(); } else vTrim();
+      };
+    } else if (s.kind === 'edit' || s.kind === 'show') {
+      ctl = el('button', { type: 'button', class: 'rs-btn rs-pn-btn', id, 'aria-labelledby': `${id} ${id}-l` }, [el('span', { class: 'rs-pn-bi', html: s.kind === 'show' ? PN_ICON.keys : PN_ICON.edit }), s.kind === 'show' ? 'Show' : 'Edit']);
+      ctl.onclick = () => { closePanel(false); ({ keyHelp: openKeyHelp, editShortcuts: openScEditor, tagList: openTagList, filterLists: openBlockEditor })[s.key](); };
+    } else if (s.kind === 'save' || s.kind === 'load') {
+      const save = s.kind === 'save';
+      ctl = el('button', { type: 'button', class: 'rs-btn rs-pn-btn', id, 'aria-labelledby': `${id}-l` }, [el('span', { class: 'rs-pn-bi', html: save ? PN_ICON.save : PN_ICON.load }), save ? 'Save' : 'Load']);
+      ctl.onclick = save ? saveSettingsFile : loadSettingsFile;
+    } else {
+      ctl = toggle(s.key);
+      ctl.id = id; if (hintId) ctl.setAttribute('aria-describedby', hintId);
+    }
+    const row = el('div', { class: s.child ? 'rs-pn-row rs-pn-child' : 'rs-pn-row', 'data-key': s.key, hidden: !!s.when && !s.when() }, [text, ctl]);
+    // The whole row of a switch is a target, not only the small switch
+    if (ctl.type === 'checkbox') row.addEventListener('click', (e) => { if (!e.target.closest('button, input, label, a')) ctl.click(); });
+    return row;
+  };
+  // A row that only matters with another choice (Open sidebar on hover needs Left sidebar: Slide out) shows only then
+  const pnWhen = () => {
+    for (const r of pn.win?.querySelectorAll('.rs-pn-row') || []) {
+      const s = SETTINGS.flatMap((c) => c.groups.flatMap((g) => g[1])).find((x) => x.key === r.dataset.key);
+      if (s?.when) r.hidden = !s.when();
+    }
+  };
+  const pnGroup = (title, rows) => el('section', { class: 'rs-pn-group' }, [title ? el('h4', { class: 'rs-pn-sub' }, title) : null, el('div', { class: 'rs-pn-card' }, rows)]);
+  // The Keyboard page also shows the keys themselves, the same list "?" opens over a page
+  const pnKeyList = () => {
+    const col = (title, rows) => el('div', { class: 'rs-pn-kcol' }, [el('h5', { text: title }), el('dl', {}, rows.filter(([k]) => k !== '?').flatMap(([k, t]) => [
+      el('dt', {}, k.split(' ').map((p) => (p === '/' || p === 'or' ? ` ${p} ` : el('kbd', { text: p })))), el('dd', { text: t })]))]);
+    return pnGroup('Keys', [el('div', { class: 'rs-pn-keys' }, [col('In a feed', KEYS.feed), col('On a post', KEYS.comments)])]);
+  };
+  // Draws the right side: the chosen category, or what the search found across every category
+  const pnDraw = () => {
+    pnTipHide();
+    const q = pn.search.value.trim(), words = pnWords(q), cur = pnCatNow();
+    pn.win.classList.toggle('rs-pn-searching', !!words.length);
+    pn.clear.hidden = !q;
+    const found = words.length ? pnFind(words) : null;
+    for (const b of pn.cats.querySelectorAll('[role="tab"]')) {
+      const on = b.dataset.cat === cur;
+      b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1;
+      const n = found ? found.filter((f) => f.cat.id === b.dataset.cat).length : 0;
+      b.querySelector('.rs-pn-n').textContent = found && n ? String(n) : '';
+      b.classList.toggle('rs-pn-none', !!found && !n);
+    }
+    const pane = pn.pane;
+    pane.replaceChildren();
+    if (!found) {
+      const cat = SETTINGS.find((c) => c.id === cur);
+      pane.setAttribute('aria-labelledby', `rs-pn-tab-${cat.id}`); pane.removeAttribute('aria-label');
+      pane.append(el('h3', { class: 'rs-pn-title' }, [el('span', { class: 'rs-pn-ti', html: cat.icon }), cat.name]));
+      for (const [title, rows] of cat.groups) pane.append(pnGroup(title, rows.map((s) => pnRow(s))));
+      if (cat.id === 'keys') pane.append(pnKeyList());
+    } else if (!found.length) {
+      pane.removeAttribute('aria-labelledby'); pane.setAttribute('aria-label', 'Search');
+      const clear = el('button', { type: 'button', class: 'rs-btn', text: 'Clear search' });
+      clear.onclick = () => { pn.search.value = ''; pnDraw(); pn.search.focus(); };
+      pane.append(el('div', { class: 'rs-pn-empty', role: 'status' }, [el('span', { class: 'rs-pn-ei', html: PN_ICON.search }), el('p', {}, ['No settings match ', el('b', { text: `"${q}"` })]), clear]));
+    } else {
+      pane.removeAttribute('aria-labelledby'); pane.setAttribute('aria-label', 'Search');
+      pane.append(el('h3', { class: 'rs-pn-title rs-pn-found', role: 'status' }, `${found.length} matching setting${found.length === 1 ? '' : 's'}`));
+      for (const cat of SETTINGS) {
+        const mine = found.filter((f) => f.cat === cat);
+        if (!mine.length) continue;
+        // A match found only in the longer explanation shows that explanation, so you can see why it is here
+        const rows = mine.map(({ s }) => pnRow(s, words, !!s.tip && !words.every((w) => `${s.label} ${s.hint || ''}`.toLowerCase().includes(w)) && words.some((w) => s.tip.toLowerCase().includes(w))));
+        pane.append(pnGroup([el('span', { class: 'rs-pn-si', html: cat.icon }), cat.name], rows));
       }
     }
-    const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
-    done.onclick = closePanel;
-    const dashB = el('button', { type: 'button', class: 'rs-btn', text: 'Dashboard' });
-    dashB.onclick = () => openDash();
-    panel.append(el('div', { class: 'rs-panel-foot' }, [el('a', { href: 'https://github.com/humangenome/RESpawn', target: '_blank', rel: 'noopener', text: 'About RESpawn' }), el('span', { class: 'rs-set-btns' }, [dashB, done])]));
-    document.body.append(panel);
-    setTimeout(() => { document.addEventListener('click', outside, true); document.addEventListener('keydown', esc, true); }, 0);
+    pane.scrollTop = 0;
   };
-  const toggle = (key) => {
+  const pnGo = (id, focus) => {
+    try { localStorage.setItem(PN_CAT, id); } catch { /* storage full */ }
+    pn.search.value = '';
+    pnDraw();
+    if (focus) pn.cats.querySelector(`[data-cat="${id}"]`)?.focus();
+  };
+  const pnOff = () => { pn.off.hidden = !!cfg.enabled; pn.state.textContent = cfg.enabled ? 'On' : 'Off'; };
+  // Keys while the window is open: Esc clears the search first and then closes, "/" or Ctrl+F jumps to the search,
+  // and Tab stays inside the window.
+  const pnKeys = (e) => {
+    if (!panel) return;
+    const typing = e.target.tagName === 'INPUT' && e.target.type !== 'checkbox';
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      if (pn.tipFor) pnTipHide();
+      else if (pn.search.value) { pn.search.value = ''; pnDraw(); pn.search.focus(); } else closePanel();
+    } else if ((e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) || ((e.ctrlKey || e.metaKey) && !e.altKey && String(e.key).toLowerCase() === 'f')) {
+      e.preventDefault(); e.stopPropagation(); pn.search.focus(); pn.search.select();
+    } else if (e.key === 'Tab') {
+      const all = [...pn.win.querySelectorAll('button, input, a[href]')].filter((x) => x.tabIndex >= 0 && !x.disabled && x.getClientRects().length);
+      const first = all[0], last = all[all.length - 1];
+      if (!pn.win.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  };
+  const togglePanel = () => {
+    if (panel) return closePanel();
+    const win = el('div', { id: 'rs-panel', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rs-pn-name' });
+    pn.win = win;
+    // Header: name, one search over every setting, the main on/off switch, and the X
+    pn.search = el('input', { type: 'search', class: 'rs-pn-q', placeholder: 'Search settings', 'aria-label': 'Search settings', autocomplete: 'off', spellcheck: 'false' });
+    pn.search.oninput = pnDraw;
+    pn.clear = el('button', { type: 'button', class: 'rs-pn-clear', 'aria-label': 'Clear search', hidden: true, html: ICON.close });
+    pn.clear.onclick = () => { pn.search.value = ''; pnDraw(); pn.search.focus(); };
+    pn.state = el('span', { class: 'rs-pn-state', 'aria-hidden': 'true' });
+    const master = toggle('enabled', pnOff);
+    master.setAttribute('aria-label', 'RESpawn');
+    const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close', title: 'Close (Esc)', html: ICON.close });
+    x.onclick = () => closePanel();
+    win.append(el('div', { class: 'rs-pn-head' }, [
+      el('div', { class: 'rs-pn-brand' }, [el('span', { class: 'rs-pn-logo', 'aria-hidden': 'true' }), el('h2', { id: 'rs-pn-name', text: 'RESpawn' })]),
+      el('div', { class: 'rs-pn-find' }, [el('span', { class: 'rs-pn-qi', html: PN_ICON.search }), pn.search, pn.clear]),
+      el('label', { class: 'rs-pn-master', title: 'Turn RESpawn off to see Reddit as it normally looks' }, [pn.state, master]),
+      x,
+    ]));
+    pn.off = el('div', { class: 'rs-pn-off', role: 'status', text: 'RESpawn is off, so Reddit shows as it normally does.' });
+    win.append(pn.off);
+    // Left: the categories (a row of icons in a narrow window). Arrow keys move between them.
+    pn.cats = el('div', { class: 'rs-pn-cats', role: 'tablist', 'aria-label': 'Categories', 'aria-orientation': PN_NARROW.matches ? 'horizontal' : 'vertical' });
+    for (const c of SETTINGS) {
+      const b = el('button', { type: 'button', role: 'tab', id: `rs-pn-tab-${c.id}`, 'aria-controls': 'rs-pn-pane', 'data-cat': c.id, title: c.name },
+        [el('span', { class: 'rs-pn-ci', html: c.icon }), el('span', { class: 'rs-pn-cn', text: c.name }), el('span', { class: 'rs-pn-n', 'aria-hidden': 'true' })]);
+      b.onclick = () => pnGo(c.id);
+      pn.cats.append(b);
+    }
+    pn.cats.onkeydown = (e) => {
+      const tabs = [...pn.cats.querySelectorAll('[role="tab"]')], i = tabs.indexOf(document.activeElement);
+      const to = { ArrowDown: i + 1, ArrowRight: i + 1, ArrowUp: i - 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+      if (to === undefined || i < 0) return;
+      e.preventDefault();
+      pnGo(tabs[(to + tabs.length) % tabs.length].dataset.cat, true);
+    };
+    pn.pane = el('div', { class: 'rs-pn-pane', id: 'rs-pn-pane', role: 'tabpanel' });
+    pn.pane.addEventListener('scroll', pnTipHide, { passive: true });
+    win.append(el('div', { class: 'rs-pn-body' }, [pn.cats, pn.pane]));
+    // Footer: about, the dashboard, the version, and Done
+    const ver = (() => { try { return chrome.runtime.getManifest().version || ''; } catch { return ''; } })();
+    const dashB = el('button', { type: 'button', class: 'rs-btn rs-pn-btn' }, [el('span', { class: 'rs-pn-bi', html: PN_ICON.dash }), 'Dashboard']);
+    dashB.onclick = () => openDash();
+    const done = el('button', { type: 'button', class: 'rs-done', text: 'Done' });
+    done.onclick = () => closePanel();
+    win.append(el('div', { class: 'rs-pn-foot' }, [
+      el('a', { class: 'rs-pn-about', href: 'https://github.com/humangenome/RESpawn', target: '_blank', rel: 'noopener' }, ['About RESpawn', el('span', { class: 'rs-pn-bi', html: PN_ICON.out })]),
+      ver ? el('span', { class: 'rs-pn-ver', text: `Version ${ver}` }) : null,
+      el('span', { class: 'rs-set-btns' }, [dashB, done]),
+    ]));
+    pn.tip = el('div', { class: 'rs-pn-tip', id: 'rs-pn-tip', role: 'tooltip', hidden: true });
+    win.append(pn.tip);
+    // (i): shown while pointed at or focused, and on a tap for touch screens
+    win.addEventListener('mouseover', (e) => { const b = e.target.closest?.('.rs-pn-i'); if (b && b !== pn.tipFor) pnTipShow(b); });
+    win.addEventListener('mouseout', (e) => { if (pn.tipFor && e.target.closest?.('.rs-pn-i') === pn.tipFor && !pn.tipFor.contains(e.relatedTarget)) pnTipHide(); });
+    win.addEventListener('focusin', (e) => { if (e.target.classList?.contains('rs-pn-i')) pnTipShow(e.target); else if (pn.tipFor) pnTipHide(); });
+    win.addEventListener('click', (e) => { const b = e.target.closest?.('.rs-pn-i'); if (b) pnTipShow(b); else if (pn.tipFor) pnTipHide(); });
+    // The dimmed page behind: a click on it closes the window (only a click that started there, not a text selection
+    // dragged out of the window), and the wheel never scrolls Reddit's page behind it.
+    panel = el('div', { id: 'rs-shade' }, [win]);
+    let downOnShade = false;
+    panel.addEventListener('pointerdown', (e) => { downOnShade = e.target === panel; });
+    panel.addEventListener('click', (e) => { if (e.target === panel && downOnShade) closePanel(); });
+    panel.addEventListener('wheel', (e) => { const sc = e.target.closest?.('.rs-pn-pane, .rs-pn-cats'); if (!sc || sc.scrollHeight <= sc.clientHeight) e.preventDefault(); }, { passive: false });
+    pnOff(); pnDraw();
+    document.body.append(panel);
+    document.getElementById('rs-gear')?.setAttribute('aria-expanded', 'true');
+    window.addEventListener('keydown', pnKeys, true);
+    pn.search.focus();
+  };
+  PN_NARROW.addEventListener('change', () => pn.cats?.setAttribute('aria-orientation', PN_NARROW.matches ? 'horizontal' : 'vertical'));
+  const toggle = (key, after) => {
     const i = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
     i.checked = !!cfg[key];
-    i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (['showShortcuts', 'linkFriends', 'linkMod', 'linkDashboard'].includes(key)) shortcutBar(); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
+    i.onchange = () => { saveCfg({ [key]: i.checked }); applyEnabled(); if (['showShortcuts', 'linkFriends', 'linkMod', 'linkDashboard'].includes(key)) shortcutBar(); const card = document.getElementById('rs-about'); if (card) paintCard(card); after?.(); };
     return i;
   };
 
@@ -299,7 +525,7 @@
   };
   const cleanSettings = (o) => {
     const out = {};
-    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome', 'classicSubs']) if (typeof o[k] === 'boolean') out[k] = o[k];
+    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome', 'classicSubs', 'navHover']) if (typeof o[k] === 'boolean') out[k] = o[k];
     for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']]]) if (ok.includes(o[k])) out[k] = o[k];
     for (const [k, lo, hi] of [['filterScore', -99999, 99999], ['pauseEvery', 0, 99], ['maxVideos', 0, 99]]) if (Number.isFinite(o[k])) out[k] = Math.max(lo, Math.min(hi, Math.round(o[k])));
     if (Array.isArray(o.shortcuts)) {
@@ -367,16 +593,47 @@
   };
 
   // ---------- left sidebar slide-out ----------
+  // Reddit's left menu waits off screen. By default a slim tab on the left edge opens it with a click: having it open
+  // by itself whenever the mouse passed the edge got in the way. "Open sidebar on hover" brings that back.
+  const LEFT_TAB = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const leftSlide = () => {
     if (document.getElementById('rs-left-edge')) return;
     const edge = el('div', { id: 'rs-left-edge', 'aria-hidden': 'true' });
-    document.body.append(edge);
+    const tab = el('button', { type: 'button', id: 'rs-left-tab', 'aria-controls': 'left-sidebar-container', 'aria-expanded': 'false', html: LEFT_TAB });
+    document.body.append(edge, tab);
     const nav = () => document.getElementById('left-sidebar-container');
     let t;
-    const open = () => { clearTimeout(t); html.classList.add('rs-left-open'); };
-    const shut = () => { clearTimeout(t); t = setTimeout(() => html.classList.remove('rs-left-open'), 250); };
-    edge.addEventListener('mouseenter', open);
-    document.addEventListener('mouseover', (e) => { const n = nav(); if (!html.classList.contains('rs-left-slide') || !n) return; if (n.contains(e.target) || e.target === edge) open(); else if (html.classList.contains('rs-left-open')) shut(); });
+    const paintTab = () => {
+      const o = html.classList.contains('rs-left-open'), say = o ? 'Close the left sidebar' : 'Open the left sidebar';
+      tab.setAttribute('aria-expanded', String(o)); tab.setAttribute('aria-label', say); tab.title = say;
+    };
+    const open = () => { clearTimeout(t); html.classList.add('rs-left-open'); paintTab(); };
+    const shut = () => { clearTimeout(t); t = setTimeout(() => { html.classList.remove('rs-left-open'); paintTab(); }, 250); };
+    const shutNow = () => { clearTimeout(t); html.classList.remove('rs-left-open'); paintTab(); };
+    paintTab();
+    edge.addEventListener('mouseenter', () => { if (cfg.navHover) open(); });
+    document.addEventListener('mouseover', (e) => { const n = nav(); if (!cfg.navHover || !html.classList.contains('rs-left-slide') || !n) return; if (n.contains(e.target) || e.target === edge) open(); else if (html.classList.contains('rs-left-open')) shut(); });
+    // Click to open: the tab opens and closes it; a click anywhere else, Esc, or following a link in the menu closes it.
+    // Clicks RESpawn makes itself are not yours and never close it.
+    tab.onclick = (e) => {
+      if (html.classList.contains('rs-left-open')) return shutNow();
+      open();
+      // Opened from the keyboard (Enter or Space): the cursor moves into the menu, since the tab sits at the page's end
+      if (!e.detail) setTimeout(() => nav()?.querySelector('a[href], button')?.focus({ preventScroll: true }), 200);
+    };
+    const clickOpen = () => !cfg.navHover && html.classList.contains('rs-left-slide') && html.classList.contains('rs-left-open');
+    document.addEventListener('click', (e) => {
+      if (!e.isTrusted || !clickOpen()) return;
+      const n = nav(), path = e.composedPath();
+      if (path.includes(tab)) return;
+      if (!n || !path.includes(n) || path.some((x) => x.tagName === 'A' && x.hasAttribute('href'))) shutNow();
+    }, true);
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !clickOpen()) return;
+      const inside = nav()?.contains(document.activeElement);
+      shutNow();
+      if (inside) tab.focus();
+    }, true);
   };
 
   // ---------- right side: "Recent posts" ----------
