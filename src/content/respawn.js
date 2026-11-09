@@ -1340,7 +1340,38 @@
       if (!v.paused) start();
     }
   };
-  setInterval(watchVideos, 1500);
+  // Highest quality: Reddit's player (post pages, and rows where RESpawn shows Reddit's own) plays one of several ready-made
+  // files of a video, picked by the player's size and the connection, or a stream that starts low and climbs. Once it
+  // has started, it is moved to the best file once, at the same moment and still playing or paused as it was. (RESpawn's
+  // own player in rows already plays Reddit's best file, the one its post details name.)
+  const PACKED = /^https:\/\/packaged-media\.redd\.it\/[^?]+\.mp4(\?|$)/;
+  const pinTop = (pl, v) => {
+    const cur = v.currentSrc || '';
+    if (v.rsTop || !cur || cur.startsWith('blob:')) return; // not started, or a stream run by Reddit's own code (left alone)
+    let files;
+    try { files = JSON.parse(pl.getAttribute('packaged-media-json') || '{}').playbackMp4s?.permutations?.map((x) => x.source).filter((x) => PACKED.test(x?.url || '') && x.dimensions); } catch { return; }
+    v.rsTop = true;
+    if (!files?.length) return;
+    const path = (u) => u.split('?')[0], area = (x) => x.dimensions.width * x.dimensions.height;
+    const now = files.find((x) => path(x.url) === path(cur));
+    if (!now && !/\.m3u8(\?|$)/.test(cur)) return; // something else: leave it
+    const vp9 = (x) => /\/m2-vp9-/.test(x.url);
+    const same = files.filter((x) => (now ? vp9(x) === vp9(now) : !vp9(x))).sort((a, b) => area(b) - area(a))[0];
+    if (!same || (now && area(same) <= area(now))) return;
+    const t = v.currentTime, playing = !v.paused;
+    v.addEventListener('loadedmetadata', () => { try { v.currentTime = t; } catch { /* not seekable */ } }, { once: true });
+    v.src = same.url;
+    if (playing) v.play().catch(() => {}); // (Reddit's player loads nothing ahead, so it only loads once asked to play)
+  };
+  const topQuality = () => {
+    for (const pl of document.querySelectorAll('shreddit-player, shreddit-player-2')) {
+      const v = pl.shadowRoot?.querySelector('video');
+      if (!v || v.rsTop) continue;
+      if (v.currentSrc) pinTop(pl, v);
+      else if (!v.rsTopWait) { v.rsTopWait = true; v.addEventListener('loadedmetadata', () => pinTop(pl, v), { once: true }); }
+    }
+  };
+  setInterval(() => { watchVideos(); if (cfg.enabled) topQuality(); }, 1500);
   // YouTube and Vimeo players say when they play or pause, and take a pause request, through messages.
   const YT_ORIGIN = 'https://www.youtube-nocookie.com', VIMEO_ORIGIN = 'https://player.vimeo.com';
   const frameSay = (f, msg) => { try { f.contentWindow?.postMessage(JSON.stringify(msg), f.rsOrigin); } catch { /* closed */ } };
@@ -2435,6 +2466,27 @@
     try { localStorage.setItem('rs-collapsed', JSON.stringify(m)); } catch { /* storage full */ }
   }, true);
 
+  // ---------- the post's own video on its page ----------
+  // Reddit's player box spans the whole content column and caps its height, so on a wide window the video sat in a wide
+  // black strip (and RESpawn's own cap on post pictures then cut off its controls). Its box now takes the video's own
+  // shape: as wide as the column allows while the whole video, controls included, stays on screen under the title.
+  // Drag on it (above its controls) or on the corner grip to resize it, up to the window's right edge.
+  const postVideo = () => {
+    if (!cfg.enabled || !isCommentsPage()) return;
+    const pl = document.querySelector('shreddit-post[view-context="CommentsPage"] > [slot="post-media-container"] :is(shreddit-player, shreddit-player-2)');
+    if (!pl || pl.rsSized) return;
+    const shape = pl.closest('[style*="aspect-ratio"]'), frame = shape?.parentElement; // Reddit's box with the video's shape, and the black box round it
+    const ar = parseFloat((shape?.getAttribute('style') || '').match(/aspect-ratio:\s*([\d.]+)/)?.[1]);
+    if (!(ar > 0.2 && ar < 6) || !frame?.closest('[slot="post-media-container"]')) return;
+    pl.rsSized = true;
+    shape.classList.add('rs-pv-in'); frame.classList.add('rs-pv'); frame.style.setProperty('--rs-ar', String(ar));
+    const normal = () => { frame.style.removeProperty('width'); frame.style.removeProperty('max-width'); };
+    zoomable(frame, {
+      surface: pl, controls: 56, width: () => frame.getBoundingClientRect().width, reset: normal,
+      set: (px) => { frame.style.setProperty('width', `${px}px`, 'important'); frame.style.setProperty('max-width', 'none', 'important'); },
+    });
+  };
+
   // ---------- comment pages ----------
   // "parent" jumps up to the comment this one answers and flashes it; if that comment isn't on the page, it opens it.
   const parentLink = (c) => {
@@ -3505,7 +3557,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); postVideo(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
     karmaSplit();

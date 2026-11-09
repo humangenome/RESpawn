@@ -269,6 +269,14 @@ html.rs-on.rs-hide-badges shreddit-comment-badges { display: none !important; }
 html.rs-on [slot="actionRow"] { display: flex !important; align-items: center; flex-wrap: wrap; }
 html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"] { max-height: 460px; overflow: hidden; }
 html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"] img { max-height: 440px !important; width: auto !important; }
+/* The post's own video takes its own shape (no black strip), with its controls on screen: as wide as the column allows
+   while it stays within Reddit's own height for it (the window less the header and 250 px for the title) */
+html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"]:has(.rs-pv) { max-height: none; overflow: visible; }
+html.rs-on .rs-pv { width: min(100%, calc(var(--rs-ar) * max(300px, 100vh - var(--shreddit-header-height, 56px) - 250px))) !important; max-width: 100%; }
+html.rs-on .rs-pv-in { max-height: none !important; }
+html.rs-on .rs-pv.rs-zoomed { z-index: 4; }
+/* Reddit's "Suggested videos" panel over a finished video: the video stays on its last frame with Reddit's replay button */
+html.rs-on :is(shreddit-player, shreddit-player-2) > [slot="recommendation-overlay"] { display: none !important; }
 html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 .rs-badge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font: 700 11px/1.4 var(--rs-font); }
 .rs-badge.rs-is-new { background: color-mix(in srgb, var(--rs-up) 14%, transparent); color: var(--rs-up); }
