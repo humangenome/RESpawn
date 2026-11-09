@@ -17,7 +17,7 @@ Keeps the new Reddit look and brings back RES and old Reddit features: compact p
 RESpawn keeps the new Reddit design and brings back the way old Reddit and Reddit Enhancement Suite (RES) worked.
 
 Posts and feeds
-- HOME and ALL show old Reddit's lists again, with best, hot, new, rising, controversial and top, when you are logged in to Reddit (the new site has dropped r/all, and old Reddit now needs an account)
+- HOME, ALL and subreddits show old Reddit's lists again, with best, hot, new, rising, controversial and top, when you are logged in to Reddit (the new site has dropped r/all, and old Reddit now needs an account)
 - More posts on a screen, numbered, with votes, comments, share, save and hide on every row
 - Sort tabs in the open, and RES's filter bar: nsfw, spoiler, visited, comments opened, expando, score
 - Hide posts by words in the title, by subreddit or by website
@@ -51,10 +51,10 @@ Not made by the RES team, and not affiliated with or endorsed by Reddit. Free an
 
 - **Category:** Chrome: Social Networking. Firefox: Social & Communication.
 - **Single purpose (Chrome):** Adds classic Reddit Enhancement Suite features to Reddit's new design on www.reddit.com.
-- **Background (service worker):** only to read old Reddit's post lists for RESpawn's HOME and ALL pages.
+- **Background (service worker):** only to read old Reddit's post lists for RESpawn's HOME, ALL and subreddit pages.
 - **Permission "storage":** Keeps the user's RESpawn settings (switches, shortcuts, tags, hide lists) in the browser.
 - **Host access www.reddit.com:** RESpawn works only on Reddit's pages, where it adds its features to the page.
-- **Host access old.reddit.com:** RESpawn's HOME and ALL pages show old Reddit's post lists (the new site no longer has r/all). The add-on's background helper reads those lists from old.reddit.com, signed in as the user, only when the user opens those pages; it reads no other address.
+- **Host access old.reddit.com:** RESpawn's HOME, ALL and subreddit pages show old Reddit's post lists (the new site no longer has r/all, and its other lists come in a different order). The add-on's background helper reads those lists from old.reddit.com, signed in as the user, only when the user opens those pages; it reads no other address.
 - **Remote code:** No. All code is in the package.
 - **Data collected:** None. Nothing leaves the browser except the user's own actions on Reddit, sent to Reddit.
 - **Privacy policy:** https://github.com/humangenome/RESpawn/blob/main/PRIVACY.md

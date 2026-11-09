@@ -1,17 +1,24 @@
-// RESpawn's background helper. It does one thing: read old Reddit's post lists (old.reddit.com) for RESpawn's HOME and
-// ALL pages, signed in as you, from your browser. The new site no longer serves r/all, and a page on www.reddit.com
-// cannot read old.reddit.com by itself. Only the list addresses below are ever read, and only when RESpawn's own page
-// code on www.reddit.com asks.
+// RESpawn's background helper. It does one thing: read old Reddit's post lists (old.reddit.com) for RESpawn's HOME, ALL
+// and subreddit pages, signed in as you, from your browser. The new site no longer serves r/all, its Home and subreddit
+// lists come in a different order from old Reddit's, and a page on www.reddit.com cannot read old.reddit.com by itself.
+// Only the list addresses below are ever read, and only when RESpawn's own page code on www.reddit.com asks.
 const SORTS = ['best', 'hot', 'new', 'rising', 'controversial', 'top'];
 const TIMES = ['hour', 'day', 'week', 'month', 'year', 'all'];
-// Reddit refuses its list data for "new" and "rising" (in any form); for those the ordinary old Reddit page is read.
+const SUB = /^[A-Za-z0-9_]{2,21}$/;
+// Reddit refuses its list data for "new" and "rising" (in any form), and for Home's "hot"; for those the ordinary old
+// Reddit page is read.
 const AS_PAGE = ['new', 'rising'];
 
 const listUrl = (q) => {
-  if (!q || (q.list !== 'home' && q.list !== 'all') || !SORTS.includes(q.sort) || (q.list === 'all' && q.sort === 'best')) return null;
-  const page = AS_PAGE.includes(q.sort);
-  const path = `${q.list === 'all' ? '/r/all' : ''}/${q.sort === 'hot' ? '' : `${q.sort}/`}`;
-  const u = new URL(`https://old.reddit.com${path}${page ? '' : '.json'}`);
+  if (!q || !['home', 'all', 'sub'].includes(q.list) || !SORTS.includes(q.sort)) return null;
+  if (q.list !== 'home' && q.sort === 'best') return null; // only Home has Best
+  if (q.list === 'sub' && (typeof q.sub !== 'string' || !SUB.test(q.sub) || /^(all|popular|mod|friends|random|randnsfw|myrandom)$/i.test(q.sub))) return null;
+  // Each list's own address is its first sort: old Reddit's front page (/) is Best for a signed-in account (the same
+  // list it shows there; /best/ comes back in a slightly different order), a subreddit's or r/all's page is Hot.
+  const first = q.list === 'home' ? 'best' : 'hot';
+  const page = AS_PAGE.includes(q.sort) || (q.list === 'home' && q.sort === 'hot');
+  const base = q.list === 'all' ? '/r/all' : q.list === 'sub' ? `/r/${q.sub}` : '';
+  const u = new URL(`https://old.reddit.com${base}/${q.sort === first ? '' : `${q.sort}/`}${page ? '' : '.json'}`);
   if (!page) { u.searchParams.set('limit', '25'); u.searchParams.set('raw_json', '1'); }
   if ((q.sort === 'top' || q.sort === 'controversial') && TIMES.includes(q.t)) u.searchParams.set('t', q.t);
   if (typeof q.after === 'string' && /^t3_[a-z0-9]{1,13}$/.test(q.after)) {
