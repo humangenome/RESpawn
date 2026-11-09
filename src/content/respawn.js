@@ -2048,6 +2048,7 @@
   document.addEventListener('toggle', (e) => {
     const d = e.target;
     if (d?.tagName !== 'DETAILS' || d.parentElement?.tagName !== 'SHREDDIT-COMMENT' || !cfg.enabled) return;
+    if (!d.open) foldInfo(d.parentElement);
     if (d.parentElement.rsQuiet) { d.parentElement.rsQuiet = false; return; }
     const id = d.parentElement.getAttribute('thingid');
     if (!id) return;
@@ -2107,6 +2108,7 @@
       const links = el('span', { class: 'rs-cacts' }, [el('a', { href: c.getAttribute('permalink') || '#', text: 'permalink' })]);
       if (+c.getAttribute('depth') > 0 && c.getAttribute('parentid')) links.append(parentLink(c));
       (c.querySelector(':scope > details [slot="actionRow"]') || meta).append(links);
+      if (c.querySelector(':scope > details:not([open])')) foldInfo(c);
     }
     kids(); updateNav(); moreReplies();
   };
@@ -2117,6 +2119,28 @@
     let n = c.querySelectorAll('shreddit-comment').length;
     for (const b of c.querySelectorAll('faceplate-partial[loading="action"] button')) n += +(b.textContent.match(/(\d+)\s+more repl/i) || [])[1] || 0;
     return n;
+  };
+  // A folded comment still says its points and how many replies sit under it, like RES ("-14 points ... (3 children)").
+  // Drawn into Reddit's name line, shown only while the comment is folded, and brought up to date each time it folds.
+  const foldInfo = (c) => {
+    const meta = c.querySelector(':scope > details > summary [slot="commentMeta"]');
+    const trig = meta?.querySelector('.author-hovercard-trigger');
+    const row = trig?.parentElement || meta?.querySelector('faceplate-timeago')?.closest('div'); // deleted comments have no name link
+    if (!row) return;
+    let pts = c.rsFoldPts, n = c.rsFoldKids;
+    if (!pts?.isConnected) {
+      pts = c.rsFoldPts = el('span', { class: 'rs-fold rs-fold-pts' });
+      n = c.rsFoldKids = el('span', { class: 'rs-fold rs-fold-kids' });
+      let at = trig;
+      while (at?.nextElementSibling?.matches('.rs-ut, .rs-aflair')) at = at.nextElementSibling;
+      if (at) at.after(pts); else row.append(pts);
+      row.append(n);
+    }
+    // Reddit gives no score for deleted comments; those show only their replies, as on old Reddit
+    const s = c.getAttribute('score');
+    pts.textContent = s === null || s === '' || Number.isNaN(+s) ? '' : `${(+s).toLocaleString()} point${Math.abs(+s) === 1 ? '' : 's'}`;
+    const k = kidsCount(c);
+    n.textContent = `(${k.toLocaleString()} ${k === 1 ? 'child' : 'children'})`;
   };
   const kidsPaint = () => {
     const b = document.getElementById('rs-kids');

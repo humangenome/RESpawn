@@ -233,6 +233,9 @@ html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-containe
 html.rs-on shreddit-comment[rs-new] { box-shadow: inset 3px 0 0 var(--rs-up); }
 .rs-badge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font: 700 11px/1.4 var(--rs-font); }
 .rs-badge.rs-is-new { background: color-mix(in srgb, var(--rs-up) 14%, transparent); color: var(--rs-up); }
+/* A folded comment's points and reply count (RES): only while it is folded */
+.rs-fold { display: none; flex: none; margin-left: 6px; color: var(--rs-weak); font: 400 12px/1.2 var(--rs-font); white-space: nowrap; }
+html.rs-on shreddit-comment > details:not([open]) > summary .rs-fold:not(:empty) { display: inline; }
 /* order: Reddit sometimes adds its own buttons after ours; ours always come last */
 .rs-cacts { display: inline-flex; align-items: center; margin-left: 4px; order: 1; }
 .rs-cacts a { padding: 2px 5px; border-radius: 6px; font: 700 12px/1.2 var(--rs-font); color: var(--rs-weak); text-decoration: none; }
