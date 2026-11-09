@@ -1449,7 +1449,8 @@
       const v = start + (state === 'UP' ? 1 : state === 'DOWN' ? -1 : 0);
       score.textContent = num(v);
       score.dataset.v = String(start); // its place on the page is judged without your own vote (see scorePaint)
-      score.title = `${v.toLocaleString()} point${v === 1 ? '' : 's'}${Number.isFinite(ratio) && ratio > 0 && ratio <= 1 ? `, ${Math.round(ratio * 100)}% upvoted` : ''}`;
+      score.rsTip = `${v.toLocaleString()} point${v === 1 ? '' : 's'}${Number.isFinite(ratio) && ratio > 0 && ratio <= 1 ? `, ${Math.round(ratio * 100)}% upvoted` : ''}`;
+      scoreTip(score);
     };
     const click = async (dir) => {
       if (!document.cookie.includes('csrf_token')) { toast('Log in to Reddit to vote.'); return; }
@@ -1483,8 +1484,17 @@
   // Scores colored by where they stand among the posts on this page (setting "Color the highest scores"): the top tenth
   // stands out, the next fifth is green, the bottom third is faint, below zero is red. A big subreddit and a small one
   // each get their own scale. Counted again as more posts load.
+  // Pointing at a colored score says what the color means.
+  const SCORE_NOTE = { 3: 'One of the highest scores on this page', 2: 'One of the highest scores on this page', 0: 'One of the lowest scores on this page' };
+  const scoreTip = (x) => {
+    const note = cfg.scoreColors && SCORE_NOTE[x.dataset.size];
+    x.title = note ? `${x.rsTip}\n${note}` : x.rsTip || '';
+  };
   const scorePaint = () => {
-    if (!cfg.scoreColors) return;
+    if (!cfg.scoreColors) {
+      if (scorePaint.n === -1) { scorePaint.n = 0; document.querySelectorAll('.rs-row .rs-score').forEach(scoreTip); } // just switched off
+      return;
+    }
     const S = [...document.querySelectorAll('.rs-row .rs-score')];
     if (S.length === scorePaint.n && S[0] === scorePaint.first) return;
     scorePaint.n = S.length; scorePaint.first = S[0];
@@ -1494,6 +1504,7 @@
     for (const x of S) {
       const v = +x.dataset.v || 0;
       x.dataset.size = v < 0 ? 'neg' : v <= low ? '0' : v >= top ? '3' : v >= good ? '2' : '1';
+      scoreTip(x);
     }
   };
   const densify = () => {
