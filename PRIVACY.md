@@ -32,8 +32,8 @@ RESpawn only talks to Reddit, from your browser, signed in as you, and only when
   requests Reddit's own buttons send.
 - It reads from Reddit: your name, your friends list, the subreddits you moderate, your saved
   comments (for the Dashboard), and public profile and subreddit details when you point at a name.
-- HOME and ALL show old Reddit's post lists. RESpawn reads them from Reddit (www.reddit.com and
-  old.reddit.com), signed in as you, only while you have those pages open. A small helper inside the
+- HOME, ALL and subreddit pages show old Reddit's post lists. RESpawn reads them from Reddit (www.reddit.com
+  and old.reddit.com), signed in as you, only while you have those pages open. A small helper inside the
   add-on does the old.reddit.com reading, because a page on www.reddit.com cannot; it reads nothing else.
 
 When you open a video or picture from another website in place (YouTube, Vimeo, Streamable, TikTok,
@@ -45,8 +45,8 @@ RESpawn does not use analytics, crash reporting or any other outside service.
 ## Permissions
 
 - **Access to www.reddit.com:** to add RESpawn's features to Reddit's pages.
-- **Access to old.reddit.com:** to read old Reddit's post lists for HOME and ALL (the new site no
-  longer has r/all).
+- **Access to old.reddit.com:** to read old Reddit's post lists for HOME, ALL and subreddit pages (the
+  new site no longer has r/all, and its other lists come in a different order).
 - **Storage:** to keep your settings in your browser.
 
 ## Questions

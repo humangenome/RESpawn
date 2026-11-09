@@ -8,7 +8,7 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, scoreColors: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, scoreColors: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, classicSubs: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
 
   // ---------- small helpers ----------
@@ -61,9 +61,15 @@
   // RESpawn starts as the page starts, so the sidebar, ads and the rest never appear and then vanish. The add-on's own
   // storage answers a moment too late for that, so a copy of just these on/off switches is kept in the site's storage.
   const BOOT_KEY = 'rs-boot';
-  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'scoreColors', 'classicHome'];
-  // Old Reddit's lists (see "old Reddit's lists" below) live on / : r/all at /#all..., Home at / unless that is switched off.
-  const isClassicUrl = (c) => !!c.enabled && location.pathname === '/' && !new URLSearchParams(location.search).has('feed') && (/^#all(\/|$)/.test(location.hash) || !!c.classicHome);
+  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'scoreColors', 'classicHome', 'classicSubs'];
+  // Old Reddit's lists (see "old Reddit's lists" below) live on / : r/all at /#all..., Home at / unless that is switched off;
+  // and on a subreddit's own list addresses (/r/kings/, /r/kings/new/, /r/kings/top/?t=week) unless that is switched off.
+  // Special lists that only look like subreddits, and Reddit's flair filter (?f=), keep Reddit's own page.
+  const subListOf = (path = location.pathname, search = location.search) => {
+    const m = path.match(/^\/r\/([A-Za-z0-9_]{2,21})(?:\/(hot|new|rising|controversial|top))?\/?$/);
+    return m && !/^(all|popular|mod|friends|random|randnsfw|myrandom)$/i.test(m[1]) && !new URLSearchParams(search).has('f') ? { sub: m[1], sort: m[2] || 'hot' } : null;
+  };
+  const isClassicUrl = (c) => !!c.enabled && ((location.pathname === '/' && !new URLSearchParams(location.search).has('feed') && (/^#all(\/|$)/.test(location.hash) || !!c.classicHome)) || (!!c.classicSubs && !!subListOf()));
   const setPageClasses = (c) => {
     const on = {
       'rs-on': !!c.enabled, 'rs-hide-ads': !!c.hideAds, 'rs-hide-badges': !!c.hideBadges, 'rs-hide-recent': !!c.hideRecent,
@@ -77,7 +83,7 @@
   let boot = cfg;
   try { boot = { ...cfg, ...(store ? JSON.parse(localStorage.getItem(BOOT_KEY) || '{}') : {}) }; } catch { /* keep the defaults */ }
   setPageClasses(boot);
-  html.classList.toggle('rs-classic', isClassicUrl(boot)); // Reddit's own Home feed never shows under it
+  html.classList.toggle('rs-classic', isClassicUrl(boot)); // Reddit's own Home (or subreddit) feed never shows under it
   html.classList.add(/^\/(r\/[^/]+\/|user\/[^/]+\/)?comments\//.test(location.pathname) ? 'rs-comments' : 'rs-feed'); // checked again once the page is in
 
   // ---------- light or dark (Reddit's Display Mode) ----------
@@ -184,6 +190,7 @@
       ['showShortcuts', 'Show shortcut bar'],
       ['scMode', 'Bar shows', [['mine', 'My list'], ['visits', 'Most visited']]],
       ['classicHome', "HOME shows old Reddit's list"],
+      ['classicSubs', "Subreddits show old Reddit's list"],
       ['linkDashboard', 'DASHBOARD link'],
       ['linkFriends', 'FRIENDS link'],
       ['linkMod', 'MOD and MODQUEUE links (moderators)'],
@@ -290,7 +297,7 @@
   };
   const cleanSettings = (o) => {
     const out = {};
-    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'scoreColors', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome']) if (typeof o[k] === 'boolean') out[k] = o[k];
+    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'scoreColors', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome', 'classicSubs']) if (typeof o[k] === 'boolean') out[k] = o[k];
     for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']]]) if (ok.includes(o[k])) out[k] = o[k];
     for (const [k, lo, hi] of [['filterScore', -99999, 99999], ['pauseEvery', 0, 99], ['maxVideos', 0, 99]]) if (Number.isFinite(o[k])) out[k] = Math.max(lo, Math.min(hi, Math.round(o[k])));
     if (Array.isArray(o.shortcuts)) {
@@ -1034,7 +1041,11 @@
   const sortTabs = () => {
     const old = document.getElementById('rs-sortbar');
     if (old?.isConnected && old.dataset.url === location.href) return;
-    if (html.classList.contains('rs-classic')) { if (old && !old.closest('#rs-classic')) old.remove(); return; } // old Reddit's list has its own bar
+    if (html.classList.contains('rs-classic')) { // old Reddit's list has its own bar
+      if (old && !old.closest('#rs-classic')) old.remove();
+      for (const f of document.querySelectorAll('#rs-filterline')) if (!f.closest('#rs-classic')) f.remove();
+      return;
+    }
     old?.remove(); document.getElementById('rs-filterline')?.remove();
     if (isCommentsPage()) return;
     // Subreddits and the home "Following" feed have a "Sort by" menu; "For You" only has the "View" menu.
@@ -1669,31 +1680,67 @@
     }
   };
 
-  // ---------- old Reddit's lists: HOME and ALL ----------
+  // ---------- old Reddit's lists: HOME, ALL and subreddits ----------
   // Reddit's new Home is its own pick of posts, and the new site has dropped r/all (its address now opens Home). So HOME
   // shows the list old Reddit shows (setting "HOME shows old Reddit's list", on by default) and ALL always shows old
   // Reddit's r/all, in RESpawn's rows with old Reddit's sorts. Addresses: / is Home (best); /#hot, /#top/week ... its
   // other sorts; /#all, /#all/new, /#all/top/week is r/all. Reddit's own Home stays at /?feed=home and /?feed=following.
-  // Best, hot, top and controversial come as list data. Reddit refuses that for new and rising, so those are read from
-  // old Reddit's ordinary page, and such a post's full details are fetched when you open it.
-  const CL_SORTS = { home: ['best', 'hot', 'new', 'rising', 'controversial', 'top'], all: ['hot', 'new', 'rising', 'controversial', 'top'] };
+  // A subreddit opens on new Reddit's "Best", a few posts at a time; old Reddit opens it on Hot, 25 at once, pinned posts
+  // first. So a subreddit's own list addresses (/r/kings/, /r/kings/new/, /r/kings/top/?t=week) show old Reddit's list
+  // instead of Reddit's feed (setting "Subreddits show old Reddit's list", on by default); its header and sidebar stay.
+  // Where each list comes from: a subreddit's hot, top and controversial are the very same list on this site (checked
+  // post by post against old Reddit), so they are read here. Home's lists come in a different order here, and Reddit
+  // refuses list data for new and rising, so those are read from old.reddit.com by the background helper (new, rising
+  // and Home's hot from old Reddit's ordinary page; such a post's full details are fetched when you open it).
+  // Old Reddit is closing: Reddit said (Sept 2026) it will soon open only for accounts that used it in the last six
+  // months, and its list data ends in March 2027. So when old Reddit says no, a list falls back to this site's own copy
+  // where there is one, and otherwise the page goes back to Reddit's own feed: never a dead end.
+  const CL_SORTS = { home: ['best', 'hot', 'new', 'rising', 'controversial', 'top'], all: ['hot', 'new', 'rising', 'controversial', 'top'], sub: ['hot', 'new', 'rising', 'controversial', 'top'] };
   const CL_TIMES = [['hour', 'Past hour'], ['day', 'Past 24 hours'], ['week', 'Past week'], ['month', 'Past month'], ['year', 'Past year'], ['all', 'All time']];
   const CL_LABEL = { best: 'Best', hot: 'Hot', new: 'New', rising: 'Rising', controversial: 'Controversial', top: 'Top' };
-  const clRoute = () => {
-    if (!isClassicUrl(cfg)) return null;
-    const parts = location.hash.replace(/^#/, '').split('/').filter(Boolean);
-    const list = parts[0] === 'all' ? 'all' : 'home';
-    // Old Reddit needs an account now, so a signed-out visitor keeps Reddit's own Home (ALL explains itself)
-    if (list === 'home' && document.querySelector('shreddit-app') && !loggedIn()) return null;
-    if (list === 'all') parts.shift();
-    const sort = CL_SORTS[list].includes(parts[0]) ? parts[0] : list === 'all' ? 'hot' : 'best';
-    const timed = sort === 'top' || sort === 'controversial';
-    return { list, sort, t: timed ? (CL_TIMES.some(([v]) => v === parts[1]) ? parts[1] : 'day') : '' };
+  // Old Reddit saying no to a signed-in account (its log-in page, or a refusal) is remembered for a few hours, so pages
+  // stop asking it first. A list that had to go back to Reddit's own feed stays that way in this tab for a while, so
+  // loading the page again shows Reddit's feed instead of asking again.
+  const OLD_OFF = 'rs-old-off', CL_BACK = 'rs-cl-back';
+  const oldOff = () => Date.now() - (+localStorage.getItem(OLD_OFF) || 0) < 6 * 3600e3;
+  const clBacked = () => { try { return JSON.parse(sessionStorage.getItem(CL_BACK) || '{}') || {}; } catch { return {}; } };
+  const clRoute = (c = cfg) => {
+    if (!isClassicUrl(c)) return null;
+    // Old Reddit needs an account now, so a signed-out visitor keeps Reddit's own Home or subreddit (ALL explains itself)
+    const out = !!document.querySelector('shreddit-app') && !loggedIn();
+    const s = subListOf();
+    let r;
+    if (s) {
+      if (out) return null;
+      const t = new URLSearchParams(location.search).get('t');
+      r = { list: 'sub', sub: s.sub, sort: s.sort, t: s.sort === 'top' || s.sort === 'controversial' ? (CL_TIMES.some(([v]) => v === t) ? t : 'day') : '' };
+    } else {
+      const parts = location.hash.replace(/^#/, '').split('/').filter(Boolean);
+      const list = parts[0] === 'all' ? 'all' : 'home';
+      if (list === 'home' && out) return null;
+      if (list === 'all') parts.shift();
+      const sort = CL_SORTS[list].includes(parts[0]) ? parts[0] : list === 'all' ? 'hot' : 'best';
+      const timed = sort === 'top' || sort === 'controversial';
+      r = { list, sort, t: timed ? (CL_TIMES.some(([v]) => v === parts[1]) ? parts[1] : 'day') : '' };
+    }
+    // ALL has nothing else to show; other lists old Reddit won't give (and this site has no copy of) stay Reddit's own
+    if (r.list !== 'all' && (Date.now() - (clBacked()[clHref(r)] || 0) < 10 * 60e3 || (oldOff() && !clWww(r)))) return null;
+    return r;
   };
   const clHref = (r) => {
     const tail = `${r.sort}${r.t ? `/${r.t}` : ''}`;
+    if (r.list === 'sub') return `/r/${r.sub}/${r.sort === 'hot' ? '' : `${r.sort}/`}${r.t ? `?t=${r.t}` : ''}`;
     if (r.list === 'all') return r.sort === 'hot' ? '/#all' : `/#all/${tail}`;
     return r.sort === 'best' ? '/' : `/#${tail}`;
+  };
+  // This site's own copy of a list, where there is one: a subreddit's hot, top and controversial (the same list as old
+  // Reddit's), and Home's best, top and controversial (near old Reddit's; used only when old Reddit won't answer).
+  const clWww = (r) => {
+    if (r.list === 'all' || r.sort === 'new' || r.sort === 'rising' || (r.list === 'home' && r.sort === 'hot')) return null;
+    const u = new URL(r.list === 'sub' ? `/r/${r.sub}/${r.sort === 'hot' ? '' : `${r.sort}/`}.json` : `/${r.sort}/.json`, location.origin);
+    u.searchParams.set('limit', '25'); u.searchParams.set('raw_json', '1');
+    if (r.t) u.searchParams.set('t', r.t);
+    return u;
   };
   const clMedia = (d) => d.crosspost_parent_list?.[0] || d;
   const clUrl = (x) => x.url_overridden_by_dest || x.url || '';
@@ -1730,7 +1777,7 @@
     set('domain', d.domain); set('author', d.author); set('subreddit-prefixed-name', d.subreddit_name_prefixed);
     set('created-timestamp', new Date((d.created_utc || 0) * 1000).toISOString());
     set('comment-count', d.num_comments ?? 0); set('score', d.score ?? 0); set('upvote-ratio', d.upvote_ratio);
-    set('nsfw', !!d.over_18); set('spoiler', !!d.spoiler); set('is-crosspost', xpost);
+    set('nsfw', !!d.over_18); set('spoiler', !!d.spoiler); set('is-crosspost', xpost); set('stickied', !!d.stickied);
     p.rsJson = d;
     return p;
   };
@@ -1756,6 +1803,7 @@
           ? { e: 'emoji', u: ((n.getAttribute('style') || '').match(/url\(\s*["']?([^"')\s]+)/) || [])[1]?.replace(/^\/\//, 'https://') || '' }
           : { e: 'text', t: n.textContent })),
         likes: mid?.classList.contains('likes') ? true : mid?.classList.contains('dislikes') ? false : null, saved: t.classList.contains('saved'),
+        stickied: t.classList.contains('stickied'),
       } });
     }
     const next = doc.querySelector('.next-button a')?.getAttribute('href') || '';
@@ -1767,22 +1815,30 @@
     if (!rt?.sendMessage) { rej(new Error('no helper')); return; }
     try { rt.sendMessage(msg, (a) => { const e = rt.lastError; if (e) rej(new Error(e.message)); else res(a); }); } catch (e) { rej(e); }
   });
-  const clFetch = async (r, after, count) => {
-    // Home's best, hot, top and controversial come straight from this site, signed in; the rest through the helper.
-    if (r.list === 'home' && !['new', 'rising'].includes(r.sort)) {
-      const u = new URL(r.sort === 'hot' ? '/.json' : `/${r.sort}/.json`, location.origin);
-      u.searchParams.set('limit', '25'); u.searchParams.set('raw_json', '1');
-      if (r.t) u.searchParams.set('t', r.t);
-      if (after) { u.searchParams.set('after', after); u.searchParams.set('count', String(count)); }
-      try {
-        const res = await fetch(u, { credentials: 'include', headers: { accept: 'application/json' } });
-        if (res.ok) { const j = await res.json(); if (j?.data) return { after: j.data.after || null, children: j.data.children || [] }; }
-      } catch { /* the helper below */ }
-    }
-    const a = await clAsk({ type: 'rs-list', list: r.list, sort: r.sort, t: r.t, after, count });
+  const clWwwGet = async (u, after, count) => {
+    if (after) { u.searchParams.set('after', after); u.searchParams.set('count', String(count)); }
+    const res = await fetch(u, { credentials: 'include', headers: { accept: 'application/json' } });
+    const j = res.ok ? await res.json().catch(() => null) : null;
+    if (!j?.data) throw new Error(`Reddit answered ${res.status}`);
+    return { after: j.data.after || null, children: j.data.children || [] };
+  };
+  const clOld = async (r, after, count) => {
+    const a = await clAsk({ type: 'rs-list', list: r.list, sub: r.sub, sort: r.sort, t: r.t, after, count });
     if (a?.data) return a.data;
     if (a?.html) return clFromPage(a.html);
-    throw new Error(a?.error || 'no answer');
+    const e = a?.error || 'no answer';
+    // its log-in page while you are logged in here, or no list where there always is one: old Reddit won't open for you
+    // (a subreddit can say no by itself: private, banned or quarantined, so only Home's and r/all's missing list count)
+    if ((e === 'login' && loggedIn()) || (e === 'no list' && r.list !== 'sub')) { try { localStorage.setItem(OLD_OFF, String(Date.now())); } catch { /* storage blocked */ } }
+    throw new Error(e);
+  };
+  const clFetch = async (r, after, count) => {
+    const www = clWww(r);
+    if (www && r.list === 'sub') return clWwwGet(www, after, count).catch(() => clOld(r, after, count));
+    if (!www || !oldOff()) {
+      try { return await clOld(r, after, count); } catch (e) { if (!www || (e.message === 'login' && !loggedIn())) throw e; }
+    }
+    return clWwwGet(www, after, count);
   };
   const clFull = async (d) => {
     const res = await fetch(`/comments/${d.id || d.name.replace(/^t3_/, '')}/.json?limit=1&raw_json=1`, { credentials: 'include', headers: { accept: 'application/json' } });
@@ -1896,8 +1952,14 @@
     const tabs = el('div', { id: 'rs-sorts', role: 'tablist', 'aria-label': 'Sort' });
     if (r.list === 'home') tabs.append(el('a', { href: '/?feed=home', class: 'rs-cl-feed', text: 'For You' }), el('a', { href: '/?feed=following', class: 'rs-cl-feed', text: 'Following' }), el('span', { class: 'rs-cl-div', 'aria-hidden': 'true' }));
     for (const s of CL_SORTS[r.list]) {
-      const on = s === r.sort, timed = s === 'top' || s === 'controversial';
-      tabs.append(el('a', { href: clHref({ ...r, sort: s, t: timed ? (r.t || 'day') : '' }), role: 'tab', 'aria-selected': String(on), class: on ? 'rs-cur' : null, text: CL_LABEL[s] }));
+      const on = s === r.sort, timed = s === 'top' || s === 'controversial', to = { ...r, sort: s, t: timed ? (r.t || 'day') : '' };
+      const tab = el('a', { href: clHref(to), role: 'tab', 'aria-selected': String(on), class: on ? 'rs-cur' : null, text: CL_LABEL[s] });
+      // pointing at a tab for a moment already asks for its list, so it is there (or nearly) when you click
+      if (!on) {
+        tab.addEventListener('pointerenter', () => { clearTimeout(tab.rsT); tab.rsT = setTimeout(() => { if (tab.isConnected && cl?.key !== clHref(to) && clFirst?.key !== clHref(to) && (clWww(to) || !oldOff())) { clFirst = { key: clHref(to), p: clFetch(to, null, 0), at: Date.now() }; clFirst.p.catch(() => { /* asked again on the click */ }); } }, 120); });
+        tab.addEventListener('pointerleave', () => clearTimeout(tab.rsT));
+      }
+      tabs.append(tab);
     }
     if (r.t) {
       const sel = el('select', { class: 'rs-cl-time', 'aria-label': 'Time range' });
@@ -1908,15 +1970,31 @@
     tabs.append(funnelBtn(), showImagesBtn());
     return el('div', { id: 'rs-sortbar', class: 'rs-cl-bar' }, [tabs]);
   };
-  let cl = null;
+  let cl = null, clFresh = false, clFirst = null;
+  const clKept = new Map(); // lists you left in this tab, by address: Back brings one back as you left it, not reloaded
+  const clHere = () => location.pathname + location.search + location.hash;
   const clBuild = (r, key) => {
-    const st = { r, key, after: null, count: 0, page: 0, loading: false, done: false, scroll: null, seen: new Set(), resume: false };
+    const st = { r, key, after: null, count: 0, page: 0, loading: false, done: false, y: null, seen: new Set(), resume: false };
     st.list = el('div', { class: 'rs-cl-list' });
     st.more = el('div', { class: 'rs-cl-more' });
     st.root = el('div', { id: 'rs-classic', 'data-list': r.list }, [clBar(r), filterLine(), st.list, st.more]);
     st.io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) clLoad(st); }, { rootMargin: '0px 0px 1500px 0px' });
     st.io.observe(st.more);
     return st;
+  };
+  // A list that can't be had goes back to Reddit's own feed: Reddit's page under it already holds that address's own
+  // feed (Reddit loads its page for every change of address, RESpawn's included), so the list just steps aside.
+  const clHandBack = (st) => {
+    const b = clBacked(); b[st.key] = Date.now();
+    let kept = true;
+    try { sessionStorage.setItem(CL_BACK, JSON.stringify(b)); } catch { kept = false; /* storage blocked: steps aside for now only */ }
+    // (should Reddit's page under it still show another sort, the address change having gone unnoticed, it loads again)
+    const d = [...document.querySelectorAll('shreddit-sort-dropdown[header-text="Sort by"] [slot="dropdown-items"] data[value]')].find((x) => x.querySelector('[aria-selected="true"], [rpl-selected]'));
+    const shown = (d?.getAttribute('value') || '').toLowerCase();
+    if (kept && st.r.list === 'sub' && st.r.sort !== 'hot' && shown && shown !== st.r.sort) { location.reload(); return; }
+    if (st === cl) { st.root.remove(); st.io.disconnect(); cl = null; }
+    html.classList.remove('rs-classic');
+    clMount();
   };
   const clLoad = async (st) => {
     if (st.loading || st.done || st !== cl || !st.root.isConnected) return;
@@ -1932,12 +2010,19 @@
     st.loading = true; st.resume = false;
     st.more.replaceChildren(el('div', { class: 'rs-cl-wait', role: 'status', text: 'Loading…' }));
     let d;
-    try { d = await clFetch(st.r, st.after, st.count); } catch (e) {
+    try {
+      const early = !st.page && clFirst?.key === st.key && Date.now() - clFirst.at < 30e3 ? clFirst.p : null; // asked for as the page started, or as you pointed at its tab
+      if (!st.page) clFirst = null;
+      d = await (early ? early.catch(() => clFetch(st.r, null, 0)) : clFetch(st.r, st.after, st.count));
+    } catch (e) {
       st.loading = false;
-      if (e?.message === 'login' || !loggedIn()) {
+      if (st !== cl) return;
+      // nothing from old Reddit or this site for a subreddit or Home: Reddit's own feed takes over
+      if (!st.page && st.r.list !== 'all' && loggedIn()) { clHandBack(st); return; }
+      if (!st.page && (e?.message === 'login' || !loggedIn() || oldOff())) {
         st.more.replaceChildren(el('div', { class: 'rs-cl-err', role: 'status' }, [
-          el('span', { text: st.r.list === 'all' ? 'r/all is only on old Reddit now, and old Reddit needs you to log in.' : 'This list comes from old Reddit, which needs you to log in.' }),
-          el('a', { class: 'rs-btn', href: '/login/', text: 'Log in' }), el('a', { class: 'rs-btn rs-btn-quiet', href: '/r/popular/', text: 'Popular' }),
+          el('span', { text: loggedIn() ? 'r/all is only on old Reddit now, and old Reddit would not open for your account.' : st.r.list === 'all' ? 'r/all is only on old Reddit now, and old Reddit needs you to log in.' : 'This list comes from old Reddit, which needs you to log in.' }),
+          loggedIn() ? null : el('a', { class: 'rs-btn', href: '/login/', text: 'Log in' }), el('a', { class: 'rs-btn rs-btn-quiet', href: '/r/popular/', text: 'Popular' }),
         ]));
         return;
       }
@@ -1955,27 +2040,44 @@
     st.more.replaceChildren(st.done ? el('div', { class: 'rs-cl-end', text: st.count ? 'No more posts.' : 'No posts here.' }) : '');
     if (!st.done && st.more.getBoundingClientRect().top < innerHeight + 1500) setTimeout(() => clLoad(st), 60); // still near the end
   };
-  // Shows, keeps or puts away old Reddit's list for the address now. A list you leave (opening a post) is kept, and
-  // Back brings it back where you were, without loading it again.
+  // Shows, keeps or puts away old Reddit's list for the address now. A list you leave (opening a post, or another sort)
+  // is kept, and Back brings it back where you were, without loading it again. A list opened by a click is fresh.
   const clMount = () => {
     const r = clRoute();
     html.classList.toggle('rs-classic', !!r);
-    if (!r) { if (cl?.root.isConnected) { cl.scroll = scrollY; cl.root.remove(); } return; }
+    if (!r) { cl?.root.remove(); return; }
     const main = document.getElementById('main-content');
     if (!main) return;
     const key = clHref(r);
     let fresh = false;
-    if (!cl || cl.key !== key) { if (cl) { cl.io.disconnect(); cl.root.remove(); } cl = clBuild(r, key); fresh = true; }
+    if (!cl || cl.key !== key || clFresh) {
+      if (cl) { cl.root.remove(); if (cl.key !== key) clKept.set(cl.key, cl); else cl.io.disconnect(); }
+      cl = (!clFresh && clKept.get(key)) || null;
+      clKept.delete(key); clFresh = false;
+      if (!cl) { cl = clBuild(r, key); fresh = true; } else { const sel = cl.root.querySelector('.rs-cl-time'); if (sel) sel.value = cl.r.t; } // its time menu may show the range picked when you left it
+      for (const [k, old] of clKept) { if (clKept.size <= 6) break; old.io.disconnect(); clKept.delete(k); }
+    }
+    cl.at = clHere();
     if (cl.root.parentElement === main) return;
     main.prepend(cl.root);
     paintFilters();
-    if (cl.scroll != null) { const y = cl.scroll; cl.scroll = null; requestAnimationFrame(() => scrollTo(0, y)); setTimeout(() => scrollTo(0, y), 400); }
-    else if (fresh && scrollY > 200) scrollTo(0, 0);
+    if (fresh) { if (scrollY > 200) scrollTo(0, 0); } else if (cl.y != null) { const y = cl.y; requestAnimationFrame(() => scrollTo(0, y)); setTimeout(() => scrollTo(0, y), 400); }
     if (!cl.page) clLoad(cl);
   };
-  // On Home only the part after # changes: Reddit re-routes any other change of address made on its page (to its own
-  // Home), but leaves # alone. Coming from Reddit's own Home (/?feed=...) the list opens fresh.
+  // where you are in the list, kept as you scroll (by the time a post opens, the list may already be off the page)
+  window.addEventListener('scroll', () => { if (cl?.root.isConnected && cl.at === clHere()) cl.y = scrollY; }, { passive: true });
+  // Opens a list. On Home only the part after # changes: Reddit re-routes any other change of address made on its page
+  // (to its own Home), but leaves # alone. Coming from Reddit's own Home (/?feed=...) the list opens fresh. On a
+  // subreddit the address changes at once and the list is asked for straight away, while Reddit loads its own page for
+  // the new address underneath, out of sight.
   const clGo = (href) => {
+    clFresh = true;
+    const u = new URL(href, location.href);
+    if (subListOf(u.pathname, u.search)) {
+      if (u.pathname + u.search !== location.pathname + location.search || location.hash) history.pushState(null, '', u.pathname + u.search);
+      clMount();
+      return;
+    }
     if (new URLSearchParams(location.search).has('feed')) { location.assign(href); return; }
     const h = href.includes('#') ? href.slice(href.indexOf('#')) : location.hash ? '#best' : '';
     if (h !== location.hash) location.hash = h; // hashchange then shows the list
@@ -1983,20 +2085,37 @@
   };
   window.addEventListener('popstate', () => clMount());
   window.addEventListener('hashchange', () => clMount());
+  // Reaching a list through a link (Reddit's own too, say the subreddit's name on a post) opens it fresh, at the top;
+  // Back and Forward bring back the one you left.
+  window.navigation?.addEventListener('navigate', (e) => {
+    if (e.navigationType === 'traverse') clFresh = false;
+    else if (e.navigationType === 'push' && e.destination?.url !== location.href) clFresh = true;
+  });
   // Links to these lists (HOME, ALL, the sort tabs) switch the list in place on Home, or open it fresh from other pages
-  // (Reddit's own page change would drop the part after #). Listened for on the window, ahead of Reddit's own link
-  // handling, which would otherwise turn them into its own Home.
+  // (Reddit's own page change would drop the part after #). A subreddit's sort tabs switch its list in place too.
+  // Listened for on the window, ahead of Reddit's own link handling, which would otherwise turn them into its own pages.
   window.addEventListener('click', (e) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !cfg.enabled) return;
     const a = e.target.closest?.('a[href]');
     if (!a || a.target === '_blank') return;
     const u = new URL(a.getAttribute('href'), location.href);
-    if (u.origin !== location.origin || u.pathname !== '/' || u.search) return;
+    if (u.origin !== location.origin) return;
+    const to = cfg.classicSubs && subListOf(u.pathname, u.search), now = subListOf();
+    if (to) {
+      if (!now || !cl?.root.isConnected || cl.r.list !== 'sub' || to.sub.toLowerCase() !== now.sub.toLowerCase()) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      clGo(u.pathname + u.search);
+      return;
+    }
+    if (u.pathname !== '/' || u.search) return;
     if (!/^#all(\/|$)/.test(u.hash) && !cfg.classicHome) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (location.pathname === '/') clGo(u.pathname + u.hash);
     else location.assign(u.pathname + u.hash);
   }, true);
+  // The first list is asked for as the page starts, alongside Reddit's own page, so it can show the moment the page is in.
+  // (A list handed back to Reddit's own feed, see above, lets that feed show from the start.)
+  { const r = clRoute(boot); if (r) { clFirst = { key: clHref(r), p: clFetch(r, null, 0), at: Date.now() }; clFirst.p.catch(() => { /* asked again when shown */ }); } else html.classList.remove('rs-classic'); }
 
   // ---------- page header + side clutter ----------
   const tidy = () => {
@@ -2907,7 +3026,10 @@
   const pageIn = new Promise((res) => { if (document.readyState !== 'loading') res(); else document.addEventListener('DOMContentLoaded', () => res(), { once: true }); });
   Promise.all([loadCfg(), pageIn]).then(() => {
     applyEnabled(); leftSlide(); tick();
-    new MutationObserver(() => { clearTimeout(tick.t); tick.t = setTimeout(tick, 120); }).observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(() => {
+      if (cl && !cl.root.isConnected && html.classList.contains('rs-classic')) clMount(); // Reddit swapped its page under the list: put it straight back
+      clearTimeout(tick.t); tick.t = setTimeout(tick, 120);
+    }).observe(document.body, { childList: true, subtree: true });
     setInterval(() => { if (location.href !== lastUrl) tick(); }, 800);
   });
   window.__respawn = { cfg: () => cfg, saveCfg };
