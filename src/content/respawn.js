@@ -618,8 +618,18 @@
     tab.onclick = (e) => {
       if (html.classList.contains('rs-left-open')) return shutNow();
       open();
-      // Opened from the keyboard (Enter or Space): the cursor moves into the menu, since the tab sits at the page's end
-      if (!e.detail) setTimeout(() => nav()?.querySelector('a[href], button')?.focus({ preventScroll: true }), 200);
+      // Opened from the keyboard (Enter or Space): the cursor moves into the menu, since the tab sits at the page's end.
+      // Reddit draws most of the menu inside its own sealed-off parts, which RESpawn can still look into.
+      // A link first (Home), not Reddit's own collapse button at the menu's top.
+      const first = (root, sel, depth = 0) => {
+        for (const x of root.querySelectorAll('*')) {
+          if (x.matches(sel) && x.getClientRects().length) return x;
+          const y = x.shadowRoot && depth < 3 && first(x.shadowRoot, sel, depth + 1);
+          if (y) return y;
+        }
+        return null;
+      };
+      if (!e.detail) setTimeout(() => { const n = nav(); (n && (first(n, 'a[href]') || first(n, 'button')))?.focus({ preventScroll: true }); }, 200);
     };
     const clickOpen = () => !cfg.navHover && html.classList.contains('rs-left-slide') && html.classList.contains('rs-left-open');
     document.addEventListener('click', (e) => {
