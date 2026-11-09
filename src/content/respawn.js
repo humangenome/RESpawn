@@ -2073,12 +2073,67 @@
     };
     return a;
   };
+  // Author flair right after the name, in old Reddit's small grey box. Reddit draws it on a second line and leaves it
+  // out on some comments (often a person's later comments in the same thread, and picture-only flair), so the post's
+  // comments are read once per post page (one request) and every comment by that person gets it.
+  const aflair = { post: '', byId: new Map(), byName: new Map(), done: false };
+  const aflairBox = (rich, text) => {
+    const s = el('span', { class: 'rs-aflair' });
+    const parts = Array.isArray(rich) && rich.length ? rich : [{ e: 'text', t: text || '' }];
+    for (const p of parts) {
+      if (p?.e === 'text' && p.t) s.append(p.t);
+      else if (p?.e === 'emoji' && FLAIR_IMG.test(p.u || '')) s.append(el('img', { class: 'rs-flair-emoji', src: p.u, alt: '', loading: 'lazy' }));
+    }
+    s.normalize();
+    if (s.firstChild?.nodeType === 3) s.firstChild.textContent = s.firstChild.textContent.trimStart();
+    if (s.lastChild?.nodeType === 3) s.lastChild.textContent = s.lastChild.textContent.trimEnd();
+    if (!s.textContent.trim() && !s.querySelector('img')) return null;
+    s.title = s.textContent.trim();
+    return s;
+  };
+  const paintFlair = (c) => {
+    if (c.hasAttribute('rs-aflair')) return;
+    const trig = c.querySelector(':scope > details > summary [slot="commentMeta"] .author-hovercard-trigger');
+    if (!trig) return;
+    const own = [...c.querySelectorAll('author-flair-event-handler')].find((f) => f.closest('shreddit-comment') === c);
+    const j = aflair.byId.get(c.getAttribute('thingid')) || aflair.byName.get(String(c.getAttribute('author')).toLowerCase());
+    // Reddit's own words when it drew them (text only), else the post's comment list; pictures only from the list
+    const domText = own && !own.querySelector('img') ? own.textContent.replace(/\s+/g, ' ').trim() : '';
+    const box = j ? aflairBox(j.rich, j.text) : domText ? aflairBox(null, domText) : null;
+    if (!box) return;
+    trig.after(box);
+    c.setAttribute('rs-aflair', '');
+  };
+  const loadFlairs = (postId) => {
+    if (aflair.post === postId) return;
+    aflair.post = postId; aflair.byId = new Map(); aflair.byName = new Map(); aflair.done = false;
+    fetch(`/comments/${postId.replace(/^t3_/, '')}/.json?limit=500&raw_json=1`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null)).then((d) => {
+        if (aflair.post !== postId || !Array.isArray(d)) return;
+        const walk = (L) => {
+          for (const k of L || []) {
+            const x = k?.kind === 't1' && k.data;
+            if (!x) continue;
+            if (x.author_flair_text || x.author_flair_richtext?.length) {
+              const f = { text: String(x.author_flair_text || ''), rich: x.author_flair_richtext };
+              aflair.byId.set(`t1_${x.id}`, f);
+              if (validUser(x.author)) aflair.byName.set(x.author.toLowerCase(), f);
+            }
+            walk(x.replies?.data?.children);
+          }
+        };
+        walk(d[1]?.data?.children);
+        aflair.done = true;
+        for (const c of document.querySelectorAll('shreddit-comment[data-rs]:not([rs-aflair])')) paintFlair(c);
+      }).catch(() => { /* Reddit's own flair stays */ });
+  };
   const comments = () => {
     const page = document.querySelector('shreddit-post[view-context="CommentsPage"]');
     if (!page) return;
     const op = page.getAttribute('author');
     const pa = page.querySelector('[slot="authorName"] a.author-name');
     if (pa && validUser(op) && !page.querySelector('[slot="authorName"] .rs-ut')) (pa.closest('faceplate-hovercard') || pa).after(nameTag(op));
+    if (cfg.enabled && page.id) loadFlairs(page.id);
     const key = `rs-visit-${page.getAttribute('id')}`;
     if (comments.started !== key) {
       nav?.remove(); nav = null; navI = -1;
@@ -2103,6 +2158,9 @@
       if (friendSet().has(author.toLowerCase())) c.setAttribute('rs-friend', '');
       const nm = meta.querySelector('.author-name-meta');
       if (nm && validUser(author)) (nm.closest('.author-hovercard-trigger') || nm).after(nameTag(author));
+      paintFlair(c);
+      // Reddit's "Top 1% Commenter" now sits in its own box under the name, outside the badges the setting hides
+      for (const b of meta.querySelectorAll('.author-hovercard-trigger img[alt^="Profile Badge"]')) b.closest('.author-hovercard-trigger').classList.add('rs-pbadge');
       if (ignored(author)) ignoreComment(c, true);
       if (comments.last && Date.parse(c.getAttribute('created')) > comments.last) { c.setAttribute('rs-new', ''); meta.append(el('span', { class: 'rs-badge rs-is-new', text: 'new' })); }
       const links = el('span', { class: 'rs-cacts' }, [el('a', { href: c.getAttribute('permalink') || '#', text: 'permalink' })]);
