@@ -253,7 +253,7 @@ html.rs-on.rs-classic #main-content > :not(#rs-classic) { display: none !importa
 /* a picture that takes more than a moment: the one on screen dims until the next is ready */
 .rs-gal-stage[aria-busy="true"] img { opacity: .55; transition: opacity .15s .12s; }
 .rs-gal-stage .rs-media-err { display: block; }
-/* Drag to resize (RES): a grip and, once resized, a back-to-normal button in the top corner while the pointer is on it */
+/* Drag to resize (RES): a grip on the bottom-right corner, right on its edge, shown while the pointer is on the picture */
 .rs-zoom { position: relative; width: fit-content; max-width: 100%; }
 .rs-zoom > a { display: block; }
 .rs-zoom.rs-sized > a > img, .rs-zoom.rs-sized > video { width: 100%; height: auto; max-height: none; }
@@ -261,14 +261,11 @@ html.rs-on.rs-classic #main-content > :not(#rs-classic) { display: none !importa
 .rs-zoom.rs-zoomed > a > img, .rs-zoom.rs-zoomed > video { width: 100%; height: auto; max-width: none; max-height: none; }
 .rs-frame { width: min(100%, 854px); }
 .rs-frame > .rs-yt { width: 100%; }
-.rs-zoom-tools { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 6px; opacity: 0; pointer-events: none; transition: opacity .12s; }
-.rs-zoom:hover > .rs-zoom-tools, .rs-zoom:focus-within > .rs-zoom-tools, html.rs-resizing .rs-zoomed > .rs-zoom-tools { opacity: 1; pointer-events: auto; }
-.rs-grip, .rs-zoom-reset { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; background: rgba(15, 20, 25, .62); color: #fff; box-shadow: 0 0 0 1px rgba(255, 255, 255, .28), 0 1px 4px rgba(0, 0, 0, .3); }
-.rs-grip { cursor: nwse-resize; }
-.rs-zoom-reset { cursor: pointer; }
-.rs-zoom-reset:hover, .rs-grip:hover { background: rgba(15, 20, 25, .82); }
-.rs-zoom-reset[hidden] { display: none; }
-.rs-grip svg, .rs-zoom-reset svg { width: 18px; height: 18px; }
+.rs-grip { position: absolute; right: -8px; bottom: -8px; z-index: 5; display: block; width: 26px; height: 26px; cursor: nwse-resize; opacity: 0; transition: opacity .12s; }
+.rs-zoom:hover > .rs-grip, html.rs-resizing .rs-zoomed > .rs-grip { opacity: 1; }
+.rs-grip svg { display: block; width: 26px; height: 26px; }
+/* a post's own video sits in Reddit's rounded box, which cuts off the corner: its lines move in, the grip stays put */
+html.rs-on .rs-pv > .rs-grip svg { transform: translate(-5px, -5px); }
 html.rs-resizing, html.rs-resizing * { cursor: nwse-resize !important; user-select: none !important; }
 html.rs-resizing iframe { pointer-events: none; }
 .rs-text .md-spoiler-text { border-radius: 3px; background: var(--rs-text); color: transparent; cursor: pointer; }

@@ -1931,21 +1931,19 @@
     if (!zoomed && dw * r > mediaMaxH()) dw = mediaMaxH() / r;
     return { w: Math.round(dw), h: Math.round(dw * r) };
   };
-  // Drag to resize (RES): dragging on a picture, on a video above its controls, or on the grip in the corner makes it
-  // bigger or smaller as you move, keeping its shape, up to the right edge of the window; the button beside the grip puts
-  // it back. A click without a drag still does what it always did (opens the picture, plays the video), and nothing gets
-  // selected or dragged out as a file. o: width() its width now, set(w), reset(), done() after a drag, surface (where a
-  // drag may start besides the grip), controls (the height of a video's own control bar, left to the video).
-  const GRIP_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11.5 4h4.5v4.5M8.5 16H4v-4.5M16 4l-5 5M4 16l5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const SHRINK_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 3.5V8h4.5M8 16.5V12H3.5M12 8l4.5-4.5M8 12l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // Drag to resize (RES): dragging on a picture, on a video above its controls, or on the grip at its bottom-right corner
+  // makes it bigger or smaller as you move, keeping its shape, up to the right edge of the window. The grip sits right on
+  // the corner's edge and shows while the pointer is on the picture; double-click it for the normal size again. A click
+  // without a drag still does what it always did (opens the picture, plays the video), and nothing gets selected or
+  // dragged out as a file. o: width() its width now, set(w), reset(), done() after a drag, surface (where a drag may
+  // start besides the grip), controls (the height of a video's own control bar, left to the video).
+  // The grip is 26 px square and hangs 8 px past the corner, so its lines sit just inside the corner (18, 18).
+  const GRIP_ICON = '<svg viewBox="0 0 26 26" aria-hidden="true"><path d="M17 8 8 17M17 13l-4 4" fill="none" stroke="rgba(0,0,0,.55)" stroke-width="4" stroke-linecap="round"/><path d="M17 8 8 17M17 13l-4 4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>';
   const zoomable = (wrap, o) => {
-    const reset = el('button', { type: 'button', class: 'rs-zoom-reset', title: 'Back to normal size', 'aria-label': 'Back to normal size', html: SHRINK_ICON, hidden: true });
-    const grip = el('span', { class: 'rs-grip', title: 'Drag to resize', html: GRIP_ICON });
+    const grip = el('span', { class: 'rs-grip', title: 'Drag to resize · double-click for normal size', html: GRIP_ICON });
     wrap.classList.add('rs-zoom');
-    wrap.append(el('div', { class: 'rs-zoom-tools' }, [reset, grip]));
-    const back = () => { wrap.classList.remove('rs-zoomed'); reset.hidden = true; o.reset(); };
-    reset.onclick = (e) => { e.preventDefault(); e.stopPropagation(); back(); };
-    grip.addEventListener('dblclick', back);
+    wrap.append(grip);
+    grip.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); wrap.classList.remove('rs-zoomed'); o.reset(); });
     const begin = (e, onGrip) => {
       if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       if (!onGrip && o.controls && e.clientY > o.surface.getBoundingClientRect().bottom - o.controls) return;
@@ -1960,7 +1958,7 @@
         last = ev;
         if (!moved) {
           if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
-          moved = true; html.classList.add('rs-resizing'); wrap.classList.add('rs-zoomed'); reset.hidden = false;
+          moved = true; html.classList.add('rs-resizing'); wrap.classList.add('rs-zoomed');
         }
         if (!frame) frame = requestAnimationFrame(apply);
       };
