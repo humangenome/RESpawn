@@ -13,7 +13,7 @@ rm -rf "$base/chrome" "$base/firefox"
 for target in chrome firefox; do
   out="$base/$target"
   mkdir -p "$out"
-  cp src/content/respawn.js src/content/respawn.css "$out"/
+  cp src/content/respawn.js src/content/respawn.css src/content/yt-quality.js "$out"/
   cp src/background/background.js "$out"/
   [ -d extension/icons ] && cp -r extension/icons "$out"/
   python3 - "$target" "$out" "$store" <<'PY'
@@ -41,7 +41,7 @@ if not store and os.path.isfile("local/defaults.json"):
     m["content_scripts"][0]["js"] = ["defaults.js"] + m["content_scripts"][0]["js"]
 json.dump(m, open(os.path.join(out, "manifest.json"), "w"), indent=2)
 PY
-  node --check "$out/respawn.js"; node --check "$out/background.js"
+  node --check "$out/respawn.js"; node --check "$out/background.js"; node --check "$out/yt-quality.js"
 done
 
 if [ $store = 1 ]; then
