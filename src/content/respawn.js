@@ -3206,6 +3206,8 @@
   // their usual job (scrolling).
   window.addEventListener('keydown', (e) => {
     if (!cfg.enabled || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing || skipKey(e)) return;
+    const t = e.composedPath()[0]; // keys meant for something else that has the focus (a menu, the settings window) stay theirs
+    if (t && t !== document.body && t !== html && !t.closest?.('.rs-row')) return;
     const g = (galHover && shown(galHover.root) && galHover) || (sel?.classList?.contains('rs-row') && [...sel.querySelectorAll('.rs-box:not([hidden]) .rs-gal')].find(shown)?.rsGal);
     if (!g) return;
     e.preventDefault(); e.stopImmediatePropagation();
