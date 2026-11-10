@@ -1895,6 +1895,7 @@
     if (h === 'vimeo.com' && (m = p.match(/^\/(\d{5,})(?:\/([a-f0-9]{6,}))?\/?$/))) return { src: `${VIMEO_ORIGIN}/video/${m[1]}?autoplay=1${m[2] ? `&h=${m[2]}` : ''}`, origin: VIMEO_ORIGIN };
     if (h === 'player.vimeo.com' && (m = p.match(/^\/video\/(\d{5,})/))) return { src: `${VIMEO_ORIGIN}/video/${m[1]}?autoplay=1`, origin: VIMEO_ORIGIN };
     if (/^(v3\.)?redgifs\.com$/.test(h) && (m = p.match(/^\/(?:watch|ifr)\/([a-z]+)/i))) return { src: `https://www.redgifs.com/ifr/${m[1].toLowerCase()}`, plays: true };
+    if (h === 'i.redgifs.com' && (m = p.match(/^\/i\/([a-z]+)\.(?:jpe?g|png|webp)$/i))) return { src: `https://www.redgifs.com/ifr/${m[1].toLowerCase()}`, plays: true }; // its still picture: the moving one
     if (h === 'tiktok.com' && (m = p.match(/\/video\/(\d{8,})/))) return { src: `https://www.tiktok.com/embed/v2/${m[1]}`, tall: true };
     if (h === 'instagram.com' && (m = p.match(/^\/(p|reel|tv)\/([\w-]{5,})/))) return { src: `https://www.instagram.com/${m[1]}/${m[2]}/embed/`, tall: true };
     return null;
@@ -2120,7 +2121,8 @@
   const player = (box, src, opts, close, title, quiet) => {
     // opened by "Show images": the player waits for its play button
     if (quiet) src = src.replace(/([?&])autoplay=1(&|$)/, (m, a, b) => (b ? a : '')).replace(/[?&]$/, '');
-    const f = el('iframe', { class: `rs-yt${opts.tall ? ' rs-tall' : ''}`, src, title, allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen' });
+    // opened by "Show images", a player may not start with sound by itself (a muted start is still allowed)
+    const f = el('iframe', { class: `rs-yt${opts.tall ? ' rs-tall' : ''}`, src, title, allow: `${quiet ? '' : 'autoplay; '}encrypted-media; picture-in-picture; fullscreen` });
     f.rsOrigin = opts.origin || '';
     if (opts.origin === YT_ORIGIN) f.rsPause = () => frameSay(f, { event: 'command', func: 'pauseVideo', args: [] });
     else if (opts.origin === VIMEO_ORIGIN) f.rsPause = () => frameSay(f, { method: 'pause' });
@@ -2142,13 +2144,14 @@
   }, 0));
   // The address a post's content comes from (its link, or for a crosspost the original's)
   const hrefOf = (post) => (post.rsJson ? clUrl(clMedia(post.rsJson)) : post.getAttribute('content-href') || '');
-  // What "Show images" may open: pictures, galleries, Reddit's videos and the outside players that wait for their play
-  // button (not ones that start by themselves, such as RedGifs, or players RESpawn knows nothing about).
+  // What "Show images" may open: pictures, galleries, Reddit's videos, the outside players that wait for their play button,
+  // and RedGifs (they play by themselves, like a GIF: opened by "Show images" a player may not start with sound, so they
+  // play silently until you turn the sound on). Not Reddit's own player pages or players RESpawn knows nothing about.
   const quietOk = (post, kind) => {
     if (kind === 'image' || kind === 'gallery' || kind === 'video' || kind === 'youtube') return true;
     if (kind !== 'embed') return false;
     const e = embedOf(hrefOf(post), post.rsJson ? clMedia(post.rsJson).name : post.id);
-    return !!e && !/redgifs\.com|redditmedia\.com/.test(e.src);
+    return !!e && !/redditmedia\.com/.test(e.src);
   };
   const fillBox = (box, post, kind, close, quiet) => {
     if (post.rsJson) { clFill(box, post, kind, close, quiet); box.dataset.filled = '1'; return; }

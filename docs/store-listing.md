@@ -57,6 +57,7 @@ Not made by the RES team, and not affiliated with or endorsed by Reddit. Free an
 - **Permission "storage":** Keeps the user's RESpawn settings (switches, shortcuts, tags, hide lists) in the browser.
 - **Host access www.reddit.com:** RESpawn works only on Reddit's pages, where it adds its features to the page.
 - **Host access www.youtube-nocookie.com (embedded player only):** When the user opens a YouTube video in place on Reddit, RESpawn shows it in YouTube's privacy-mode player. A small script inside that player, only when it sits on www.reddit.com, picks the highest quality the video offers (YouTube otherwise picks by the player's size, e.g. 720p for a 2160p video). It reads and sends nothing.
+- **Host access www.redgifs.com (embedded player only):** RedGifs' embedded player always starts with its small file (854x480). When the user opens a RedGifs post in place on Reddit, a small script inside that player, only when it sits on www.reddit.com, presses the player's own HD button and keeps the sound as it was. It reads and sends nothing.
 - **Host access old.reddit.com:** RESpawn's HOME, ALL and subreddit pages show old Reddit's post lists (the new site no longer has r/all, and its other lists come in a different order). The add-on's background helper reads those lists from old.reddit.com, signed in as the user, only when the user opens those pages; it reads no other address.
 - **Remote code:** No. All code is in the package.
 - **Data collected:** None. Nothing leaves the browser except the user's own actions on Reddit, sent to Reddit.
