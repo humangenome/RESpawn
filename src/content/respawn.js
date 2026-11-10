@@ -871,11 +871,83 @@
     if (last < text.length) frag.append(text.slice(last));
     return frag;
   };
-  const joinButton = () => document.querySelector('shreddit-subreddit-header-buttons')?.shadowRoot?.querySelector('shreddit-join-button');
+  // Reddit's own Join button for this subreddit: in the header on its pages, in the side box's shadow on post pages
+  // (that one was missed before, so the card showed no Join or Leave on posts).
+  const joinButton = (sub) => {
+    const L = [document.querySelector('shreddit-subreddit-header-buttons')?.shadowRoot?.querySelector('shreddit-join-button'),
+      document.querySelector('#right-sidebar-container shreddit-subreddit-header')?.shadowRoot?.querySelector('shreddit-join-button')];
+    return L.find((b) => b && (!sub || String(b.getAttribute('name')).toLowerCase() === sub.toLowerCase())) || null;
+  };
+  const paintJoin = (card) => {
+    const jb = joinButton(card.dataset.sub), join = card.querySelector('.rs-ab-join');
+    const on = !!jb?.hasAttribute('subscribed'), text = jb ? (on ? 'Leave' : 'Join') : '';
+    if (join.hidden !== !jb) join.hidden = !jb;
+    if (jb && join.textContent !== text) { join.textContent = text; join.setAttribute('aria-pressed', String(on)); join.title = on ? `Leave r/${card.dataset.sub}` : `Join r/${card.dataset.sub}`; }
+  };
+  // "Show my flair" (old Reddit's sidebar line): your name with your flair here, a switch, and "edit".
+  // What Reddit has on file comes from the subreddit's about.json. Reddit's own flair box can't be pressed for the
+  // switch: it starts unticked even while your flair shows (checked 11/9 against about.json). So the switch sends the
+  // request that box sends when only its "Show my user flair" tick changes (watched 11/9: shouldUpdateUserFlair false,
+  // so the flair itself is never touched). "edit" opens Reddit's own flair box under this card; while it is closed it
+  // is tucked away, so the two don't repeat each other.
+  const myFlair = { sub: '', d: null, failed: false };
+  const flairWidget = (sub) => {
+    const f = document.querySelector('#right-sidebar-container community-author-flair');
+    return f && String(f.getAttribute('subreddit-name')).toLowerCase() === sub.toLowerCase() ? f : null;
+  };
+  const loadMyFlair = (card) => {
+    const sub = card.dataset.sub;
+    if (myFlair.sub === sub || !loggedIn()) return;
+    myFlair.sub = sub; myFlair.d = null; myFlair.failed = false;
+    fetch(`/r/${sub}/about.json?raw_json=1`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((j) => {
+      if (myFlair.sub !== sub) return;
+      if (j?.data) myFlair.d = j.data; else myFlair.failed = true; // no flair line; Reddit's own section stays
+      paintFlairRow(card);
+    });
+  };
+  const paintFlairRow = (card) => {
+    const row = card.querySelector('.rs-ab-flair');
+    if (!row) return;
+    const sub = card.dataset.sub, f = flairWidget(sub), d = myFlair.sub === sub ? myFlair.d : null;
+    const open = f?.getAttribute('aria-expanded') === 'true';
+    if (card.rsFlairOpen && !open) { myFlair.sub = ''; loadMyFlair(card); } // you may have changed it in Reddit's box
+    card.rsFlairOpen = open;
+    const show = !!(f && d && (d.user_can_flair_in_sr || d.user_flair_text));
+    if (row.hidden !== !show) row.hidden = !show;
+    // Reddit's own "User flair" section, and the divider that would then start its box; tucked away already while
+    // about.json is on its way, so the side column doesn't jump when the line arrives
+    const sec = f?.closest('#right-sidebar-container .px-md');
+    const tuck = !open && (show || (!!f && !d && !myFlair.failed && myFlair.sub === sub && loggedIn()));
+    sec?.classList.toggle('rs-hide-flairsec', tuck);
+    let hr = sec?.nextElementSibling;
+    while (hr && hr.tagName !== 'HR' && !hr.getBoundingClientRect().height) hr = hr.nextElementSibling;
+    for (const x of document.querySelectorAll('.rs-hide-flairhr')) if (x !== hr || !tuck) x.classList.remove('rs-hide-flairhr');
+    if (hr?.tagName === 'HR' && tuck) hr.classList.add('rs-hide-flairhr');
+    if (!show || row.dataset.busy) return;
+    const on = d.user_sr_flair_enabled !== false, name = f.getAttribute('username') || '';
+    const sig = JSON.stringify([name, on, d.user_flair_text, d.user_flair_richtext]);
+    if (row.dataset.sig === sig) return;
+    row.dataset.sig = sig;
+    row.querySelector('input').checked = on;
+    row.classList.toggle('rs-off', !on);
+    const me = row.querySelector('.rs-ab-fl-me');
+    me.replaceChildren(el('span', { class: 'rs-ab-fl-name', text: name }), aflairBox(d.user_flair_richtext, d.user_flair_text) || '', me.rsEdit);
+  };
+  const flairEnable = async (card, on) => {
+    const row = card.querySelector('.rs-ab-flair'), d = myFlair.d, f = flairWidget(card.dataset.sub);
+    if (!d || !f || row.dataset.busy || needLogin('change your flair')) { paintFlairRow(card); return; }
+    row.dataset.busy = '1';
+    try {
+      await gql('UpdateUserFlairAndEnabledStatus', { subredditId: f.getAttribute('subreddit-id') || d.name, isEnabled: on, flairTemplateId: null, text: null, shouldUpdateUserFlair: false, shouldUpdateUserFlairEnabledStatus: true, username: f.getAttribute('username') }, true);
+      d.user_sr_flair_enabled = on;
+    } catch { toast('Reddit did not take that. Try again.'); }
+    delete row.dataset.busy; delete row.dataset.sig;
+    paintFlairRow(card);
+  };
   const paintCard = (card) => {
     const sub = card.dataset.sub;
-    const jb = joinButton(), join = card.querySelector('.rs-ab-join');
-    if (jb) { const on = jb.hasAttribute('subscribed'); join.hidden = false; join.textContent = on ? 'Leave' : 'Join'; join.setAttribute('aria-pressed', String(on)); } else join.hidden = true;
+    paintJoin(card);
+    paintFlairRow(card);
     const sc = card.querySelector('.rs-ab-sc'), inList = scIndex(sub) >= 0;
     sc.textContent = inList ? '− Shortcut' : '+ Shortcut'; sc.setAttribute('aria-pressed', String(inList));
     card.querySelector('.rs-ab-style input').checked = subStyleOn(sub.toLowerCase());
@@ -885,7 +957,7 @@
     let card = document.getElementById('rs-about');
     if (!hdr) { card?.remove(); return; }
     const sub = hdr.getAttribute('name');
-    if (card?.isConnected && card.dataset.sub === sub) return;
+    if (card?.isConnected && card.dataset.sub === sub) { paintJoin(card); paintFlairRow(card); return; } // Reddit's parts can change (or arrive late)
     card?.remove();
     const g = (k) => hdr.getAttribute(k) || '';
     // The community icon: the picture Reddit marks as this community's icon (header, or the post's own header on
@@ -903,15 +975,27 @@
     more.onclick = () => { const open = desc.classList.toggle('rs-open'); more.textContent = open ? 'Show less' : 'Show more'; };
     const join = el('button', { type: 'button', class: 'rs-ab-join rs-btn' });
     join.onclick = () => {
-      const jb = joinButton();
+      const jb = joinButton(sub);
       if (!jb) return;
       (jb.shadowRoot?.querySelector('button') || jb).click();
-      setTimeout(() => paintCard(card), 800); setTimeout(() => paintCard(card), 2500);
+      setTimeout(() => paintJoin(card), 800); setTimeout(() => paintJoin(card), 2500);
     };
     const sc = el('button', { type: 'button', class: 'rs-ab-sc rs-btn' });
     sc.onclick = () => { scToggle(sub); paintCard(card); };
     const style = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
     style.onchange = () => setSubStyle(sub.toLowerCase(), style.checked);
+    const flairSw = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
+    flairSw.onchange = () => flairEnable(card, flairSw.checked);
+    const flairMe = el('div', { class: 'rs-ab-fl-me' });
+    flairMe.rsEdit = el('a', { href: '#', role: 'button', class: 'rs-ab-fl-edit', text: 'edit', title: 'Change your flair in this subreddit' });
+    flairMe.rsEdit.onclick = (e) => {
+      e.preventDefault();
+      const f = flairWidget(sub);
+      if (!f) return;
+      if (f.getAttribute('aria-expanded') !== 'true') (f.querySelector('[slot="toggle"] button') || f.shadowRoot?.querySelector('[role="button"]'))?.click();
+      paintFlairRow(card);
+      requestAnimationFrame(() => f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+    };
     card.append(
       el('div', { class: 'rs-ab-head' }, [
         iconSrc ? el('img', { src: iconSrc, alt: '' }) : el('span', { class: 'rs-ms-noicon', text: 'r/' }),
@@ -928,12 +1012,14 @@
       ]),
       created ? el('div', { class: 'rs-ab-created', text: `Created ${created}` }) : null,
       el('div', { class: 'rs-ab-acts' }, [join, sc]),
+      el('div', { class: 'rs-ab-flair', hidden: true }, [el('label', { class: 'rs-ab-fl-top' }, [el('span', { text: 'Show my flair' }), flairSw]), flairMe]),
       el('label', { class: 'rs-ab-style' }, [el('span', { text: 'Use subreddit style' }), style]),
     );
     const top = document.getElementById('right-sidebar-contents') || hdr.closest('#right-sidebar-container');
     const info = document.getElementById('rs-postinfo');
     if (info?.isConnected) info.after(card); else top.prepend(card);
     hdr.classList.add('rs-hide-about');
+    loadMyFlair(card);
     paintCard(card);
     requestAnimationFrame(() => { more.hidden = desc.scrollHeight <= desc.clientHeight + 2; });
   };

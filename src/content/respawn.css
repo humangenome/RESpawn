@@ -572,6 +572,8 @@ html.rs-on:not(.rs-sub-plain) #subreddit-banner-img { height: 64px !important; m
 html.rs-on .rs-hide-about { display: none !important; }
 /* the divider under Reddit's own About box stays behind when it is hidden, leaving an empty band above "User flair" */
 html.rs-on .rs-hide-about ~ hr:first-of-type { display: none !important; }
+/* and the box's own top padding doubled up with the hidden About box's, an empty grey band: "User flair" starts the box */
+html.rs-on .py-md:has(> .rs-hide-about) { padding-top: 0 !important; }
 html:not(.rs-on) #rs-about { display: none !important; }
 #rs-about { margin: 12px 0 8px; padding: 14px 16px; border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); color: var(--rs-text); font: 400 14px/1.45 var(--rs-font); }
 #rs-about, #rs-about * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
@@ -594,6 +596,18 @@ html:not(.rs-on) #rs-about { display: none !important; }
 .rs-ab-join[aria-pressed="false"]:hover { filter: brightness(1.15); background: var(--rs-text); }
 .rs-ab-join[hidden] { display: none; }
 .rs-ab-style { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rs-line); color: var(--rs-text); font-size: 14px; cursor: pointer; }
+.rs-ab-flair { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rs-line); }
+.rs-ab-flair[hidden] { display: none; }
+.rs-ab-fl-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--rs-text); font-size: 14px; cursor: pointer; }
+.rs-ab-fl-me { display: flex; align-items: center; min-width: 0; margin-top: 4px; color: var(--rs-weak); font-size: 13px; }
+.rs-ab-fl-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--rs-text); font-weight: 600; }
+.rs-ab-fl-me .rs-aflair { max-width: 150px; }
+.rs-ab-flair.rs-off .rs-ab-fl-name, .rs-ab-flair.rs-off .rs-aflair { opacity: .5; }
+.rs-ab-fl-edit { flex: none; margin-left: 8px; color: var(--rs-weak); font: 700 12px/1.2 var(--rs-font); text-decoration: none; }
+.rs-ab-fl-edit:hover { color: var(--rs-text); text-decoration: underline; }
+.rs-ab-flair + .rs-ab-style { margin-top: 10px; }
+/* Reddit's own "User flair" section repeats the card's flair line: tucked away until "edit" opens it */
+html.rs-on .rs-hide-flairsec, html.rs-on .rs-hide-flairhr { display: none !important; }
 #rs-about .rs-switch-input { box-sizing: border-box !important; width: 40px !important; min-width: 40px !important; height: 24px !important; padding: 0 !important; border: 0 !important; }
 /* Reddit lifts the header row 36px to overlap the banner (and pulls what follows up with it); without the banner, push the row down by the same amount */
 html.rs-on.rs-sub-plain .masthead section.relative[class*="-top-"] { margin-top: 36px !important; }
