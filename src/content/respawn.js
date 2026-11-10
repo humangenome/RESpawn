@@ -2110,7 +2110,7 @@
   const player = (box, src, opts, close, title, quiet) => {
     // opened by "Show images": the player waits for its play button
     if (quiet) src = src.replace(/([?&])autoplay=1(&|$)/, (m, a, b) => (b ? a : '')).replace(/[?&]$/, '');
-    const f = el('iframe', { class: `rs-yt${opts.tall ? ' rs-tall' : ''}`, src, title, allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen', allowfullscreen: true });
+    const f = el('iframe', { class: `rs-yt${opts.tall ? ' rs-tall' : ''}`, src, title, allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen' });
     f.rsOrigin = opts.origin || '';
     if (opts.origin === YT_ORIGIN) f.rsPause = () => frameSay(f, { event: 'command', func: 'pauseVideo', args: [] });
     else if (opts.origin === VIMEO_ORIGIN) f.rsPause = () => frameSay(f, { method: 'pause' });
