@@ -2566,10 +2566,94 @@
     };
     return a;
   };
+  // The rest of old RES's row under each comment. Each link uses Reddit's own part where there is one (its Reply button,
+  // Report in its "..." menu); save sends the same request as Reddit's own Save. Reddit's comment list, read once per post
+  // page (see loadFlairs), says which comments you saved and holds each comment as written, for "source".
+  const ownOf = (c, css, root = c) => [...root.querySelectorAll(css)].find((x) => x.closest('shreddit-comment') === c);
+  const linkBtn = (text, title, fn, cls) => {
+    const a = el('a', { href: '#', role: 'button', class: cls || null, text, title });
+    a.onclick = (e) => { e.preventDefault(); fn(a); };
+    return a;
+  };
+  // "source": the comment as its writer typed it (markdown), in a box under the comment to read or copy
+  const srcToggle = async (c, a) => {
+    if (c.rsSrc?.isConnected) { c.rsSrc.remove(); c.rsSrc = null; a.setAttribute('aria-expanded', 'false'); return; }
+    const body = ownOf(c, '[slot="comment"]');
+    if (!body) return;
+    const id = c.getAttribute('thingid');
+    const ta = el('textarea', { class: 'rs-src-text', readonly: true, spellcheck: 'false', rows: '2', 'aria-label': 'Comment source' });
+    const copy = el('button', { type: 'button', class: 'rs-btn', text: 'Copy' });
+    const close = el('button', { type: 'button', class: 'rs-btn', text: 'Close' });
+    copy.onclick = async () => toast((await copyText(ta.value)) ? 'Source copied.' : 'Press Ctrl+C to copy it.');
+    close.onclick = () => srcToggle(c, a);
+    const box = c.rsSrc = el('div', { class: 'rs-src' }, [ta, el('div', { class: 'rs-src-bar' }, [copy, close])]);
+    body.after(box);
+    a.setAttribute('aria-expanded', 'true');
+    let text = aflair.body.get(id);
+    if (typeof text !== 'string') {
+      ta.value = 'Loading…'; copy.disabled = true;
+      try {
+        const j = await (await fetch(`${c.getAttribute('permalink')}.json?raw_json=1&limit=1&depth=1`, { credentials: 'include' })).json();
+        const x = j?.[1]?.data?.children?.[0]?.data;
+        if (x?.name === id && typeof x.body === 'string') { text = x.body; aflair.body.set(id, text); }
+      } catch { /* said below */ }
+      if (c.rsSrc !== box) return;
+      if (typeof text !== 'string') { ta.value = 'Reddit did not send this comment. Try again.'; return; }
+    }
+    ta.value = text; copy.disabled = false;
+    ta.style.height = `${Math.min(ta.scrollHeight + 2, 320)}px`;
+  };
+  const paintSave = (a) => { const on = savedComments.has(a.dataset.id); setText(a, on ? 'unsave' : 'save'); a.title = on ? 'Remove from your saved comments' : 'Save this comment'; };
+  const paintSaves = (id) => document.querySelectorAll(id ? `.rs-csave[data-id="${id}"]` : '.rs-csave').forEach(paintSave);
+  const saveToggle = async (c, a) => {
+    const id = c.getAttribute('thingid');
+    if (a.dataset.busy || needLogin('save')) return;
+    const on = !savedComments.has(id);
+    a.dataset.busy = '1';
+    try {
+      await gql('UpdateCommentSaveState', { commentId: id, saveState: on ? 'SAVED' : 'NONE' });
+      if (on) savedComments.add(id); else savedComments.delete(id);
+      paintSaves(id);
+    } catch { toast('Reddit did not take that. Try again.'); }
+    delete a.dataset.busy;
+  };
+  // Reddit's own report window, from the Report item in its "..." menu for this comment
+  const reportOpen = (c) => {
+    const menu = ownOf(c, 'shreddit-overflow-menu')?.shadowRoot;
+    const item = menu?.querySelector('faceplate-tracker[noun="report"] li, li.report-menu-button');
+    if (!item) { toast('Reddit has not finished loading that comment. Try again.'); return; }
+    menu.querySelector('#overflow-trigger')?.click(); // open the menu first, as a click would
+    requestAnimationFrame(() => (item.querySelector('[tabindex]') || item).click());
+  };
+  // Reddit's own Reply button: it opens the reply box under this comment with the cursor in it
+  const replyOpen = (c) => {
+    const b = ownOf(c, '[slot="comment-reply"] button');
+    if (b) b.click(); else toast('Reddit has not finished loading that comment. Try again.');
+  };
+  // "hide child comments" folds this comment's replies only (RES); the comment itself stays open
+  const kidsToggle = (c, a) => {
+    const shut = c.toggleAttribute('rs-kids-shut');
+    setText(a, shut ? 'show child comments' : 'hide child comments');
+    a.setAttribute('aria-expanded', String(!shut));
+    updateNav();
+  };
+  const commentLinks = (c) => {
+    const id = c.getAttribute('thingid');
+    const src = linkBtn('source', 'Show this comment as it was written', (a) => srcToggle(c, a));
+    src.setAttribute('aria-expanded', 'false');
+    const save = linkBtn('save', '', (a) => saveToggle(c, a), 'rs-csave');
+    save.dataset.id = id; paintSave(save);
+    const kidsA = linkBtn('hide child comments', 'Fold the replies to this comment', (a) => kidsToggle(c, a), 'rs-kids-me');
+    kidsA.setAttribute('aria-expanded', 'true');
+    if (c.getAttribute('depth') === '0') kidsA.dataset.top = ''; // "Hide all replies" gives top comments their own link
+    return [src, save, linkBtn('report', 'Report this comment to the moderators', () => reportOpen(c)), linkBtn('reply', 'Reply to this comment', () => replyOpen(c)), kidsA];
+  };
   // Author flair right after the name, in old Reddit's small grey box. Reddit draws it on a second line and leaves it
   // out on some comments (often a person's later comments in the same thread, and picture-only flair), so the post's
   // comments are read once per post page (one request) and every comment by that person gets it.
-  const aflair = { post: '', byId: new Map(), byName: new Map(), done: false };
+  const aflair = { post: '', byId: new Map(), byName: new Map(), body: new Map(), done: false };
+  // Reddit doesn't mark saved comments on the page; its comment list does, and comments saved here are added
+  const savedComments = new Set();
   const aflairBox = (rich, text) => {
     const s = el('span', { class: 'rs-aflair' });
     const parts = Array.isArray(rich) && rich.length ? rich : [{ e: 'text', t: text || '' }];
@@ -2599,7 +2683,7 @@
   };
   const loadFlairs = (postId) => {
     if (aflair.post === postId) return;
-    aflair.post = postId; aflair.byId = new Map(); aflair.byName = new Map(); aflair.done = false;
+    aflair.post = postId; aflair.byId = new Map(); aflair.byName = new Map(); aflair.body = new Map(); aflair.done = false;
     fetch(`/comments/${postId.replace(/^t3_/, '')}/.json?limit=500&raw_json=1`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null)).then((d) => {
         if (aflair.post !== postId || !Array.isArray(d)) return;
@@ -2607,6 +2691,8 @@
           for (const k of L || []) {
             const x = k?.kind === 't1' && k.data;
             if (!x) continue;
+            if (typeof x.body === 'string') aflair.body.set(`t1_${x.id}`, x.body); // for "source"
+            if (x.saved) savedComments.add(`t1_${x.id}`);
             if (x.author_flair_text || x.author_flair_richtext?.length) {
               const f = { text: String(x.author_flair_text || ''), rich: x.author_flair_richtext };
               aflair.byId.set(`t1_${x.id}`, f);
@@ -2618,6 +2704,7 @@
         walk(d[1]?.data?.children);
         aflair.done = true;
         for (const c of document.querySelectorAll('shreddit-comment[data-rs]:not([rs-aflair])')) paintFlair(c);
+        paintSaves();
       }).catch(() => { /* Reddit's own flair stays */ });
   };
   const comments = () => {
@@ -2660,10 +2747,22 @@
       if (comments.last && Date.parse(c.getAttribute('created')) > comments.last) { c.setAttribute('rs-new', ''); meta.append(el('span', { class: 'rs-badge rs-is-new', text: 'new' })); }
       const links = el('span', { class: 'rs-cacts' }, [el('a', { href: c.getAttribute('permalink') || '#', text: 'permalink' })]);
       if (+c.getAttribute('depth') > 0 && c.getAttribute('parentid')) links.append(parentLink(c));
-      (c.querySelector(':scope > details [slot="actionRow"]') || meta).append(links);
+      links.append(...commentLinks(c));
+      c.rsLinks = links;
+      placeLinks(c);
       if (c.querySelector(':scope > details:not([open])')) foldInfo(c);
     }
+    for (const c of document.querySelectorAll('shreddit-comment[rs-links-wait]')) placeLinks(c);
     kids(); updateNav(); moreReplies();
+  };
+  // Reddit draws a comment's buttons only once it scrolls into view. Links put in before that sat at the left and then
+  // jumped right when the buttons came (seen on 134 of 150 comments), so they wait for Reddit's buttons.
+  const placeLinks = (c) => {
+    const row = c.querySelector(':scope > details [slot="actionRow"]');
+    if (row && !row.querySelector(':scope > shreddit-comment-action-row')) { c.setAttribute('rs-links-wait', ''); return; }
+    c.removeAttribute('rs-links-wait');
+    c.rsLinks.querySelectorAll('.rs-csave').forEach(paintSave);
+    (row || c.querySelector('[slot="commentMeta"]')).append(c.rsLinks);
   };
   // Hide all replies (RES's "hide child comments"): only the top comments show, each with its own "show N replies".
   // A button next to Reddit's comment sort switches it for this page; a setting starts every post that way.
@@ -2936,8 +3035,7 @@
   const go = (path, newTab) => { if (newTab) window.open(new URL(path, location.origin).href, '_blank', 'noopener'); else location.assign(path); };
   const openIn = (a, newTab) => { if (!a) return; if (newTab) window.open(a.href, '_blank', 'noopener'); else a.click(); };
   // s on a post page. Reddit's own s saves the post even when a comment is picked, so RESpawn answers it.
-  // Reddit doesn't mark saved comments on the page, so a comment counts as unsaved until you save it here.
-  const savedComments = new Set();
+  // Which comments you saved comes from Reddit's comment list (see savedComments), shared with the "save" links.
   const saveSel = async () => {
     if (!sel || needLogin('save')) return;
     try {
@@ -2945,6 +3043,7 @@
         const id = sel.getAttribute('thingid'), on = !savedComments.has(id);
         await gql('UpdateCommentSaveState', { commentId: id, saveState: on ? 'SAVED' : 'NONE' });
         if (on) savedComments.add(id); else savedComments.delete(id);
+        paintSaves(id);
         toast(on ? 'Comment saved. Press s again to unsave.' : 'Comment removed from saved.');
       } else if (sel.tagName === 'SHREDDIT-POST') {
         const menu = sel.querySelector('shreddit-post-overflow-menu'), on = !menu?.hasAttribute('is-post-saved');

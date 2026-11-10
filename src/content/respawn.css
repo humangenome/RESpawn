@@ -249,9 +249,25 @@ html.rs-on.rs-hide-badges .rs-pbadge { display: none !important; }
 .rs-fold { display: none; flex: none; margin-left: 6px; color: var(--rs-weak); font: 400 12px/1.2 var(--rs-font); white-space: nowrap; }
 html.rs-on shreddit-comment > details:not([open]) > summary .rs-fold:not(:empty) { display: inline; }
 /* order: Reddit sometimes adds its own buttons after ours; ours always come last */
-.rs-cacts { display: inline-flex; align-items: center; margin-left: 4px; order: 1; }
-.rs-cacts a { padding: 2px 5px; border-radius: 6px; font: 700 12px/1.2 var(--rs-font); color: var(--rs-weak); text-decoration: none; }
+/* the row stays on Reddit's line while it fits, else moves under Reddit's buttons as one piece (never one stray word) */
+/* top-aligned at the buttons' height, so it stays on their line when Reddit opens a reply box inside its own row */
+.rs-cacts { display: inline-flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; align-self: flex-start; min-height: var(--size-button-sm-h, 32px); max-width: 100%; margin-left: 4px; order: 1; }
+.rs-cacts a { padding: 2px 4px; border-radius: 6px; font: 700 12px/1.2 var(--rs-font); color: var(--rs-weak); text-decoration: none; white-space: nowrap; cursor: pointer; }
 .rs-cacts a:hover { background: var(--rs-hover); color: var(--rs-text); }
+/* "source": the comment as written, under the comment */
+html:not(.rs-on) .rs-src { display: none !important; }
+.rs-src { max-width: 760px; margin: 4px 4px 8px; }
+.rs-src-text { display: block; box-sizing: border-box; width: 100%; min-height: 52px; margin: 0; padding: 8px 10px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-hover); color: var(--rs-text); font: 400 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; resize: vertical; }
+.rs-src-text:focus { outline: none; border-color: var(--rs-weak); }
+.rs-src-bar { display: flex; gap: 8px; margin-top: 6px; }
+.rs-src-bar .rs-btn { height: 28px; padding: 0 12px; font-size: 12px; }
+/* "hide child comments" on one comment (RES): its replies fold away, the comment stays open */
+html.rs-on shreddit-comment[rs-kids-shut] > details [slot^="children"],
+html.rs-on shreddit-comment[rs-kids-shut] > details .more-comments-partial,
+html.rs-on shreddit-comment[rs-kids-shut] > details .fold-more { display: none !important; }
+/* only on comments with replies; with "Hide all replies" on, top comments have their own "show N replies" */
+html.rs-on shreddit-comment:not(:has(> details [slot^="children"])) .rs-kids-me,
+html.rs-on.rs-kids-hidden .rs-kids-me[data-top] { display: none !important; }
 /* "parent" flashes the comment it jumps to */
 .rs-flash { background-color: color-mix(in srgb, var(--rs-up) 16%, transparent) !important; border-radius: 6px; }
 /* Comment navigator: a slim column in the bottom-right corner, back-to-top on top of it (comments keep clear of it):
