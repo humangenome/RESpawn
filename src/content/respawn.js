@@ -2112,7 +2112,8 @@
         if (c.nodeType !== 1) { c.remove(); continue; }
         if (!SAFE_TAGS.has(c.tagName)) { if (/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|TEMPLATE|SVG|MATH|FORM|INPUT|BUTTON|IMG|VIDEO|AUDIO)$/.test(c.tagName)) c.remove(); else { clean(c); c.replaceWith(...c.childNodes); } continue; }
         for (const at of [...c.attributes]) {
-          const ok = (c.tagName === 'A' && at.name === 'href' && /^(https?:\/\/|\/(?!\/))/i.test(at.value.trim())) || (at.name === 'class' && at.value === 'md-spoiler-text');
+          const ok = (c.tagName === 'A' && at.name === 'href' && /^(https?:\/\/|\/(?!\/))/i.test(at.value.trim())) || (at.name === 'class' && at.value === 'md-spoiler-text')
+            || ((c.tagName === 'TD' || c.tagName === 'TH') && at.name === 'align' && /^(left|right|center)$/.test(at.value)); // numbers in tables line up right, as written
           if (!ok) c.removeAttribute(at.name);
         }
         if (c.tagName === 'A') { c.setAttribute('target', '_blank'); c.setAttribute('rel', 'noopener nofollow'); }
@@ -2410,6 +2411,42 @@
       el('div', { class: 'rs-pi-short' }, [link, copy]),
     ]);
     rail.prepend(box);
+  };
+
+  // ---------- app posts: the text version under the app's picture ----------
+  // Some posts are Reddit apps (game threads, polls, puzzles) that draw their own picture. Old Reddit can't run apps, so
+  // it shows the text the app writes alongside (a game thread's box score as tables), which is why the two designs looked
+  // completely different. That text comes with the post itself (one request); old Reddit's "not supported here" note is
+  // left out, since this is the full post.
+  const appText = () => {
+    const post = document.querySelector('shreddit-post[view-context="CommentsPage"][post-type="customPost"]');
+    const box = document.getElementById('rs-apptext');
+    if (!post) { box?.remove(); return; }
+    if ((box?.isConnected && box.dataset.id === post.id) || appText.tried === post) return;
+    box?.remove();
+    appText.tried = post; // once per post: a post with no text, or a failed request, is not asked again
+    fetch(`/comments/${post.id.replace(/^t3_/, '')}/.json?limit=1&raw_json=1`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null)).then((j) => {
+        const d = j?.[0]?.data?.children?.[0]?.data;
+        if (!d?.selftext_html || !post.isConnected) return;
+        const body = el('div', { class: 'rs-text md' });
+        body.append(safeHtml(d.selftext_html));
+        for (const p of body.querySelectorAll('p')) {
+          if (!/content not supported on old reddit/i.test(p.textContent)) continue;
+          if (p.previousElementSibling?.tagName === 'HR') p.previousElementSibling.remove();
+          p.remove();
+        }
+        // the app writes its links for old Reddit; on this design they open here
+        for (const a of body.querySelectorAll('a[href^="https://old.reddit.com/"]')) a.href = a.href.replace('https://old.reddit.com/', 'https://www.reddit.com/');
+        if (!body.textContent.trim()) return;
+        // under the picture and the app's own "Privacy" line, which belongs to the picture
+        const media = [...post.querySelectorAll(':scope > [slot="post-media-container"]')].pop();
+        const privacy = [...post.children].find((k) => !k.slot && k.querySelector('activate-feature[name^="DevvitPrivacy"]'));
+        if (!media && !privacy) return;
+        document.getElementById('rs-apptext')?.remove();
+        const box = el('section', { id: 'rs-apptext', 'data-id': post.id, 'aria-label': 'Text version' }, [el('div', { class: 'rs-at-label', text: 'Text version' }), body]);
+        if (privacy) privacy.after(box); else { box.slot = 'post-media-container'; media.after(box); }
+      }).catch(() => { /* the app's picture stays on its own */ });
   };
 
   // ---------- remembered collapsed comments (RES) ----------
@@ -3490,7 +3527,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    clMount(); densify(); rankCheck(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    clMount(); densify(); rankCheck(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); appText(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
     karmaSplit();
