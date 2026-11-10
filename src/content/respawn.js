@@ -43,6 +43,13 @@
   const num = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M` : n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
   const subOf = () => (location.pathname.match(/^\/r\/([^/]+)/) || [])[1];
   const isCommentsPage = () => !!document.querySelector('shreddit-post[view-context="CommentsPage"]');
+  // Phones: when a finger last touched the page. A tap also sends the mouse events a click would ("pointer over", then
+  // the click), so what opens on pointing (hover cards) and what would pop the phone's keyboard up (the settings
+  // search) checks this first. A mouse never sets it, so nothing changes on a computer.
+  let touchAt = 0;
+  const touched = () => Date.now() - touchAt < 1500;
+  for (const t of ['pointerdown', 'pointerup']) addEventListener(t, (e) => { if (e.pointerType === 'touch') touchAt = Date.now(); }, { capture: true, passive: true });
+  const touchScreen = () => touched() || matchMedia('(hover: none) and (pointer: coarse)').matches;
 
   const ICON = {
     video: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4.5v11l9-5.5z" fill="currentColor"/></svg>',
@@ -172,8 +179,10 @@
   // ---------- gear + settings panel ----------
   const GEAR = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4zm7 4.1v-1.8l-2-.4a5.6 5.6 0 0 0-.6-1.4l1.2-1.7-1.3-1.3-1.7 1.2a5.6 5.6 0 0 0-1.4-.6l-.4-2H9.1l-.4 2a5.6 5.6 0 0 0-1.4.6L5.6 4.3 4.3 5.6l1.2 1.7a5.6 5.6 0 0 0-.6 1.4l-2 .4v1.8l2 .4c.1.5.3 1 .6 1.4l-1.2 1.7 1.3 1.3 1.7-1.2c.4.3.9.5 1.4.6l.4 2h1.8l.4-2c.5-.1 1-.3 1.4-.6l1.7 1.2 1.3-1.3-1.2-1.7c.3-.4.5-.9.6-1.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
   // The gear sits in Reddit's top bar, left of your picture. On a phone-width window Reddit's bar has no room left, so
-  // it moves to the start of the shortcut bar (and back when the window widens).
-  const PHONE = 560;
+  // it moves to the start of the shortcut bar (and back when the window widens). Asked as the stylesheet asks (the phone
+  // layout in respawn.css starts at the same width): a phone zooms out when something is too wide for it, and the
+  // window's inner width grows with that zoom, which once moved the gear back into Reddit's full header.
+  const PHONE = matchMedia('(max-width: 640px)');
   const addGear = () => {
     let gear = document.getElementById('rs-gear');
     if (!gear) {
@@ -186,7 +195,7 @@
       theme = el('button', { id: 'rs-theme', type: 'button' });
       theme.onclick = () => setTheme(darkShown() ? 'light' : 'dark');
     }
-    const bar = innerWidth <= PHONE && cfg.showShortcuts ? document.getElementById('rs-shortcuts') : null;
+    const bar = PHONE.matches && cfg.showShortcuts ? document.getElementById('rs-shortcuts') : null;
     const user = document.querySelector('#expand-user-drawer-button');
     const actions = user?.closest('.ps-lg') || user?.closest('nav');
     let slot = null;
@@ -552,7 +561,7 @@
     document.body.append(panel);
     document.getElementById('rs-gear')?.setAttribute('aria-expanded', 'true');
     window.addEventListener('keydown', pnKeys, true);
-    pn.search.focus();
+    if (!touchScreen()) pn.search.focus(); // on a phone the keyboard would cover half the settings before you asked for it
   };
   PN_NARROW.addEventListener('change', () => pn.cats?.setAttribute('aria-orientation', PN_NARROW.matches ? 'horizontal' : 'vertical'));
   const toggle = (key, after) => {
@@ -790,13 +799,16 @@
   };
   const mostVisited = (limit = 40) => Object.values(subVisits()).sort((a, b) => b.n - a.n || b.t - a.t).slice(0, limit).map((v) => ({ sub: v.name }));
   const loggedIn = () => document.querySelector('shreddit-app')?.getAttribute('user-logged-in') === 'true';
+  // Reddit's top bar: the large one on a computer, a small one of its own on a phone (sent by the phone's browser name,
+  // so a phone held sideways gets it too). The shortcut bar goes right under whichever it is.
+  const redditHeader = () => document.querySelector('reddit-header-large') || document.querySelector('reddit-header-small');
 
   const ARROW = { l: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>', r: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>', d: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 8l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' };
   const shortcutBar = () => {
     let bar = document.getElementById('rs-shortcuts');
     if (!cfg.showShortcuts) { bar?.remove(); return; }
     if (!bar) bar = el('nav', { id: 'rs-shortcuts', 'aria-label': 'Shortcut bar' });
-    const header = document.querySelector('reddit-header-large');
+    const header = redditHeader();
     if (header && bar.previousElementSibling !== header) header.after(bar);
     else if (!header && !bar.isConnected) document.body.prepend(bar);
     const mine = el('button', { type: 'button', class: 'rs-mine', 'aria-haspopup': 'true', 'aria-expanded': 'false' }, [document.createTextNode('My subreddits'), el('span', { html: ARROW.d })]);
@@ -1151,7 +1163,7 @@
     mySubs.style.top = `${Math.round(r.bottom + 6)}px`;
     document.body.append(mySubs);
     btn.setAttribute('aria-expanded', 'true');
-    search.focus();
+    if (!touchScreen()) search.focus(); // a phone's keyboard would cover the list you came to pick from
     setTimeout(() => { document.addEventListener('click', mySubsOutside, true); document.addEventListener('keydown', mySubsEsc, true); }, 0);
   };
 
@@ -1430,7 +1442,7 @@
     );
     draw();
     document.body.append(editor);
-    if (opts.group) gName.focus(); else addIn.focus();
+    if (opts.group) gName.focus(); else if (!touchScreen()) addIn.focus(); // a phone's keyboard would cover your list
     setTimeout(() => document.addEventListener('keydown', editorEsc, true), 0);
   };
 
@@ -1639,7 +1651,7 @@
   const fitSorts = () => {
     const bar = document.getElementById('rs-sorts'), wrap = bar?.parentElement;
     if (!bar?.isConnected || !wrap || !bar.offsetWidth) return;
-    const sig = `${bar.clientWidth}|${fontNow()}|${innerWidth <= PHONE}`;
+    const sig = `${bar.clientWidth}|${fontNow()}`;
     if (bar.rsFit === sig) return;
     bar.rsFit = sig;
     let more = bar.querySelector(':scope > .rs-more'), menu = wrap.querySelector(':scope > .rs-more-menu');
@@ -1649,7 +1661,7 @@
     for (const k of bar.rsAll) bar.insertBefore(k, more); // in their first order (a folded one would come back last)
     if (more) more.hidden = true;
     bar.classList.remove('rs-tight');
-    if (innerWidth <= PHONE || fitsIn(bar)) return; // phone widths keep their own swipe-along tabs
+    if (fitsIn(bar)) return; // phones too: tabs that slid sideways out of sight were never found (Show images, the time range)
     bar.classList.add('rs-tight');
     if (fitsIn(bar)) return;
     if (!more) {
@@ -1749,7 +1761,7 @@
     blockEd.append(el('div', { class: 'rs-panel-head' }, [el('b', { text: 'Hide posts' }), x]), wBox, sBox, xBox, el('div', { class: 'rs-panel-foot' }, [msg, done]));
     document.body.append(blockEd);
     save();
-    words.focus();
+    if (!touchScreen()) words.focus(); // a phone's keyboard would cover the other two lists
     setTimeout(() => document.addEventListener('keydown', blockEdEsc, true), 0);
   };
   const trackOpens = (e) => {
@@ -2400,12 +2412,14 @@
       const meta = el('div', { class: 'rs-meta' });
       if (kind) meta.append(xButton(post, kind, row));
       const by = el('span', { class: 'rs-by' });
-      by.append(`submitted ${ago(g('created-timestamp'))} ago by `, el('a', { href: `/user/${g('author')}/`, class: friendSet().has(g('author').toLowerCase()) ? 'rs-author rs-friend' : 'rs-author', text: g('author') }), nameTag(g('author')));
+      // the name and its tag button go onto the next line together (a phone), never the button alone
+      by.append(`submitted ${ago(g('created-timestamp'))} ago by `, el('span', { class: 'rs-who' }, [el('a', { href: `/user/${g('author')}/`, class: friendSet().has(g('author').toLowerCase()) ? 'rs-author rs-friend' : 'rs-author', text: g('author') }), nameTag(g('author'))]));
       const sub = subOf();
-      if (!sub || sub.includes('+') || sub === 'popular' || sub === 'all') by.append(' to ', el('a', { href: `/${g('subreddit-prefixed-name')}/`, text: g('subreddit-prefixed-name') }));
+      // "to r/x" stays together when the line wraps (a phone), never a lone subreddit on the last line
+      if (!sub || sub.includes('+') || sub === 'popular' || sub === 'all') by.append(' ', el('span', { class: 'rs-keep' }, ['to ', el('a', { href: `/${g('subreddit-prefixed-name')}/`, text: g('subreddit-prefixed-name') })]));
       // Crossposts (RES's x-post links): Reddit gives the original post's address as the content link.
       const orig = post.hasAttribute('is-crosspost') && link.match(/^\/r\/([A-Za-z0-9_]{2,21})\/comments\/[a-z0-9]+\//i);
-      if (orig) by.append(' crossposted from ', el('a', { href: link, class: 'rs-xpost', title: 'Open the original post', text: `r/${orig[1]}` }));
+      if (orig) by.append(' crossposted ', el('span', { class: 'rs-keep' }, ['from ', el('a', { href: link, class: 'rs-xpost', title: 'Open the original post', text: `r/${orig[1]}` })]));
       meta.append(by);
       const n = +g('comment-count') || 0;
       const acts = el('div', { class: 'rs-acts' }, [
@@ -3513,7 +3527,7 @@
   };
   const topGap = () => {
     let g = 0;
-    for (const x of document.querySelectorAll('reddit-header-large, reddit-header-large header, #rs-shortcuts')) {
+    for (const x of document.querySelectorAll('reddit-header-large, reddit-header-large header, reddit-header-small, #rs-shortcuts')) {
       const p = getComputedStyle(x).position;
       if (p === 'fixed' || p === 'sticky') g = Math.max(g, x.getBoundingClientRect().bottom);
     }
@@ -3915,6 +3929,8 @@
   };
   document.addEventListener('mouseover', (e) => {
     if (!cfg.enabled || !cfg.hoverCards) return;
+    // A tap on a name follows its link: no card over the next page, and none left standing on this one
+    if (touched()) { clearTimeout(hcT); return; }
     if (hc && hc.contains(e.target)) { clearTimeout(hcT); return; }
     const a = e.target.closest?.('a[href]');
     const t = a && hcTarget(a);
@@ -4183,12 +4199,12 @@
     nameLast = Date.now();
     const re = new RegExp(`(?<![A-Za-z0-9_-])${me}(?![A-Za-z0-9_-])`, 'gi');
     swapText(document.body, me, re);
-    const roots = [...document.querySelectorAll('reddit-header-large *, reddit-search-large')].filter((e) => e.shadowRoot).map((e) => e.shadowRoot);
+    const roots = [...document.querySelectorAll('reddit-header-large *, reddit-header-small *, reddit-search-large')].filter((e) => e.shadowRoot).map((e) => e.shadowRoot);
     for (let i = 0; i < roots.length && i < 100; i++) {
       swapText(roots[i], me, re);
       for (const e of roots[i].querySelectorAll('*')) { if (e.shadowRoot) roots.push(e.shadowRoot); if (e.hasAttribute('placeholder')) swapHint(e, re); }
     }
-    for (const e of document.querySelectorAll('reddit-header-large [placeholder], reddit-search-large [placeholder]')) swapHint(e, re);
+    for (const e of document.querySelectorAll('reddit-header-large [placeholder], reddit-header-small [placeholder], reddit-search-large [placeholder]')) swapHint(e, re);
     const t = document.title.replace(re, NAME_STANDIN);
     if (t !== document.title) { titleOwn = document.title; titleShown = t; document.title = t; }
     if (renamed.size > 2000) for (const n of renamed.keys()) if (!n.isConnected) renamed.delete(n);
@@ -4265,7 +4281,13 @@
     html.classList.toggle('rs-feed', !onComments);
     html.classList.toggle('rs-comments', onComments);
     if (!onComments && nav) { nav.remove(); nav = null; comments.started = null; }
-    const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
+    const bar = document.getElementById('rs-shortcuts'), header = redditHeader();
+    html.classList.toggle('rs-small-head', header?.tagName === 'REDDIT-HEADER-SMALL');
+    // On a phone's post page Reddit's top bar carries a second strip (the subreddit, Join) and leaves that much room at
+    // the top of the post: the shortcut bar goes under the strip and that room closes up (respawn.css, rs-strip)
+    const strip = header?.tagName === 'REDDIT-HEADER-SMALL' ? header.querySelector(':scope > #pdp-credit-bar') : null;
+    const sh = strip?.getClientRects().length ? Math.round(strip.getBoundingClientRect().height) : 0;
+    if (sh !== (tick.strip || 0)) { tick.strip = sh; html.style.setProperty('--rs-strip-h', `${sh}px`); html.classList.toggle('rs-strip', sh > 0); }
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
     clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); postVideo(); applyFilters(); fitBars(); scButton(); postInfo(); appText(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
