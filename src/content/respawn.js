@@ -2768,7 +2768,7 @@
   const clKept = new Map(); // lists you left in this tab, by address: Back brings one back as you left it, not reloaded
   const clHere = () => location.pathname + location.search + location.hash;
   const clBuild = (r, key) => {
-    const st = { r, key, after: null, count: 0, page: 0, loading: false, done: false, y: null, seen: new Set(), resume: false };
+    const st = { r, key, after: null, count: 0, page: 0, loading: false, done: false, y: null, seen: new Set(), goneOn: 0, got: 0 };
     st.list = el('div', { class: 'rs-cl-list' });
     st.more = el('div', { class: 'rs-cl-more' });
     st.root = el('div', { id: 'rs-classic', 'data-list': r.list }, [r.list === 'multi' ? el('h1', { class: 'rs-cl-title' }) : null, clBar(r), filterLine(), st.list, st.more]);
@@ -2793,21 +2793,21 @@
   const clLoad = async (st) => {
     if (st.loading || st.done || st !== cl || !st.root.isConnected) return;
     const every = +cfg.pauseEvery || 0;
-    if (st.page && every && st.page % every === 0 && !st.resume) { // RES's pause every few pages
+    if (st.page && every && st.page % every === 0 && st.goneOn !== st.page) { // RES's pause every few pages (once per page: a skipped page of repeats doesn't pause again)
       if (!st.more.querySelector('.rs-pause')) {
         const go = el('button', { type: 'button', class: 'rs-btn', text: 'Load more' });
-        go.onclick = () => { st.resume = true; clLoad(st); };
+        go.onclick = () => { st.goneOn = st.page; clLoad(st); };
         st.more.replaceChildren(el('div', { class: 'rs-pause', role: 'status' }, [el('span', { text: `Paused after ${st.page} pages.` }), go]));
       }
       return;
     }
-    st.loading = true; st.resume = false;
+    st.loading = true;
     st.more.replaceChildren(el('div', { class: 'rs-cl-wait', role: 'status', text: 'Loading…' }));
     let d;
     try {
       const early = !st.page && clFirst?.key === st.key && Date.now() - clFirst.at < 30e3 ? clFirst.p : null; // asked for as the page started, or as you pointed at its tab
       if (!st.page) clFirst = null;
-      d = await (early ? early.catch(() => clFetch(st.r, null, 0)) : clFetch(st.r, st.after, st.count));
+      d = await (early ? early.catch(() => clFetch(st.r, null, 0)) : clFetch(st.r, st.after, st.got));
     } catch (e) {
       st.loading = false;
       if (st !== cl) return;
@@ -2830,9 +2830,15 @@
     const posts = (d.children || []).filter((c) => c?.kind === 't3' && /^t3_[a-z0-9]+$/.test(c.data?.name || '') && !c.data.promoted && !st.seen.has(c.data.name));
     if (st.page && posts.length) st.list.append(el('div', { class: 'rs-page', 'aria-hidden': 'true', text: `Page ${st.page + 1}` }));
     for (const c of posts) { st.seen.add(c.data.name); try { st.list.append(makeRow(clPost(c.data), st.count + 1)); st.count++; } catch { /* a post that won't draw is left out */ } }
-    st.page++; st.after = d.after; st.done = !d.after || !posts.length;
+    // Old Reddit's HOME (Best) reshuffles as you go deeper and can send a whole page of posts already shown (checked
+    // 11/10: pages 4 and 10 of 16 had nothing new). Such a page is skipped, not taken for the end; the list ends when
+    // Reddit has no next page, or after 8 pages in a row with nothing new. A skipped page doesn't count as a page.
+    st.got += (d.children || []).length; // how far down Reddit's list this is, repeats included (old Reddit's "count"; rows are numbered by st.count)
+    st.empty = posts.length ? 0 : (st.empty || 0) + 1;
+    if (posts.length || !st.page) st.page++;
+    st.after = d.after; st.done = !d.after || st.empty >= 8;
     st.more.replaceChildren(st.done ? el('div', { class: 'rs-cl-end', text: st.count ? 'No more posts.' : 'No posts here.' }) : '');
-    if (!st.done && st.more.getBoundingClientRect().top < innerHeight + 1500) setTimeout(() => clLoad(st), 60); // still near the end
+    if (!st.done && (!posts.length || st.more.getBoundingClientRect().top < innerHeight + 1500)) setTimeout(() => clLoad(st), posts.length ? 60 : 400); // still near the end
   };
   // Shows, keeps or puts away old Reddit's list for the address now. A list you leave (opening a post, or another sort)
   // is kept, and Back brings it back where you were, without loading it again. A list opened by a click is fresh.
