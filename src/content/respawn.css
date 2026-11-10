@@ -307,6 +307,17 @@ html:not(.rs-on) #rs-multi { display: none !important; }
 /* Comment pages */
 html.rs-on.rs-hide-badges shreddit-comment-badges { display: none !important; }
 html.rs-on [slot="actionRow"] { display: flex !important; align-items: center; flex-wrap: wrap; }
+/* Comment boxes (like old Reddit's): a reply box takes the comment's whole row under its buttons, both boxes open several
+   lines tall (the "Join the conversation" strip too, so pressing it doesn't jump), and resize from the corner grip.
+   --rs-box-w / --rs-box-h: the size you gave that kind of box (commentBoxes in respawn.js). */
+html.rs-on [slot="actionRow"] > shreddit-comment-action-row:has(comment-composer-host[reply-mode]) { flex: 1 1 100%; min-width: 0; }
+html.rs-on shreddit-async-loader[slot="comment-composer"] { display: block; }
+html.rs-on comment-composer-host { display: block; width: var(--rs-box-w, 100%); max-width: 100%; }
+html.rs-on comment-composer-host > faceplate-form { position: relative; display: block; }
+html.rs-on comment-composer-host shreddit-composer > div[slot="rte"] { min-height: var(--rs-box-h, 120px) !important; resize: none !important; }
+html.rs-on comment-composer-host faceplate-textarea-input { --rem90: calc(var(--rs-box-h, 120px) + 40px); } /* its tall version's height, inside it only */
+.rs-box-grip { opacity: .65; }
+.rs-box-grip:hover, html.rs-resizing .rs-box-grip { opacity: 1; }
 html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"] { max-height: 460px; overflow: hidden; }
 html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"] img { max-height: 440px !important; width: auto !important; }
 /* The post's own video takes its own shape (no black strip), with its controls on screen: as wide as the column allows

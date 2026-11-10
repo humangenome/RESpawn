@@ -3102,6 +3102,72 @@
     });
   };
 
+  // ---------- comment boxes ----------
+  // Reddit's reply box came out squeezed to the width of the buttons above it (RESpawn lines its comment links up beside
+  // them), and "Join the conversation" is a one-line strip. Both now open as a proper box, like old Reddit's: the reply
+  // box as wide as the comment, both several lines tall. Each resizes from a grip on its bottom-right corner, the same
+  // grip as pictures: drag to resize, double-click for the normal size. The size you give each kind (reply, top) is kept.
+  const BOX_H = 120; // the writing area's normal height (old Reddit's was 100 px)
+  const boxKind = (host) => (host.hasAttribute('reply-mode') ? 'reply' : 'top');
+  const boxApply = (host) => {
+    const s = (cfg.boxSizes || {})[boxKind(host)] || {};
+    host.style.setProperty('--rs-box-h', `${s.h || BOX_H}px`);
+    if (s.w) host.style.setProperty('--rs-box-w', `${s.w}px`); else host.style.removeProperty('--rs-box-w');
+  };
+  // the room a box may take: its own column (a reply: the comment's row, under the buttons)
+  const boxRoom = (host) => (host.closest('[slot="actionRow"]') || host.parentElement)?.getBoundingClientRect().width || innerWidth;
+  const commentBoxes = () => {
+    if (!cfg.enabled) return;
+    for (const host of document.querySelectorAll('comment-composer-host')) {
+      if (host.rsBox !== boxKind(host)) { host.rsBox = boxKind(host); boxApply(host); }
+      // the closed "Join the conversation" strip: Reddit's own tall version of it, as tall as the open box
+      const strip = host.querySelector(':scope > faceplate-tracker faceplate-textarea-input');
+      if (strip && strip.getAttribute('size') !== 'expanded') strip.setAttribute('size', 'expanded');
+      const form = host.querySelector(':scope > faceplate-form');
+      const ed = form?.querySelector('shreddit-composer > div[slot="rte"]');
+      if (!ed || !form.getClientRects().length || form.querySelector(':scope > .rs-box-grip')) continue;
+      const grip = el('span', { class: 'rs-grip rs-box-grip', title: 'Drag to resize · double-click for the normal size', html: GRIP_ICON });
+      form.append(grip);
+      grip.addEventListener('dblclick', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const k = boxKind(host), all = { ...(cfg.boxSizes || {}) };
+        delete all[k]; saveCfg({ boxSizes: all });
+        for (const h of document.querySelectorAll('comment-composer-host')) if (boxKind(h) === k) boxApply(h);
+      });
+      grip.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        const k = boxKind(host), room = boxRoom(host);
+        const x0 = e.clientX, y0 = e.clientY, w0 = host.getBoundingClientRect().width, h0 = ed.getBoundingClientRect().height;
+        let w = w0, h = h0, frame = 0, last = e;
+        const apply = () => {
+          frame = 0;
+          w = Math.round(Math.max(280, Math.min(room, w0 + last.clientX - x0)));
+          h = Math.round(Math.max(44, Math.min(innerHeight * 0.85, h0 + last.clientY - y0)));
+          host.style.setProperty('--rs-box-w', `${w}px`); host.style.setProperty('--rs-box-h', `${h}px`);
+        };
+        const move = (ev) => { if (!(ev.buttons & 1)) { stop(); return; } last = ev; if (!frame) frame = requestAnimationFrame(apply); };
+        const stop = () => {
+          window.removeEventListener('mousemove', move, true); window.removeEventListener('mouseup', stop, true);
+          if (frame) { cancelAnimationFrame(frame); apply(); }
+          html.classList.remove('rs-resizing');
+          // as wide as it can go counts as "full width", so it follows the window from then on
+          saveCfg({ boxSizes: { ...(cfg.boxSizes || {}), [k]: { w: w >= room - 2 ? null : w, h } } });
+          for (const o of document.querySelectorAll('comment-composer-host')) if (o !== host && boxKind(o) === k) boxApply(o);
+        };
+        html.classList.add('rs-resizing');
+        window.addEventListener('mousemove', move, true); window.addEventListener('mouseup', stop, true);
+      });
+    }
+  };
+  // A box opens without a page change RESpawn would notice (its own insides are left alone for speed): look again when
+  // one gets the cursor, and just after a Reply or "Join the conversation" press.
+  document.addEventListener('focusin', (e) => { if (e.target.closest?.('comment-composer-host')) commentBoxes(); }, true);
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest?.('comment-composer-host, shreddit-comment-action-row')) return;
+    for (const ms of [250, 900, 2000]) setTimeout(commentBoxes, ms);
+  }, true);
+
   // ---------- comment pages ----------
   // "parent" jumps up to the comment this one answers and flashes it; if that comment isn't on the page, it opens it.
   const parentLink = (c) => {
@@ -4290,7 +4356,7 @@
     if (sh !== (tick.strip || 0)) { tick.strip = sh; html.style.setProperty('--rs-strip-h', `${sh}px`); html.classList.toggle('rs-strip', sh > 0); }
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); postVideo(); applyFilters(); fitBars(); scButton(); postInfo(); appText(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); postVideo(); commentBoxes(); applyFilters(); fitBars(); scButton(); postInfo(); appText(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
     karmaSplit();
