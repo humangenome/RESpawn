@@ -908,11 +908,83 @@
     if (last < text.length) frag.append(text.slice(last));
     return frag;
   };
-  const joinButton = () => document.querySelector('shreddit-subreddit-header-buttons')?.shadowRoot?.querySelector('shreddit-join-button');
+  // Reddit's own Join button for this subreddit: in the header on its pages, in the side box's shadow on post pages
+  // (that one was missed before, so the card showed no Join or Leave on posts).
+  const joinButton = (sub) => {
+    const L = [document.querySelector('shreddit-subreddit-header-buttons')?.shadowRoot?.querySelector('shreddit-join-button'),
+      document.querySelector('#right-sidebar-container shreddit-subreddit-header')?.shadowRoot?.querySelector('shreddit-join-button')];
+    return L.find((b) => b && (!sub || String(b.getAttribute('name')).toLowerCase() === sub.toLowerCase())) || null;
+  };
+  const paintJoin = (card) => {
+    const jb = joinButton(card.dataset.sub), join = card.querySelector('.rs-ab-join');
+    const on = !!jb?.hasAttribute('subscribed'), text = jb ? (on ? 'Leave' : 'Join') : '';
+    if (join.hidden !== !jb) join.hidden = !jb;
+    if (jb && join.textContent !== text) { join.textContent = text; join.setAttribute('aria-pressed', String(on)); join.title = on ? `Leave r/${card.dataset.sub}` : `Join r/${card.dataset.sub}`; }
+  };
+  // "Show my flair" (old Reddit's sidebar line): your name with your flair here, a switch, and "edit".
+  // What Reddit has on file comes from the subreddit's about.json. Reddit's own flair box can't be pressed for the
+  // switch: it starts unticked even while your flair shows (checked 11/9 against about.json). So the switch sends the
+  // request that box sends when only its "Show my user flair" tick changes (watched 11/9: shouldUpdateUserFlair false,
+  // so the flair itself is never touched). "edit" opens Reddit's own flair box under this card; while it is closed it
+  // is tucked away, so the two don't repeat each other.
+  const myFlair = { sub: '', d: null, failed: false };
+  const flairWidget = (sub) => {
+    const f = document.querySelector('#right-sidebar-container community-author-flair');
+    return f && String(f.getAttribute('subreddit-name')).toLowerCase() === sub.toLowerCase() ? f : null;
+  };
+  const loadMyFlair = (card) => {
+    const sub = card.dataset.sub;
+    if (myFlair.sub === sub || !loggedIn()) return;
+    myFlair.sub = sub; myFlair.d = null; myFlair.failed = false;
+    fetch(`/r/${sub}/about.json?raw_json=1`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((j) => {
+      if (myFlair.sub !== sub) return;
+      if (j?.data) myFlair.d = j.data; else myFlair.failed = true; // no flair line; Reddit's own section stays
+      paintFlairRow(card);
+    });
+  };
+  const paintFlairRow = (card) => {
+    const row = card.querySelector('.rs-ab-flair');
+    if (!row) return;
+    const sub = card.dataset.sub, f = flairWidget(sub), d = myFlair.sub === sub ? myFlair.d : null;
+    const open = f?.getAttribute('aria-expanded') === 'true';
+    if (card.rsFlairOpen && !open) { myFlair.sub = ''; loadMyFlair(card); } // you may have changed it in Reddit's box
+    card.rsFlairOpen = open;
+    const show = !!(f && d && (d.user_can_flair_in_sr || d.user_flair_text));
+    if (row.hidden !== !show) row.hidden = !show;
+    // Reddit's own "User flair" section, and the divider that would then start its box; tucked away already while
+    // about.json is on its way, so the side column doesn't jump when the line arrives
+    const sec = f?.closest('#right-sidebar-container .px-md');
+    const tuck = !open && (show || (!!f && !d && !myFlair.failed && myFlair.sub === sub && loggedIn()));
+    sec?.classList.toggle('rs-hide-flairsec', tuck);
+    let hr = sec?.nextElementSibling;
+    while (hr && hr.tagName !== 'HR' && !hr.getBoundingClientRect().height) hr = hr.nextElementSibling;
+    for (const x of document.querySelectorAll('.rs-hide-flairhr')) if (x !== hr || !tuck) x.classList.remove('rs-hide-flairhr');
+    if (hr?.tagName === 'HR' && tuck) hr.classList.add('rs-hide-flairhr');
+    if (!show || row.dataset.busy) return;
+    const on = d.user_sr_flair_enabled !== false, name = f.getAttribute('username') || '';
+    const sig = JSON.stringify([name, on, d.user_flair_text, d.user_flair_richtext]);
+    if (row.dataset.sig === sig) return;
+    row.dataset.sig = sig;
+    row.querySelector('input').checked = on;
+    row.classList.toggle('rs-off', !on);
+    const me = row.querySelector('.rs-ab-fl-me');
+    me.replaceChildren(el('span', { class: 'rs-ab-fl-name', text: name }), aflairBox(d.user_flair_richtext, d.user_flair_text) || '', me.rsEdit);
+  };
+  const flairEnable = async (card, on) => {
+    const row = card.querySelector('.rs-ab-flair'), d = myFlair.d, f = flairWidget(card.dataset.sub);
+    if (!d || !f || row.dataset.busy || needLogin('change your flair')) { paintFlairRow(card); return; }
+    row.dataset.busy = '1';
+    try {
+      await gql('UpdateUserFlairAndEnabledStatus', { subredditId: f.getAttribute('subreddit-id') || d.name, isEnabled: on, flairTemplateId: null, text: null, shouldUpdateUserFlair: false, shouldUpdateUserFlairEnabledStatus: true, username: f.getAttribute('username') }, true);
+      d.user_sr_flair_enabled = on;
+    } catch { toast('Reddit did not take that. Try again.'); }
+    delete row.dataset.busy; delete row.dataset.sig;
+    paintFlairRow(card);
+  };
   const paintCard = (card) => {
     const sub = card.dataset.sub;
-    const jb = joinButton(), join = card.querySelector('.rs-ab-join');
-    if (jb) { const on = jb.hasAttribute('subscribed'); join.hidden = false; join.textContent = on ? 'Leave' : 'Join'; join.setAttribute('aria-pressed', String(on)); } else join.hidden = true;
+    paintJoin(card);
+    paintFlairRow(card);
     const sc = card.querySelector('.rs-ab-sc'), inList = scIndex(sub) >= 0;
     sc.textContent = inList ? '− Shortcut' : '+ Shortcut'; sc.setAttribute('aria-pressed', String(inList));
     card.querySelector('.rs-ab-style input').checked = subStyleOn(sub.toLowerCase());
@@ -922,7 +994,7 @@
     let card = document.getElementById('rs-about');
     if (!hdr) { card?.remove(); return; }
     const sub = hdr.getAttribute('name');
-    if (card?.isConnected && card.dataset.sub === sub) return;
+    if (card?.isConnected && card.dataset.sub === sub) { paintJoin(card); paintFlairRow(card); return; } // Reddit's parts can change (or arrive late)
     card?.remove();
     const g = (k) => hdr.getAttribute(k) || '';
     // The community icon: the picture Reddit marks as this community's icon (header, or the post's own header on
@@ -940,15 +1012,27 @@
     more.onclick = () => { const open = desc.classList.toggle('rs-open'); more.textContent = open ? 'Show less' : 'Show more'; };
     const join = el('button', { type: 'button', class: 'rs-ab-join rs-btn' });
     join.onclick = () => {
-      const jb = joinButton();
+      const jb = joinButton(sub);
       if (!jb) return;
       (jb.shadowRoot?.querySelector('button') || jb).click();
-      setTimeout(() => paintCard(card), 800); setTimeout(() => paintCard(card), 2500);
+      setTimeout(() => paintJoin(card), 800); setTimeout(() => paintJoin(card), 2500);
     };
     const sc = el('button', { type: 'button', class: 'rs-ab-sc rs-btn' });
     sc.onclick = () => { scToggle(sub); paintCard(card); };
     const style = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
     style.onchange = () => setSubStyle(sub.toLowerCase(), style.checked);
+    const flairSw = el('input', { type: 'checkbox', role: 'switch', class: 'rs-switch-input' });
+    flairSw.onchange = () => flairEnable(card, flairSw.checked);
+    const flairMe = el('div', { class: 'rs-ab-fl-me' });
+    flairMe.rsEdit = el('a', { href: '#', role: 'button', class: 'rs-ab-fl-edit', text: 'edit', title: 'Change your flair in this subreddit' });
+    flairMe.rsEdit.onclick = (e) => {
+      e.preventDefault();
+      const f = flairWidget(sub);
+      if (!f) return;
+      if (f.getAttribute('aria-expanded') !== 'true') (f.querySelector('[slot="toggle"] button') || f.shadowRoot?.querySelector('[role="button"]'))?.click();
+      paintFlairRow(card);
+      requestAnimationFrame(() => f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+    };
     card.append(
       el('div', { class: 'rs-ab-head' }, [
         iconSrc ? el('img', { src: iconSrc, alt: '' }) : el('span', { class: 'rs-ms-noicon', text: 'r/' }),
@@ -965,12 +1049,14 @@
       ]),
       created ? el('div', { class: 'rs-ab-created', text: `Created ${created}` }) : null,
       el('div', { class: 'rs-ab-acts' }, [join, sc]),
+      el('div', { class: 'rs-ab-flair', hidden: true }, [el('label', { class: 'rs-ab-fl-top' }, [el('span', { text: 'Show my flair' }), flairSw]), flairMe]),
       el('label', { class: 'rs-ab-style' }, [el('span', { text: 'Use subreddit style' }), style]),
     );
     const top = document.getElementById('right-sidebar-contents') || hdr.closest('#right-sidebar-container');
     const info = document.getElementById('rs-postinfo');
     if (info?.isConnected) info.after(card); else top.prepend(card);
     hdr.classList.add('rs-hide-about');
+    loadMyFlair(card);
     paintCard(card);
     requestAnimationFrame(() => { more.hidden = desc.scrollHeight <= desc.clientHeight + 2; });
   };
@@ -2470,7 +2556,8 @@
         if (c.nodeType !== 1) { c.remove(); continue; }
         if (!SAFE_TAGS.has(c.tagName)) { if (/^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|TEMPLATE|SVG|MATH|FORM|INPUT|BUTTON|IMG|VIDEO|AUDIO)$/.test(c.tagName)) c.remove(); else { clean(c); c.replaceWith(...c.childNodes); } continue; }
         for (const at of [...c.attributes]) {
-          const ok = (c.tagName === 'A' && at.name === 'href' && /^(https?:\/\/|\/(?!\/))/i.test(at.value.trim())) || (at.name === 'class' && at.value === 'md-spoiler-text');
+          const ok = (c.tagName === 'A' && at.name === 'href' && /^(https?:\/\/|\/(?!\/))/i.test(at.value.trim())) || (at.name === 'class' && at.value === 'md-spoiler-text')
+            || ((c.tagName === 'TD' || c.tagName === 'TH') && at.name === 'align' && /^(left|right|center)$/.test(at.value)); // numbers in tables line up right, as written
           if (!ok) c.removeAttribute(at.name);
         }
         if (c.tagName === 'A') { c.setAttribute('target', '_blank'); c.setAttribute('rel', 'noopener nofollow'); }
@@ -2850,6 +2937,42 @@
     rail.prepend(box);
   };
 
+  // ---------- app posts: the text version under the app's picture ----------
+  // Some posts are Reddit apps (game threads, polls, puzzles) that draw their own picture. Old Reddit can't run apps, so
+  // it shows the text the app writes alongside (a game thread's box score as tables), which is why the two designs looked
+  // completely different. That text comes with the post itself (one request); old Reddit's "not supported here" note is
+  // left out, since this is the full post.
+  const appText = () => {
+    const post = document.querySelector('shreddit-post[view-context="CommentsPage"][post-type="customPost"]');
+    const box = document.getElementById('rs-apptext');
+    if (!post) { box?.remove(); return; }
+    if ((box?.isConnected && box.dataset.id === post.id) || appText.tried === post) return;
+    box?.remove();
+    appText.tried = post; // once per post: a post with no text, or a failed request, is not asked again
+    fetch(`/comments/${post.id.replace(/^t3_/, '')}/.json?limit=1&raw_json=1`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null)).then((j) => {
+        const d = j?.[0]?.data?.children?.[0]?.data;
+        if (!d?.selftext_html || !post.isConnected) return;
+        const body = el('div', { class: 'rs-text md' });
+        body.append(safeHtml(d.selftext_html));
+        for (const p of body.querySelectorAll('p')) {
+          if (!/content not supported on old reddit/i.test(p.textContent)) continue;
+          if (p.previousElementSibling?.tagName === 'HR') p.previousElementSibling.remove();
+          p.remove();
+        }
+        // the app writes its links for old Reddit; on this design they open here
+        for (const a of body.querySelectorAll('a[href^="https://old.reddit.com/"]')) a.href = a.href.replace('https://old.reddit.com/', 'https://www.reddit.com/');
+        if (!body.textContent.trim()) return;
+        // under the picture and the app's own "Privacy" line, which belongs to the picture
+        const media = [...post.querySelectorAll(':scope > [slot="post-media-container"]')].pop();
+        const privacy = [...post.children].find((k) => !k.slot && k.querySelector('activate-feature[name^="DevvitPrivacy"]'));
+        if (!media && !privacy) return;
+        document.getElementById('rs-apptext')?.remove();
+        const box = el('section', { id: 'rs-apptext', 'data-id': post.id, 'aria-label': 'Text version' }, [el('div', { class: 'rs-at-label', text: 'Text version' }), body]);
+        if (privacy) privacy.after(box); else { box.slot = 'post-media-container'; media.after(box); }
+      }).catch(() => { /* the app's picture stays on its own */ });
+  };
+
   // ---------- remembered collapsed comments (RES) ----------
   // Reddit folds a comment by closing the <details> inside it. Remember which ones you folded and fold them again next time.
   const collapsedMap = () => readJSON('rs-collapsed');
@@ -2902,10 +3025,94 @@
     };
     return a;
   };
+  // The rest of old RES's row under each comment. Each link uses Reddit's own part where there is one (its Reply button,
+  // Report in its "..." menu); save sends the same request as Reddit's own Save. Reddit's comment list, read once per post
+  // page (see loadFlairs), says which comments you saved and holds each comment as written, for "source".
+  const ownOf = (c, css, root = c) => [...root.querySelectorAll(css)].find((x) => x.closest('shreddit-comment') === c);
+  const linkBtn = (text, title, fn, cls) => {
+    const a = el('a', { href: '#', role: 'button', class: cls || null, text, title });
+    a.onclick = (e) => { e.preventDefault(); fn(a); };
+    return a;
+  };
+  // "source": the comment as its writer typed it (markdown), in a box under the comment to read or copy
+  const srcToggle = async (c, a) => {
+    if (c.rsSrc?.isConnected) { c.rsSrc.remove(); c.rsSrc = null; a.setAttribute('aria-expanded', 'false'); return; }
+    const body = ownOf(c, '[slot="comment"]');
+    if (!body) return;
+    const id = c.getAttribute('thingid');
+    const ta = el('textarea', { class: 'rs-src-text', readonly: true, spellcheck: 'false', rows: '2', 'aria-label': 'Comment source' });
+    const copy = el('button', { type: 'button', class: 'rs-btn', text: 'Copy' });
+    const close = el('button', { type: 'button', class: 'rs-btn', text: 'Close' });
+    copy.onclick = async () => toast((await copyText(ta.value)) ? 'Source copied.' : 'Press Ctrl+C to copy it.');
+    close.onclick = () => srcToggle(c, a);
+    const box = c.rsSrc = el('div', { class: 'rs-src' }, [ta, el('div', { class: 'rs-src-bar' }, [copy, close])]);
+    body.after(box);
+    a.setAttribute('aria-expanded', 'true');
+    let text = aflair.body.get(id);
+    if (typeof text !== 'string') {
+      ta.value = 'Loading…'; copy.disabled = true;
+      try {
+        const j = await (await fetch(`${c.getAttribute('permalink')}.json?raw_json=1&limit=1&depth=1`, { credentials: 'include' })).json();
+        const x = j?.[1]?.data?.children?.[0]?.data;
+        if (x?.name === id && typeof x.body === 'string') { text = x.body; aflair.body.set(id, text); }
+      } catch { /* said below */ }
+      if (c.rsSrc !== box) return;
+      if (typeof text !== 'string') { ta.value = 'Reddit did not send this comment. Try again.'; return; }
+    }
+    ta.value = text; copy.disabled = false;
+    ta.style.height = `${Math.min(ta.scrollHeight + 2, 320)}px`;
+  };
+  const paintSave = (a) => { const on = savedComments.has(a.dataset.id); setText(a, on ? 'unsave' : 'save'); a.title = on ? 'Remove from your saved comments' : 'Save this comment'; };
+  const paintSaves = (id) => document.querySelectorAll(id ? `.rs-csave[data-id="${id}"]` : '.rs-csave').forEach(paintSave);
+  const saveToggle = async (c, a) => {
+    const id = c.getAttribute('thingid');
+    if (a.dataset.busy || needLogin('save')) return;
+    const on = !savedComments.has(id);
+    a.dataset.busy = '1';
+    try {
+      await gql('UpdateCommentSaveState', { commentId: id, saveState: on ? 'SAVED' : 'NONE' });
+      if (on) savedComments.add(id); else savedComments.delete(id);
+      paintSaves(id);
+    } catch { toast('Reddit did not take that. Try again.'); }
+    delete a.dataset.busy;
+  };
+  // Reddit's own report window, from the Report item in its "..." menu for this comment
+  const reportOpen = (c) => {
+    const menu = ownOf(c, 'shreddit-overflow-menu')?.shadowRoot;
+    const item = menu?.querySelector('faceplate-tracker[noun="report"] li, li.report-menu-button');
+    if (!item) { toast('Reddit has not finished loading that comment. Try again.'); return; }
+    menu.querySelector('#overflow-trigger')?.click(); // open the menu first, as a click would
+    requestAnimationFrame(() => (item.querySelector('[tabindex]') || item).click());
+  };
+  // Reddit's own Reply button: it opens the reply box under this comment with the cursor in it
+  const replyOpen = (c) => {
+    const b = ownOf(c, '[slot="comment-reply"] button');
+    if (b) b.click(); else toast('Reddit has not finished loading that comment. Try again.');
+  };
+  // "hide child comments" folds this comment's replies only (RES); the comment itself stays open
+  const kidsToggle = (c, a) => {
+    const shut = c.toggleAttribute('rs-kids-shut');
+    setText(a, shut ? 'show child comments' : 'hide child comments');
+    a.setAttribute('aria-expanded', String(!shut));
+    updateNav();
+  };
+  const commentLinks = (c) => {
+    const id = c.getAttribute('thingid');
+    const src = linkBtn('source', 'Show this comment as it was written', (a) => srcToggle(c, a));
+    src.setAttribute('aria-expanded', 'false');
+    const save = linkBtn('save', '', (a) => saveToggle(c, a), 'rs-csave');
+    save.dataset.id = id; paintSave(save);
+    const kidsA = linkBtn('hide child comments', 'Fold the replies to this comment', (a) => kidsToggle(c, a), 'rs-kids-me');
+    kidsA.setAttribute('aria-expanded', 'true');
+    if (c.getAttribute('depth') === '0') kidsA.dataset.top = ''; // "Hide all replies" gives top comments their own link
+    return [src, save, linkBtn('report', 'Report this comment to the moderators', () => reportOpen(c)), linkBtn('reply', 'Reply to this comment', () => replyOpen(c)), kidsA];
+  };
   // Author flair right after the name, in old Reddit's small grey box. Reddit draws it on a second line and leaves it
   // out on some comments (often a person's later comments in the same thread, and picture-only flair), so the post's
   // comments are read once per post page (one request) and every comment by that person gets it.
-  const aflair = { post: '', byId: new Map(), byName: new Map(), done: false };
+  const aflair = { post: '', byId: new Map(), byName: new Map(), body: new Map(), done: false };
+  // Reddit doesn't mark saved comments on the page; its comment list does, and comments saved here are added
+  const savedComments = new Set();
   const aflairBox = (rich, text) => {
     const s = el('span', { class: 'rs-aflair' });
     const parts = Array.isArray(rich) && rich.length ? rich : [{ e: 'text', t: text || '' }];
@@ -2935,7 +3142,7 @@
   };
   const loadFlairs = (postId) => {
     if (aflair.post === postId) return;
-    aflair.post = postId; aflair.byId = new Map(); aflair.byName = new Map(); aflair.done = false;
+    aflair.post = postId; aflair.byId = new Map(); aflair.byName = new Map(); aflair.body = new Map(); aflair.done = false;
     fetch(`/comments/${postId.replace(/^t3_/, '')}/.json?limit=500&raw_json=1`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null)).then((d) => {
         if (aflair.post !== postId || !Array.isArray(d)) return;
@@ -2943,6 +3150,8 @@
           for (const k of L || []) {
             const x = k?.kind === 't1' && k.data;
             if (!x) continue;
+            if (typeof x.body === 'string') aflair.body.set(`t1_${x.id}`, x.body); // for "source"
+            if (x.saved) savedComments.add(`t1_${x.id}`);
             if (x.author_flair_text || x.author_flair_richtext?.length) {
               const f = { text: String(x.author_flair_text || ''), rich: x.author_flair_richtext };
               aflair.byId.set(`t1_${x.id}`, f);
@@ -2954,6 +3163,7 @@
         walk(d[1]?.data?.children);
         aflair.done = true;
         for (const c of document.querySelectorAll('shreddit-comment[data-rs]:not([rs-aflair])')) paintFlair(c);
+        paintSaves();
       }).catch(() => { /* Reddit's own flair stays */ });
   };
   const comments = () => {
@@ -2996,10 +3206,22 @@
       if (comments.last && Date.parse(c.getAttribute('created')) > comments.last) { c.setAttribute('rs-new', ''); meta.append(el('span', { class: 'rs-badge rs-is-new', text: 'new' })); }
       const links = el('span', { class: 'rs-cacts' }, [el('a', { href: c.getAttribute('permalink') || '#', text: 'permalink' })]);
       if (+c.getAttribute('depth') > 0 && c.getAttribute('parentid')) links.append(parentLink(c));
-      (c.querySelector(':scope > details [slot="actionRow"]') || meta).append(links);
+      links.append(...commentLinks(c));
+      c.rsLinks = links;
+      placeLinks(c);
       if (c.querySelector(':scope > details:not([open])')) foldInfo(c);
     }
+    for (const c of document.querySelectorAll('shreddit-comment[rs-links-wait]')) placeLinks(c);
     kids(); updateNav(); moreReplies();
+  };
+  // Reddit draws a comment's buttons only once it scrolls into view. Links put in before that sat at the left and then
+  // jumped right when the buttons came (seen on 134 of 150 comments), so they wait for Reddit's buttons.
+  const placeLinks = (c) => {
+    const row = c.querySelector(':scope > details [slot="actionRow"]');
+    if (row && !row.querySelector(':scope > shreddit-comment-action-row')) { c.setAttribute('rs-links-wait', ''); return; }
+    c.removeAttribute('rs-links-wait');
+    c.rsLinks.querySelectorAll('.rs-csave').forEach(paintSave);
+    (row || c.querySelector('[slot="commentMeta"]')).append(c.rsLinks);
   };
   // Hide all replies (RES's "hide child comments"): only the top comments show, each with its own "show N replies".
   // A button next to Reddit's comment sort switches it for this page; a setting starts every post that way.
@@ -3272,8 +3494,7 @@
   const go = (path, newTab) => { if (newTab) window.open(new URL(path, location.origin).href, '_blank', 'noopener'); else location.assign(path); };
   const openIn = (a, newTab) => { if (!a) return; if (newTab) window.open(a.href, '_blank', 'noopener'); else a.click(); };
   // s on a post page. Reddit's own s saves the post even when a comment is picked, so RESpawn answers it.
-  // Reddit doesn't mark saved comments on the page, so a comment counts as unsaved until you save it here.
-  const savedComments = new Set();
+  // Which comments you saved comes from Reddit's comment list (see savedComments), shared with the "save" links.
   const saveSel = async () => {
     if (!sel || needLogin('save')) return;
     try {
@@ -3281,6 +3502,7 @@
         const id = sel.getAttribute('thingid'), on = !savedComments.has(id);
         await gql('UpdateCommentSaveState', { commentId: id, saveState: on ? 'SAVED' : 'NONE' });
         if (on) savedComments.add(id); else savedComments.delete(id);
+        paintSaves(id);
         toast(on ? 'Comment saved. Press s again to unsave.' : 'Comment removed from saved.');
       } else if (sel.tagName === 'SHREDDIT-POST') {
         const menu = sel.querySelector('shreddit-post-overflow-menu'), on = !menu?.hasAttribute('is-post-saved');
@@ -3960,7 +4182,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); postVideo(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); postVideo(); applyFilters(); scButton(); postInfo(); appText(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
     karmaSplit();
