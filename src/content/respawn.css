@@ -48,6 +48,10 @@ html:not(.rs-on) .rs-page, html:not(.rs-on) .rs-pause, html:not(.rs-on) .rs-ut, 
   height: 34px; padding: 0 12px 0 16px; background: var(--rs-bg); border-bottom: 1px solid var(--rs-line);
   white-space: nowrap; font: 600 12px/1 var(--rs-font);
 }
+/* In a window just too narrow for its fixed links (about 720 to 800 px) the bar slides sideways inside itself instead of
+   pushing EDIT past the window's edge and making the whole page scroll sideways */
+#rs-shortcuts { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+#rs-shortcuts::-webkit-scrollbar { display: none; }
 /* Reddit's search suggestions drop down from its top bar over this bar, so its top bar sits above this one */
 html.rs-on reddit-header-large { z-index: 6 !important; }
 #rs-shortcuts a, #rs-shortcuts button { flex: none; padding: 6px 8px; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); text-decoration: none; letter-spacing: .02em; font: inherit; cursor: pointer; text-transform: none; }
@@ -125,8 +129,10 @@ html:not(.rs-on) #rs-sc-btn { display: none !important; }
 .rs-btn-quiet:hover { background: var(--rs-strong-bg); }
 
 /* Sort tabs in the open */
-#rs-sorts { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; font: 600 13px/1 var(--rs-font); }
-#rs-sorts a, #rs-sorts button { padding: 8px 14px; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); text-decoration: none; font: inherit; cursor: pointer; }
+#rs-sorts { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; margin: 4px 0 8px; font: 600 13px/1 var(--rs-font); }
+/* One line at every width: no tab ever breaks a word (the script tightens them, then folds the rest into More) */
+#rs-sorts > * { flex: none; white-space: nowrap; }
+#rs-sorts a, #rs-sorts button { padding: 8px 12px; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); text-decoration: none; font: inherit; cursor: pointer; }
 #rs-sorts a:hover, #rs-sorts button:hover { background: var(--rs-hover); color: var(--rs-text); }
 #rs-sorts .rs-cur, #rs-sorts .rs-cur:hover { background: var(--rs-text); color: var(--rs-bg); }
 #rs-sorts .rs-expand-all { margin-left: auto; border: 1px solid var(--rs-line); }
@@ -136,8 +142,14 @@ html.rs-on.rs-feed shreddit-sort-dropdown[header-text="Sort by"] { display: none
 html.rs-on #subgrid-container { max-width: none !important; width: auto !important; margin-inline: 24px !important; }
 html.rs-on .main-container { max-width: none !important; grid-template-columns: minmax(0, 1fr) 316px !important; }
 html.rs-on main#main-content { max-width: none !important; width: auto !important; }
+/* Use full width (setting, on by default): like old Reddit, the page runs to the window's edges with small even margins,
+   the right column keeps its width at the right edge and the posts take the rest */
+html.rs-on.rs-full #subgrid-container { margin-inline: 0 !important; padding-inline: 16px !important; }
+html.rs-on.rs-full .main-container { column-gap: 16px !important; }
 /* Reddit hides its right sidebar in a narrower window: then the posts take its space too */
 html.rs-on.rs-no-rail .main-container { grid-template-columns: minmax(0, 1fr) !important; }
+/* ...and on feeds it steps aside early, before the posts get too narrow for the sort tabs (railCheck measures) */
+html.rs-on.rs-feed.rs-rail-narrow #right-sidebar-container { display: none !important; }
 html.rs-on.rs-rail-empty .main-container { grid-template-columns: minmax(0, 1fr) !important; }
 html.rs-on.rs-rail-empty #right-sidebar-container { position: fixed !important; left: 0 !important; top: 0 !important; visibility: hidden !important; pointer-events: none !important; }
 /* Post pages: a comment that starts below the end of the right column runs on under it at the full width, like
@@ -215,9 +227,8 @@ html:not(.rs-on) .rs-hidden-note { display: none !important; }
 /* old Reddit's lists (classic HOME and ALL): Reddit's own feed stays out of sight under them */
 html.rs-on.rs-classic #main-content > :not(#rs-classic) { display: none !important; }
 #rs-classic { display: block; min-width: 0; padding-top: 8px; }
-#rs-classic #rs-sorts { flex-wrap: wrap; row-gap: 6px; }
 #rs-classic .rs-cl-div { flex: none; width: 1px; height: 20px; margin: 0 4px; background: var(--rs-line); }
-#rs-classic .rs-cl-time { height: 31px; padding: 0 10px; border: 1px solid var(--rs-line); border-radius: 999px; background: var(--rs-bg); color: var(--rs-text); font: 600 13px/1 var(--rs-font); cursor: pointer; }
+#rs-classic .rs-cl-time { box-sizing: border-box; height: 31px; margin: 0; align-self: center; padding: 0 10px; border: 1px solid var(--rs-line); border-radius: 999px; background: var(--rs-bg); color: var(--rs-text); font: 600 13px/1 var(--rs-font); cursor: pointer; }
 .rs-cl-more { padding: 18px 0 48px; text-align: center; color: var(--rs-weak); font: 500 14px/1.3 var(--rs-font); }
 .rs-cl-err { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .rs-cl-err a.rs-btn { display: inline-flex; align-items: center; text-decoration: none; }
@@ -308,6 +319,30 @@ html.rs-on shreddit-comment > details:not([open]) > summary .rs-fold:not(:empty)
 #rs-theme.rs-theme-float { position: fixed; top: 8px; right: 164px; z-index: 2147483000; }
 html:not(.rs-on) #rs-theme { display: none !important; }
 
+/* Font (setting): one of the fonts every computer has, on RESpawn's rows and on Reddit's own text. Icons, code and the
+   settings window keep their own (the window stays put while the page behind it previews the pick). */
+html.rs-on.rs-font-old { --rs-pick: verdana, arial, helvetica, sans-serif; }
+html.rs-on.rs-font-arial { --rs-pick: arial, helvetica, sans-serif; }
+html.rs-on.rs-font-tahoma { --rs-pick: tahoma, verdana, "Segoe UI", sans-serif; }
+html.rs-on.rs-font-georgia { --rs-pick: georgia, "Times New Roman", serif; }
+html.rs-on:is(.rs-font-old, .rs-font-arial, .rs-font-tahoma, .rs-font-georgia) { --font-sans: var(--rs-pick) !important; --rs-font: var(--rs-pick); }
+html.rs-on:is(.rs-font-old, .rs-font-arial, .rs-font-tahoma, .rs-font-georgia) body,
+html.rs-on:is(.rs-font-old, .rs-font-arial, .rs-font-tahoma, .rs-font-georgia) body :not(svg, svg *, code, pre, pre *, kbd, samp, [class*="icon"], #rs-panel, #rs-panel *) { font-family: var(--rs-pick) !important; }
+
+/* Old Reddit font: Verdana runs large and wide, so rows take old Reddit's own sizes (plain 16 px titles, 11 px lines
+   under them) and keep its tight rows; comments stay 14 px as on old Reddit */
+html.rs-on.rs-font-old .rs-title, html.rs-on.rs-font-old .rs-tline { font-weight: 400; line-height: 1.25; }
+html.rs-on.rs-font-old .rs-meta { margin-top: 2px; font-size: 11px; }
+html.rs-on.rs-font-old .rs-meta a { font-weight: 400; }
+html.rs-on.rs-font-old .rs-domain, html.rs-on.rs-font-old .rs-flair { font-size: 10px; }
+html.rs-on.rs-font-old .rs-x { width: 22px; height: 22px; }
+html.rs-on.rs-font-old .rs-acts { margin-top: 1px; }
+html.rs-on.rs-font-old .rs-acts > * { height: 18px; font-size: 11px; }
+html.rs-on.rs-font-old #rs-shortcuts { font-size: 11px; font-weight: 400; }
+html.rs-on.rs-font-old #rs-sorts { font-size: 12px; }
+html.rs-on.rs-font-old #rs-filterline { font-weight: 400; }
+html.rs-on.rs-font-old shreddit-post[view-context="CommentsPage"] h1[slot="title"] { font-size: 20px !important; font-weight: 400 !important; line-height: 1.3 !important; }
+
 /* Settings window: RES's settings console in the new look. A dimmed page behind, a window sized for the screen, the
    categories on the left and only the settings side scrolling. Reddit's own colors come through its variables. */
 #rs-shade { position: fixed; inset: 0; z-index: 2147483001; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; background: rgba(0,0,0,.45); animation: rs-pn-fade .14s ease-out; }
@@ -319,6 +354,7 @@ html:not(.rs-on) #rs-theme { display: none !important; }
   --rs-pn-track: var(--color-neutral-background-selected, #e5ebee);
   --rs-pn-thumb: var(--color-neutral-background, #fff);
   --rs-pn-focus: var(--color-interactive-focused, #01668d);
+  --rs-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   position: relative; display: flex; flex-direction: column; box-sizing: border-box;
   width: min(880px, 100%); height: min(620px, 100%); /* the backdrop's padding keeps it off the window's edges */
   border: 1px solid var(--rs-line); border-radius: 16px; background: var(--rs-pn-bg); color: var(--rs-text); overflow: hidden;
@@ -361,7 +397,7 @@ html:not(.rs-on) #rs-theme { display: none !important; }
 #rs-panel mark { padding: 0 1px; border-radius: 3px; background: color-mix(in srgb, #f5b400 34%, transparent); color: inherit; }
 
 /* Header: icon and name over the categories, the search lined up with the settings, then on/off and the X */
-.rs-pn-head { display: grid; grid-template-columns: 208px minmax(0, 1fr) auto auto; align-items: center; padding: 12px 12px 12px 0; border-bottom: 1px solid var(--rs-line); }
+.rs-pn-head { display: grid; grid-template-columns: 220px minmax(0, 1fr) auto auto; align-items: center; padding: 12px 12px 12px 0; border-bottom: 1px solid var(--rs-line); }
 .rs-pn-brand { display: flex; align-items: center; gap: 10px; min-width: 0; padding-left: 20px; }
 .rs-pn-logo { flex: none; width: 28px; height: 28px; background: url("data:image/png;base64,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") center / contain no-repeat; }
 #rs-panel .rs-pn-brand h2 { font: 700 17px/1 var(--rs-font); color: var(--rs-text); }
@@ -382,7 +418,7 @@ html:not(.rs-on) #rs-theme { display: none !important; }
 
 /* Categories */
 .rs-pn-head, .rs-pn-off, .rs-pn-foot { flex: none; }
-.rs-pn-body { display: grid; flex: 1 1 0; grid-template-columns: 208px minmax(0, 1fr); min-height: 0; }
+.rs-pn-body { display: grid; flex: 1 1 0; grid-template-columns: 220px minmax(0, 1fr); min-height: 0; }
 .rs-pn-cats { display: flex; flex-direction: column; gap: 2px; min-height: 0; padding: 12px 10px; border-right: 1px solid var(--rs-line); background: var(--rs-pn-side); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 #rs-panel .rs-pn-cats button { position: relative; display: flex; align-items: center; gap: 10px; flex: none; width: 100%; height: 38px; margin: 0; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--rs-text); font: 500 14px/1 var(--rs-font); text-align: left; cursor: pointer; }
 #rs-panel .rs-pn-cats button:hover { background: color-mix(in srgb, var(--rs-text) 6%, transparent); }
@@ -420,7 +456,9 @@ html:not(.rs-on) #rs-theme { display: none !important; }
 #rs-panel .rs-pn-label { font: 500 14px/1.3 var(--rs-font); color: var(--rs-text); cursor: inherit; text-wrap: balance; }
 .rs-pn-count { flex: none; min-width: 22px; height: 20px; padding: 0 7px; border-radius: 999px; background: var(--rs-pn-track); color: var(--rs-weak); font: 600 12px/20px var(--rs-font); text-align: center; }
 #rs-panel .rs-pn-i { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px; margin: -2px 0; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); cursor: help; }
-#rs-panel .rs-pn-i:hover, #rs-panel .rs-pn-i[aria-describedby] { background: var(--rs-hover); color: var(--rs-text); }
+#rs-panel .rs-pn-i { opacity: .55; transition: opacity .12s; }
+#rs-panel .rs-pn-row:hover .rs-pn-i, #rs-panel .rs-pn-i:focus-visible { opacity: 1; }
+#rs-panel .rs-pn-i:hover, #rs-panel .rs-pn-i[aria-describedby] { opacity: 1; background: var(--rs-hover); color: var(--rs-text); }
 .rs-pn-i svg { width: 16px; height: 16px; }
 .rs-pn-hint { margin-top: 3px; font: 400 12.5px/1.35 var(--rs-font); color: var(--rs-weak); text-wrap: balance; }
 #rs-panel .rs-seg { flex: none; background: var(--rs-pn-track); }
@@ -437,6 +475,23 @@ html:not(.rs-on) #rs-theme { display: none !important; }
 .rs-pn-ei { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 999px; background: var(--rs-pn-track); color: var(--rs-weak); }
 .rs-pn-ei svg { width: 24px; height: 24px; }
 #rs-panel .rs-pn-empty p { font: 500 15px/1.4 var(--rs-font); color: var(--rs-text); }
+/* Font: a name per font, each drawn in its own font; they move under the label when the window is narrow */
+#rs-panel .rs-pn-wrap { flex-wrap: wrap; row-gap: 10px; }
+.rs-pn-fonts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+#rs-panel .rs-pn-font { height: 32px; margin: 0; padding: 0 12px; border: 1px solid var(--rs-line); border-radius: 8px; background: var(--rs-pn-bg); color: var(--rs-text); font-size: 13.5px; font-weight: 400; line-height: 1; white-space: nowrap; cursor: pointer; }
+#rs-panel .rs-pn-font:hover { background: var(--rs-hover); }
+#rs-panel .rs-pn-font[aria-checked="true"] { border-color: var(--rs-up); background: color-mix(in srgb, var(--rs-up) 10%, var(--rs-pn-bg)); box-shadow: inset 0 0 0 1px var(--rs-up); }
+#rs-panel .rs-pn-font[data-v="reddit"] { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+#rs-panel .rs-pn-font[data-v="old"] { font-family: verdana, arial, helvetica, sans-serif; }
+#rs-panel .rs-pn-font[data-v="arial"] { font-family: arial, helvetica, sans-serif; }
+#rs-panel .rs-pn-font[data-v="tahoma"] { font-family: tahoma, verdana, "Segoe UI", sans-serif; }
+#rs-panel .rs-pn-font[data-v="georgia"] { font-family: georgia, "Times New Roman", serif; }
+/* Backup: what a saved file holds */
+.rs-pn-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rs-pn-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; }
+.rs-pn-tile + .rs-pn-tile { border-left: 1px solid var(--rs-line); }
+#rs-panel .rs-pn-tile b { font: 700 22px/1.1 var(--rs-font); color: var(--rs-text); font-variant-numeric: tabular-nums; }
+.rs-pn-tile span { font: 400 12.5px/1.3 var(--rs-font); color: var(--rs-weak); }
 /* The keys on the Keyboard page */
 .rs-pn-keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 28px; padding: 14px 16px 16px; }
 #rs-panel .rs-pn-kcol h5 { margin-bottom: 8px; font: 600 13px/1.2 var(--rs-font); color: var(--rs-text); }
@@ -475,6 +530,10 @@ html:not(.rs-on) #rs-theme { display: none !important; }
   .rs-pn-pane { padding: 16px 12px 20px; }
   .rs-pn-row { gap: 12px; padding: 9px 12px; }
   .rs-pn-keys { grid-template-columns: minmax(0, 1fr); }
+  .rs-pn-fonts { display: grid; flex: 1 1 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rs-pn-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rs-pn-tile:nth-child(3) { border-left: 0; }
+  .rs-pn-tile:nth-child(n+3) { border-top: 1px solid var(--rs-line); }
   .rs-pn-foot { gap: 12px; padding: 10px 12px 10px 14px; }
 }
 @media (max-width: 520px) { .rs-pn-ver { display: none; } }
@@ -517,11 +576,11 @@ html.rs-on.rs-left-slide.rs-left-open #left-sidebar-container { transform: none 
 html.rs-on.rs-left-slide.rs-left-hover #rs-left-edge { display: block; }
 html.rs-on.rs-left-slide.rs-left-hover #rs-left-edge::after { content: ""; position: absolute; left: 0; top: 50%; width: 4px; height: 56px; margin-top: -28px; border-radius: 0 4px 4px 0; background: var(--rs-strong-bg); }
 /* Click to open (the default): a slim tab on the left edge that rides along the menu's edge while it is open */
-#rs-left-tab { position: fixed; left: 0; top: 50%; z-index: 31; display: none; align-items: center; justify-content: center; width: 16px; height: 48px; margin: -24px 0 0; padding: 0; border: 1px solid var(--rs-line); border-left: 0; border-radius: 0 10px 10px 0; background: var(--rs-strong-bg); color: var(--rs-weak); box-shadow: 2px 1px 8px rgba(0,0,0,.1); cursor: pointer; transition: width .12s, left .18s ease, color .12s, background .12s; }
+#rs-left-tab { position: fixed; left: 0; top: 50%; z-index: 31; display: none; align-items: center; justify-content: center; width: 14px; height: 48px; margin: -24px 0 0; padding: 0; border: 1px solid var(--rs-line); border-left: 0; border-radius: 0 10px 10px 0; background: var(--rs-strong-bg); color: var(--rs-weak); box-shadow: 2px 1px 8px rgba(0,0,0,.1); cursor: pointer; transition: width .12s, left .18s ease, color .12s, background .12s; }
 html.rs-on.rs-left-slide:not(.rs-left-hover) #rs-left-tab { display: inline-flex; }
-#rs-left-tab:hover, #rs-left-tab:focus-visible { width: 22px; background: var(--rs-hover); color: var(--rs-text); }
+#rs-left-tab:hover, #rs-left-tab:focus-visible { width: 16px; background: var(--rs-hover); color: var(--rs-text); }
 #rs-left-tab:focus-visible { outline: 2px solid var(--color-interactive-focused, #01668d); outline-offset: 2px; }
-#rs-left-tab svg { flex: none; width: 14px; height: 14px; transition: transform .18s; }
+#rs-left-tab svg { flex: none; width: 13px; height: 13px; transition: transform .18s; }
 html.rs-left-open #rs-left-tab { left: 272px; }
 html.rs-left-open #rs-left-tab svg { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { #rs-left-tab, #rs-left-tab svg { transition: none; } }
@@ -533,12 +592,20 @@ html.rs-on.rs-hide-suggested feed-announcement, html.rs-on.rs-hide-suggested shr
 #rs-sorts .rs-funnel svg { width: 17px; height: 17px; }
 #rs-sorts .rs-funnel[aria-pressed="true"] { background: var(--rs-hover); color: var(--rs-text); }
 #rs-sorts .rs-funnel.rs-fl-active::after { content: ""; position: absolute; top: 5px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--rs-up); }
-#rs-filterline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 8px; padding: 6px 8px; border: 1px solid var(--rs-line); border-radius: 12px; font: 600 12px/1 var(--rs-font); color: var(--rs-weak); }
+#rs-filterline { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; margin: 2px 0 8px; padding: 6px 8px; border: 1px solid var(--rs-line); border-radius: 12px; font: 600 12px/1 var(--rs-font); color: var(--rs-weak); }
 html.rs-fl-hidden #rs-filterline { display: none !important; }
+/* Always one line: the last button shortens to "Hide…" when room runs out, and past that the chips slide sideways */
+#rs-filterline::-webkit-scrollbar { display: none; }
+#rs-filterline > * { flex: none; }
+#rs-filterline .rs-fl-brief { display: none; }
+#rs-filterline.rs-fl-tight .rs-fl-long { display: none; }
+#rs-filterline.rs-fl-tight .rs-fl-brief { display: inline; }
+#rs-filterline.rs-fl-tight { gap: 3px; }
+#rs-filterline.rs-fl-tight .rs-chip, #rs-filterline.rs-fl-tight .rs-fl-lists { padding: 0 8px; }
 #rs-filterline .rs-fl-icon { display: inline-flex; padding: 0 4px 0 2px; }
 #rs-filterline .rs-fl-icon svg { width: 16px; height: 16px; }
 #rs-filterline button { text-transform: none !important; letter-spacing: normal; font: inherit; cursor: pointer; white-space: nowrap; }
-.rs-chip { height: 28px; padding: 0 12px; border: 1px solid var(--rs-line); border-radius: 999px; background: none; color: var(--rs-weak); }
+.rs-chip { height: 28px; padding: 0 10px; border: 1px solid var(--rs-line); border-radius: 999px; background: none; color: var(--rs-weak); }
 .rs-chip:hover { background: var(--rs-hover); color: var(--rs-text); }
 .rs-chip[data-state="only"] { border-color: var(--rs-good); background: color-mix(in srgb, var(--rs-good) 12%, transparent); color: var(--rs-good); }
 .rs-chip[data-state="hide"] { border-color: var(--rs-bad); background: color-mix(in srgb, var(--rs-bad) 10%, transparent); color: var(--rs-bad); }
@@ -546,17 +613,30 @@ html.rs-fl-hidden #rs-filterline { display: none !important; }
 #rs-filterline .rs-fl-clear { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--rs-hover); color: var(--rs-text); }
 #rs-filterline .rs-fl-clear:hover { background: var(--rs-strong-bg); }
 #rs-filterline .rs-fl-clear[hidden] { display: none; }
-#rs-filterline .rs-fl-lists { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 12px; border: 1px dashed var(--rs-line); border-radius: 999px; background: none; color: var(--rs-weak); }
+#rs-filterline .rs-fl-lists { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 11px; border: 1px dashed var(--rs-line); border-radius: 999px; background: none; color: var(--rs-weak); }
 #rs-filterline .rs-fl-lists:hover { border-style: solid; color: var(--rs-text); background: var(--rs-hover); }
 #rs-filterline .rs-fl-plus { font-size: 15px; line-height: 1; }
 html.rs-on .rs-row.rs-filtered { display: none !important; }
 .rs-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border: 1px solid currentColor; border-radius: 4px; font: 700 10px/1.4 var(--rs-font); letter-spacing: .03em; text-transform: uppercase; vertical-align: 2px; }
 .rs-tag-nsfw { color: var(--rs-bad); }
 .rs-tag-spoiler { color: var(--rs-weak); }
-#rs-sortbar { flex: 1 1 auto; min-width: 0; margin-right: 8px; }
+#rs-sortbar { position: relative; flex: 1 1 auto; min-width: 0; margin-right: 8px; }
+#rs-sorts.rs-tight { gap: 2px; }
+#rs-sorts.rs-tight a, #rs-sorts.rs-tight button:not(.rs-funnel) { padding: 8px 9px; }
+#rs-sorts .rs-more { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; border: 1px solid var(--rs-line); }
+#rs-sorts .rs-more[hidden] { display: none; }
+#rs-sorts .rs-more[aria-expanded="true"] { background: var(--rs-hover); color: var(--rs-text); }
+.rs-more-i { display: inline-flex; }
+.rs-more-i svg { width: 16px; height: 16px; }
+.rs-more-menu { position: absolute; top: calc(100% - 2px); right: 0; z-index: 40; display: flex; flex-direction: column; min-width: 190px; padding: 6px; border: 1px solid var(--rs-line); border-radius: 12px; background: var(--rs-bg); box-shadow: 0 12px 32px rgba(0,0,0,.16); font: 600 13px/1 var(--rs-font); }
+.rs-more-menu[hidden] { display: none; }
+.rs-more-menu > a, .rs-more-menu > button { display: flex; align-items: center; height: 34px; margin: 0; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--rs-text); font: inherit; text-align: left; text-decoration: none; text-transform: none; white-space: nowrap; cursor: pointer; }
+.rs-more-menu > a:hover, .rs-more-menu > button:hover { background: var(--rs-hover); }
+.rs-more-menu > .rs-cl-div { width: auto; height: 1px; margin: 4px 6px; background: var(--rs-line); }
+.rs-more-menu > select { margin: 4px 6px; }
 #rs-sortbar #rs-sorts { margin: 2px 0 6px; }
 html.rs-on .rs-grow { flex: 1 1 auto !important; min-width: 0; }
-html.rs-on .rs-grow-row > :not(.rs-grow) { flex-grow: 0 !important; }
+html.rs-on .rs-grow-row > :not(.rs-grow) { flex-grow: 0 !important; flex-shrink: 0 !important; } /* Reddit's View menu keeps its size */
 html.rs-on .rs-nospace { display: none !important; }
 #rs-sortbar.rs-after-tabs { margin-left: 16px; padding-left: 12px; border-left: 1px solid var(--rs-line); }
 /* A collapsed Reddit menu slides its panel left and fades its contents out; the slide-out shows them */

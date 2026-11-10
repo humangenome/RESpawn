@@ -8,8 +8,11 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', navHover: false, hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, classicSubs: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', navHover: false, font: 'reddit', fullWidth: true, hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, classicSubs: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
+  // Fonts every computer already has (nothing is downloaded). Reddit's own is your computer's font (Segoe UI on
+  // Windows, San Francisco on a Mac); Old Reddit is the Verdana stack old Reddit used.
+  const FONTS = [['reddit', 'Reddit'], ['old', 'Old Reddit'], ['arial', 'Arial'], ['tahoma', 'Tahoma'], ['georgia', 'Georgia']];
 
   // ---------- small helpers ----------
   // Our own fixed icon drawings (never text from a page), read once and copied in without innerHTML
@@ -64,7 +67,7 @@
   // RESpawn starts as the page starts, so the sidebar, ads and the rest never appear and then vanish. The add-on's own
   // storage answers a moment too late for that, so a copy of just these on/off switches is kept in the site's storage.
   const BOOT_KEY = 'rs-boot';
-  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'navHover', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'classicHome', 'classicSubs'];
+  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'navHover', 'font', 'fullWidth', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'classicHome', 'classicSubs'];
   // Old Reddit's lists (see "old Reddit's lists" below) live on / : r/all at /#all..., Home at / unless that is switched off;
   // and on a subreddit's own list addresses (/r/kings/, /r/kings/new/, /r/kings/top/?t=week) unless that is switched off.
   // Special lists that only look like subreddits, and Reddit's flair filter (?f=), keep Reddit's own page.
@@ -78,8 +81,9 @@
       'rs-on': !!c.enabled, 'rs-hide-ads': !!c.hideAds, 'rs-hide-badges': !!c.hideBadges, 'rs-hide-recent': !!c.hideRecent,
       'rs-hide-suggested': !!c.hideSuggested, 'rs-no-shortcuts': !c.showShortcuts, 'rs-left-slide': c.leftNav === 'slide',
       'rs-left-hide': c.leftNav === 'hide', 'rs-left-hover': !!c.navHover, 'rs-fl-hidden': !c.filterline, 'rs-pin-header': !!c.pinHeader, 'rs-hl': !!c.highlight,
-      'rs-no-chat': !!c.hideChat,
+      'rs-no-chat': !!c.hideChat, 'rs-full': !!c.fullWidth,
     };
+    for (const [f] of FONTS.slice(1)) on[`rs-font-${f}`] = c.font === f;
     for (const [k, v] of Object.entries(on)) html.classList.toggle(k, v);
   };
   const saveBoot = () => { try { localStorage.setItem(BOOT_KEY, JSON.stringify(Object.fromEntries(BOOT_FIELDS.map((k) => [k, cfg[k]])))); } catch { /* storage full or blocked */ } };
@@ -122,6 +126,7 @@
     paintGear();
     if (!cfg.enabled) releaseHolds();
     topButton(); hideMyName(true);
+    setTimeout(fitBars, 50); // a new font or width setting changes how much fits on the sort and filter lines
   };
   // On/off lives at the top of the gear's settings panel (the gear stays in Reddit's top bar while RESpawn is off).
   const paintGear = () => {
@@ -188,62 +193,62 @@
   };
   const SETTINGS = [
     { id: 'look', name: 'Appearance', icon: PN_ICON.look, words: 'look style layout clutter', groups: [
-      ['Colors', [
-        { key: 'theme', label: 'Light or dark', choices: [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], tip: "Auto follows your computer. This is Reddit's own Display Mode, so Reddit's menu changes with it.", words: 'theme dark mode light mode night display' },
-        { key: 'subStyles', label: 'Subreddit styles', tip: "Each subreddit's own colors and banner. The switch on a subreddit's side card changes that one subreddit only.", words: 'community theme css custom' },
+      ['Colors and text', [
+        { key: 'theme', label: 'Light or dark', choices: [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], info: true, tip: "Auto follows your computer. This is Reddit's own Display Mode, so Reddit's menu changes with it.", words: 'theme dark mode light mode night display' },
+        { key: 'font', label: 'Font', kind: 'font', info: true, tip: "Old Reddit is Verdana, the font old Reddit used. Reddit is your computer's own font. Posts, comments and sidebars change as you pick.", words: 'typeface verdana arial tahoma georgia text size' },
+        { key: 'subStyles', label: 'Subreddit styles', info: true, tip: "Each subreddit's own colors and banner. The switch on a subreddit's side card changes that one subreddit only.", words: 'community theme css custom' },
       ]],
       ['Layout', [
-        { key: 'leftNav', label: 'Left sidebar', choices: [['show', 'Show'], ['slide', 'Slide out'], ['hide', 'Hide']], tip: "Reddit's left menu. Slide out keeps it tucked away until you point at the left edge of the window.", words: 'menu navigation communities' },
-        { key: 'navHover', label: 'Open sidebar on hover', child: true, when: () => cfg.leftNav === 'slide', tip: 'When off, a slim tab on the left edge opens the sidebar with a click. When on, it slides out as soon as the mouse reaches the left edge.', words: 'auto open mouse point slide out left menu' },
-        { key: 'pinHeader', label: 'Keep top bar on screen', tip: "When off, Reddit's top bar scrolls away with the page, like old Reddit's header.", words: 'header sticky pinned fixed' },
+        { key: 'fullWidth', label: 'Use full width', info: true, tip: "Posts and comments use the whole window like old Reddit, with small even margins. When off, Reddit's wider margins come back.", words: 'wide margins gutters space stretch' },
+        { key: 'leftNav', label: 'Left sidebar', choices: [['show', 'Show'], ['slide', 'Slide out'], ['hide', 'Hide']], info: true, tip: "Reddit's left menu. Slide out keeps it tucked away behind a tab on the left edge.", words: 'menu navigation communities' },
+        { key: 'navHover', label: 'Open sidebar on hover', child: true, when: () => cfg.leftNav === 'slide', info: true, tip: 'When off, a slim tab on the left edge opens the sidebar with a click. When on, it slides out as soon as the mouse reaches the left edge.', words: 'auto open mouse point slide out left menu' },
+        { key: 'pinHeader', label: 'Keep top bar on screen', info: true, tip: "When off, Reddit's top bar scrolls away with the page, like old Reddit's header.", words: 'header sticky pinned fixed' },
         { key: 'topButton', label: 'Back to top button', tip: 'A round button in the bottom right corner once you scroll down. It jumps back to the top.', words: 'scroll up jump' },
       ]],
       ['Clutter', [
         { key: 'hideAds', label: 'Hide ads', tip: 'Promoted posts in the feed and ads beside it.', words: 'promoted sponsored' },
         { key: 'hideRecent', label: 'Hide "Recent posts"', tip: 'The list of posts you opened lately, on the right side of the feed.', words: 'history recently viewed sidebar' },
-        { key: 'hideSuggested', label: 'Hide suggestions and games', tip: "Reddit's suggested communities and its games, in the feed and the left menu.", words: 'recommended communities' },
+        { key: 'hideSuggested', label: 'Hide suggestions and games', info: true, tip: "Reddit's suggested communities and its games, in the feed and the left menu.", words: 'recommended communities' },
         { key: 'hideBadges', label: 'Hide "Top 1%" badges', tip: 'The Top 1% poster and commenter badges beside names.', words: 'flair award' },
         { key: 'hideChat', label: 'Hide chat', tip: "Reddit's chat button in the top bar and its chat window.", words: 'messages' },
       ]],
     ] },
     { id: 'feed', name: 'Feed', icon: PN_ICON.feed, words: 'posts list', groups: [
       ["Old Reddit's lists", [
-        { key: 'classicHome', label: "Old Reddit's list on Home", tip: "Home shows old Reddit's front page, in old Reddit's order. When off, Home is Reddit's own feed.", words: 'front page classic best hot order' },
-        { key: 'classicSubs', label: "Old Reddit's list on subreddits", tip: "A subreddit's Hot, New, Top and other lists come from old Reddit, in old Reddit's order. Its header and sidebar stay.", words: 'classic hot new top rising controversial order' },
+        { key: 'classicHome', label: "Old Reddit's list on Home", info: true, tip: "Home shows old Reddit's front page, in old Reddit's order. When off, Home is Reddit's own feed.", words: 'front page classic best hot order' },
+        { key: 'classicSubs', label: "Old Reddit's list on subreddits", info: true, tip: "A subreddit's Hot, New, Top and other lists come from old Reddit, in old Reddit's order. Its header and sidebar stay.", words: 'classic hot new top rising controversial order' },
       ]],
       ['Filters', [
-        { key: 'filterline', label: 'Filter bar', tip: 'Buttons above the feed that show only, or hide, NSFW posts, spoilers, posts you have opened and more.', words: 'filterline visited expando' },
-        { key: 'filterScore', label: 'Score filter', kind: 'number', tip: "The filter bar's score button picks posts with more than this many points.", words: 'points upvotes karma minimum' },
+        { key: 'filterline', label: 'Filter bar', info: true, tip: 'Buttons above the feed that show only, or hide, NSFW posts, spoilers, posts you have opened and more.', words: 'filterline visited expando' },
+        { key: 'filterScore', label: 'Score filter', kind: 'number', info: true, tip: "The filter bar's score button picks posts with more than this many points.", words: 'points upvotes karma minimum' },
         { key: 'filterLists', label: 'Hide by word, subreddit or site', kind: 'edit', count: 'filterLists', tip: 'Posts with a word from your list in the title, from a subreddit on your list, or linking to a site on your list never show.', words: 'block mute keyword domain' },
       ]],
       ['Scrolling and videos', [
-        { key: 'pauseEvery', label: 'Pages before a pause', kind: 'number', hint: '0 = never pause', tip: 'Endless scrolling stops after this many pages and waits for you to press Load more.', words: 'never ending infinite scroll' },
+        { key: 'pauseEvery', label: 'Pages before a pause', kind: 'number', hint: '0 = never pause', info: true, tip: 'Endless scrolling stops after this many pages and waits for you to press Load more.', words: 'never ending infinite scroll' },
         { key: 'maxVideos', label: 'Videos playing at once', kind: 'number', hint: '0 = no limit', tip: 'Starting one more video pauses the one that started first.', words: 'autoplay limit' },
       ]],
     ] },
     { id: 'bar', name: 'Shortcut bar', icon: PN_ICON.bar, words: 'subreddit manager favorites', groups: [
       ['', [
         { key: 'showShortcuts', label: 'Show shortcut bar', tip: "Your subreddits in a bar under Reddit's top bar, like RES's subreddit bar.", words: 'subreddit manager' },
-        { key: 'scMode', label: 'Bar shows', choices: [['mine', 'My list'], ['visits', 'Most visited']], tip: 'My list is the shortcuts you pick. Most visited fills the bar with the subreddits you open most.', words: 'frequent' },
+        { key: 'scMode', label: 'Bar shows', choices: [['mine', 'My list'], ['visits', 'Most visited']], info: true, tip: 'My list is the shortcuts you pick. Most visited fills the bar with the subreddits you open most.', words: 'frequent' },
         { key: 'editShortcuts', label: 'Your shortcuts', kind: 'edit', count: 'editShortcuts', tip: 'Add, rename, reorder and group the subreddits on the bar.', words: 'add remove reorder rename groups' },
       ]],
       ['Extra links', [
-        { key: 'linkDashboard', label: 'Dashboard link', tip: 'Opens the RESpawn dashboard: your saved comments, tags and hide lists.', words: 'saved' },
-        { key: 'linkFriends', label: 'Friends link', tip: 'A feed of posts from your friends and the people you follow.', words: 'follow following' },
-        { key: 'linkMod', label: 'Mod and Mod queue links', tip: 'Only shows when you moderate a subreddit.', words: 'moderator queue' },
+        { key: 'linkDashboard', label: 'Dashboard link', info: true, tip: 'Opens the RESpawn dashboard: your saved comments, tags and hide lists.', words: 'saved' },
+        { key: 'linkFriends', label: 'Friends link', info: true, tip: 'A feed of posts from your friends and the people you follow.', words: 'follow following' },
+        { key: 'linkMod', label: 'Mod and Mod queue links', info: true, tip: 'Only shows when you moderate a subreddit.', words: 'moderator queue' },
       ]],
     ] },
-    { id: 'comments', name: 'Comments', icon: PN_ICON.comments, words: 'post page thread replies', groups: [
-      ['', [
+    { id: 'people', name: 'Comments and people', icon: PN_ICON.comments, words: 'post page thread replies users names', groups: [
+      ['Comments', [
         { key: 'autoReplies', label: 'Load more replies as you scroll', tip: 'Presses "more replies" for you when you reach it.', words: 'expand continue thread' },
         { key: 'hideKids', label: 'Start with replies hidden', tip: 'Post pages open with only the top comments. Each one shows how many replies it has.', words: 'collapse fold children threads' },
       ]],
-    ] },
-    { id: 'people', name: 'People', icon: PN_ICON.people, words: 'users names', groups: [
-      ['', [
-        { key: 'hoverCards', label: 'Hover cards', tip: 'Point at a username or subreddit name for a moment to see a card about it.', words: 'user info popup karma' },
+      ['People', [
+        { key: 'hoverCards', label: 'Hover cards', info: true, tip: 'Point at a username or subreddit name for a moment to see a card about it.', words: 'user info popup karma' },
         { key: 'highlight', label: 'Color the poster, mods and friends', tip: 'In comments, the person who made the post, moderators and your friends get colored names.', words: 'highlight op submitter moderator' },
-        { key: 'tagList', label: 'Your tags', kind: 'edit', count: 'tagList', tip: 'Tag anyone from their hover card. The tag shows beside their name.', words: 'label tagger ignore' },
+        { key: 'tagList', label: 'Your tags', kind: 'edit', count: 'tagList', info: true, tip: 'Tag anyone from their hover card. The tag shows beside their name.', words: 'label tagger ignore' },
         { key: 'hideMyName', label: 'Hide your username', tip: 'Your name shows as "anonymous" on screen, handy for screenshots.', words: 'privacy screenshot anonymous' },
       ]],
     ] },
@@ -255,7 +260,7 @@
     ] },
     { id: 'backup', name: 'Backup', icon: PN_ICON.backup, words: 'backup file export import restore', groups: [
       ['Settings file', [
-        { key: 'saveFile', label: 'Save to a file', kind: 'save', tip: 'Your settings, shortcuts, tags and hide lists, saved to your Downloads folder.', words: 'export download' },
+        { key: 'saveFile', label: 'Save to a file', kind: 'save', info: true, tip: 'Your settings, shortcuts, tags and hide lists, saved to your Downloads folder.', words: 'export download' },
         { key: 'loadFile', label: 'Load from a file', kind: 'load', tip: 'Replaces your settings with the ones in a file you saved.', words: 'import restore upload' },
       ]],
     ] },
@@ -306,9 +311,9 @@
   const pnRow = (s, words, why) => {
     const id = `rs-pn-${s.key}`, hintId = s.hint || why ? `${id}-h` : null;
     const n = s.count ? pnCount(s.count) : 0;
-    const one = !s.choices && !['edit', 'show', 'save', 'load'].includes(s.kind); // a single box or switch the words can name
+    const one = !s.choices && !['edit', 'show', 'save', 'load', 'font'].includes(s.kind); // a single box or switch the words can name
     const name = el(one ? 'label' : 'span', { class: 'rs-pn-label', id: `${id}-l`, for: one ? id : null }, pnMark(s.label, words));
-    const info = s.tip && !why ? el('button', { type: 'button', class: 'rs-pn-i', 'aria-label': `About ${s.label}`, 'data-tip': s.tip, html: PN_ICON.info }) : null;
+    const info = s.info && !why ? el('button', { type: 'button', class: 'rs-pn-i', 'aria-label': `About ${s.label}`, 'data-tip': s.tip, html: PN_ICON.info }) : null;
     const text = el('div', { class: 'rs-pn-text' }, [
       el('div', { class: 'rs-pn-name' }, [name, n ? el('span', { class: 'rs-pn-count', text: String(n) }) : null, info]),
       hintId ? el('div', { class: 'rs-pn-hint', id: hintId }, pnMark(why ? s.tip : s.hint, words)) : null,
@@ -324,6 +329,14 @@
           saveCfg({ [s.key]: v }); applyEnabled(); if (s.key === 'scMode') shortcutBar(); ctl.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
           pnWhen();
         };
+        ctl.append(b);
+      }
+    } else if (s.kind === 'font') {
+      // Each name is drawn in its own font, and the page behind the window changes the moment you pick one
+      ctl = el('div', { class: 'rs-pn-fonts', role: 'radiogroup', 'aria-labelledby': `${id}-l`, 'data-key': s.key });
+      for (const [v, t] of FONTS) {
+        const b = el('button', { type: 'button', role: 'radio', class: 'rs-pn-font', 'data-v': v, 'aria-checked': String((cfg.font || 'reddit') === v), text: t });
+        b.onclick = () => { saveCfg({ font: v }); applyEnabled(); ctl.querySelectorAll('button').forEach((o) => o.setAttribute('aria-checked', String(o === b))); };
         ctl.append(b);
       }
     } else if (s.kind === 'number') {
@@ -345,7 +358,7 @@
       ctl = toggle(s.key);
       ctl.id = id; if (hintId) ctl.setAttribute('aria-describedby', hintId);
     }
-    const row = el('div', { class: s.child ? 'rs-pn-row rs-pn-child' : 'rs-pn-row', 'data-key': s.key, hidden: !!s.when && !s.when() }, [text, ctl]);
+    const row = el('div', { class: `rs-pn-row${s.child ? ' rs-pn-child' : ''}${s.kind === 'font' ? ' rs-pn-wrap' : ''}`, 'data-key': s.key, hidden: !!s.when && !s.when() }, [text, ctl]);
     // The whole row of a switch is a target, not only the small switch
     if (ctl.type === 'checkbox') row.addEventListener('click', (e) => { if (!e.target.closest('button, input, label, a')) ctl.click(); });
     return row;
@@ -363,6 +376,13 @@
     const col = (title, rows) => el('div', { class: 'rs-pn-kcol' }, [el('h5', { text: title }), el('dl', {}, rows.filter(([k]) => k !== '?').flatMap(([k, t]) => [
       el('dt', {}, k.split(' ').map((p) => (p === '/' || p === 'or' ? ` ${p} ` : el('kbd', { text: p })))), el('dd', { text: t })]))]);
     return pnGroup('Keys', [el('div', { class: 'rs-pn-keys' }, [col('In a feed', KEYS.feed), col('On a post', KEYS.comments)])]);
+  };
+  // The Backup page says what a saved file will hold, with your own numbers
+  const pnHolds = () => {
+    const tile = (n, t) => el('div', { class: 'rs-pn-tile' }, [el('b', { text: num(n) }), el('span', { text: t })]);
+    return pnGroup('What the file holds', [el('div', { class: 'rs-pn-tiles' }, [
+      tile(scList().length, 'Shortcuts'), tile(Object.keys(cfg.tags || {}).length, 'Tags'), tile(blockCount(), 'Hide-list entries'), tile(Object.keys(subVisits()).length, 'Subreddits visited'),
+    ])]);
   };
   // Draws the right side: the chosen category, or what the search found across every category
   const pnDraw = () => {
@@ -386,6 +406,7 @@
       pane.append(el('h3', { class: 'rs-pn-title' }, [el('span', { class: 'rs-pn-ti', html: cat.icon }), cat.name]));
       for (const [title, rows] of cat.groups) pane.append(pnGroup(title, rows.map((s) => pnRow(s))));
       if (cat.id === 'keys') pane.append(pnKeyList());
+      if (cat.id === 'backup') pane.append(pnHolds());
     } else if (!found.length) {
       pane.removeAttribute('aria-labelledby'); pane.setAttribute('aria-label', 'Search');
       const clear = el('button', { type: 'button', class: 'rs-btn', text: 'Clear search' });
@@ -525,8 +546,8 @@
   };
   const cleanSettings = (o) => {
     const out = {};
-    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome', 'classicSubs', 'navHover']) if (typeof o[k] === 'boolean') out[k] = o[k];
-    for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']]]) if (ok.includes(o[k])) out[k] = o[k];
+    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome', 'classicSubs', 'navHover', 'fullWidth']) if (typeof o[k] === 'boolean') out[k] = o[k];
+    for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']], ['font', FONTS.map(([f]) => f)]]) if (ok.includes(o[k])) out[k] = o[k];
     for (const [k, lo, hi] of [['filterScore', -99999, 99999], ['pauseEvery', 0, 99], ['maxVideos', 0, 99]]) if (Number.isFinite(o[k])) out[k] = Math.max(lo, Math.min(hi, Math.round(o[k])));
     if (Array.isArray(o.shortcuts)) {
       out.shortcuts = o.shortcuts.map((x) => {
@@ -1440,11 +1461,69 @@
     }
     const clear = el('button', { type: 'button', class: 'rs-fl-clear', text: 'Clear', hidden: true });
     clear.onclick = () => { saveCfg({ filters: {} }); refilter(); };
-    const lists = el('button', { type: 'button', class: 'rs-fl-lists', title: 'Hide posts by words in the title, by subreddit or by website' }, [el('span', { class: 'rs-fl-plus', 'aria-hidden': 'true', text: '+' }), ' Hide words, subs, sites']);
+    const lists = el('button', { type: 'button', class: 'rs-fl-lists', title: 'Hide posts by words in the title, by subreddit or by website', 'aria-label': 'Hide words, subs, sites' },
+      [el('span', { class: 'rs-fl-plus', 'aria-hidden': 'true', text: '+' }), el('span', { class: 'rs-fl-long', text: ' Hide words, subs, sites' }), el('span', { class: 'rs-fl-brief', text: ' Hide…' })]);
     lists.onclick = (e) => { e.stopPropagation(); openBlockEditor(); };
     bar.append(el('span', { class: 'rs-fl-count', role: 'status' }), clear, lists);
     return bar;
   };
+
+  // ---------- sort tabs and filter bar stay on one line ----------
+  // Ryan: the tabs broke mid-word ("Bes / t") in a narrow window, and the filter bar "should always be on one line".
+  // When the tabs run out of room they first tighten, then Show images, the time range and the last tabs (never the one
+  // you are on) fold into a More menu. The filter bar first shortens its last button to "Hide…", and past that its
+  // chips slide sideways inside the bar. Checked when the width or the font changes, not on every pass.
+  const MORE = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4.5" cy="10" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="15.5" cy="10" r="1.6" fill="currentColor"/></svg>';
+  const fitsIn = (box) => { const r = box.getBoundingClientRect(), pad = parseFloat(getComputedStyle(box).paddingRight) || 0; return [...box.children].every((k) => !k.getClientRects().length || k.getBoundingClientRect().right <= r.right - pad + 0.5); };
+  const fontNow = () => (html.className.match(/rs-font-\w+/) || [''])[0];
+  const closeMore = () => { const m = document.querySelector('.rs-more-menu:not([hidden])'); if (m) { m.hidden = true; m.rsBtn?.setAttribute('aria-expanded', 'false'); } };
+  document.addEventListener('click', (e) => { if (e.isTrusted && !e.target.closest?.('.rs-more, .rs-more-menu')) closeMore(); }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.querySelector('.rs-more-menu:not([hidden])')) { closeMore(); e.stopPropagation(); } }, true);
+  const fitSorts = () => {
+    const bar = document.getElementById('rs-sorts'), wrap = bar?.parentElement;
+    if (!bar?.isConnected || !wrap || !bar.offsetWidth) return;
+    const sig = `${bar.clientWidth}|${fontNow()}|${innerWidth <= PHONE}`;
+    if (bar.rsFit === sig) return;
+    bar.rsFit = sig;
+    let more = bar.querySelector(':scope > .rs-more'), menu = wrap.querySelector(':scope > .rs-more-menu');
+    if (!bar.rsAll) bar.rsAll = [...bar.children];
+    // everything back in its place, then fold only as much as needed
+    closeMore();
+    for (const k of bar.rsAll) bar.insertBefore(k, more); // in their first order (a folded one would come back last)
+    if (more) more.hidden = true;
+    bar.classList.remove('rs-tight');
+    if (innerWidth <= PHONE || fitsIn(bar)) return; // phone widths keep their own swipe-along tabs
+    bar.classList.add('rs-tight');
+    if (fitsIn(bar)) return;
+    if (!more) {
+      more = el('button', { type: 'button', class: 'rs-more', 'aria-haspopup': 'true', 'aria-expanded': 'false' }, [el('span', { class: 'rs-more-i', html: MORE }), 'More']);
+      menu = el('div', { class: 'rs-more-menu', hidden: true });
+      menu.rsBtn = more;
+      more.onclick = () => { const open = menu.hidden; closeMore(); menu.hidden = !open; more.setAttribute('aria-expanded', String(open)); };
+      menu.addEventListener('click', (e) => { if (e.target.closest('a, button')) setTimeout(closeMore, 0); });
+      bar.append(more); wrap.append(menu);
+    }
+    more.hidden = false;
+    const feeds = [...bar.querySelectorAll('.rs-cl-feed')], div = bar.querySelector('.rs-cl-div');
+    const order = [bar.querySelector('.rs-expand-all'), bar.querySelector('.rs-cl-time'), ...[...bar.querySelectorAll('[role="tab"]:not(.rs-cur)')].reverse(), ...feeds.reverse()].filter(Boolean);
+    const out = [];
+    for (const k of order) {
+      if (fitsIn(bar)) break;
+      out.push(k); k.remove();
+      if (feeds.includes(k) && div?.parentElement === bar) { out.push(div); div.remove(); }
+    }
+    menu.replaceChildren(...out.sort((a, b) => bar.rsAll.indexOf(a) - bar.rsAll.indexOf(b)));
+  };
+  const fitFilters = () => {
+    const bar = document.getElementById('rs-filterline');
+    if (!bar?.isConnected || !bar.offsetWidth) return;
+    const sig = `${bar.clientWidth}|${fontNow()}|${bar.textContent}`;
+    if (bar.rsFit === sig) return;
+    bar.rsFit = sig;
+    bar.classList.remove('rs-fl-tight');
+    if (!fitsIn(bar)) bar.classList.add('rs-fl-tight');
+  };
+  const fitBars = () => { fitSorts(); fitFilters(); };
 
   // ---------- your hide lists (RES's filteReddit): words in titles, subreddits, websites ----------
   // Words match whole words or phrases, any capitals. A hidden subreddit still shows when you visit it. A website
@@ -3434,7 +3513,16 @@
   // Reddit hides its right sidebar in a narrower window; the page layout then gives its space to the posts
   // Home's right side holds only "Recent posts": with that hidden it is an empty column, so the posts get its space too.
   // (Emptiness is judged by size, not visibility, so content that arrives later still shows the column again.)
+  // On feeds the right column also steps aside when it would leave the posts less than this (Ryan: in a half-screen
+  // window the sort tabs broke mid-word next to it). Measured from the page's own box, which does not change when the
+  // column goes, so it never flips back and forth.
+  const MIN_POSTS = 600;
   const railCheck = () => {
+    const sg = document.getElementById('subgrid-container'), mc = document.querySelector('.main-container');
+    if (sg && mc) {
+      const cs = getComputedStyle(sg), room = sg.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 316 - (parseFloat(getComputedStyle(mc).columnGap) || 0);
+      html.classList.toggle('rs-rail-narrow', !isCommentsPage() && room < MIN_POSTS);
+    }
     const r = document.getElementById('right-sidebar-container');
     const gone = !!r && getComputedStyle(r).display === 'none';
     html.classList.toggle('rs-no-rail', gone);
@@ -3479,7 +3567,7 @@
     });
     for (const c of all) if (c.classList.contains('rs-wide') !== wide.has(c)) c.classList.toggle('rs-wide', wide.has(c));
   };
-  window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(() => { railCheck(); addGear(); }, 150); }, { passive: true });
+  window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(() => { railCheck(); addGear(); fitBars(); }, 150); }, { passive: true });
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     railCheck();
@@ -3490,7 +3578,7 @@
     const bar = document.getElementById('rs-shortcuts'), header = document.querySelector('reddit-header-large');
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    clMount(); densify(); rankCheck(); pager(); sortTabs(); applyFilters(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    clMount(); densify(); rankCheck(); pager(); sortTabs(); applyFilters(); fitBars(); scButton(); postInfo(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
     karmaSplit();
