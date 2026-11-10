@@ -229,6 +229,32 @@ html.rs-on.rs-classic #main-content > :not(#rs-classic) { display: none !importa
 .rs-text .md-spoiler-text { border-radius: 3px; background: var(--rs-text); color: transparent; cursor: pointer; }
 .rs-text .md-spoiler-text:hover { background: none; color: inherit; }
 html:not(.rs-on) #rs-classic { display: none !important; }
+/* A combined list (r/a+b+c): its heading, and "These subreddits" at the top of the right column (or above the list when
+   the window is too narrow for that column), first 12 names shown until "Show all" */
+#rs-classic .rs-cl-title { margin: 16px 0 10px; padding: 0; color: var(--rs-text); font: 700 20px/1.25 var(--rs-font); overflow-wrap: anywhere; }
+html:not(.rs-on) #rs-multi { display: none !important; }
+#rs-multi { margin: 12px 0 8px; padding: 14px 16px; border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); color: var(--rs-text); font: 400 14px/1.45 var(--rs-font); }
+#rs-multi, #rs-multi * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
+#right-sidebar-contents > #rs-multi:first-child, #right-sidebar-container > #rs-multi:first-child { margin-top: 0; } /* level with the heading */
+#rs-classic > #rs-multi { margin: 0 0 12px; }
+.rs-mu-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.rs-mu-head b { display: flex; align-items: baseline; gap: 8px; font-size: 16px; line-height: 1.25; }
+.rs-mu-n { color: var(--rs-weak); font: 600 13px/1 var(--rs-font); }
+#rs-multi .rs-mu-sc { flex: none; height: 28px; padding: 0 12px; }
+.rs-mu-form { display: flex; gap: 6px; margin: 0 0 10px; }
+.rs-mu-form[hidden] { display: none; }
+.rs-mu-form .rs-ed-add { flex: 1; height: 32px; }
+.rs-mu-form .rs-done, .rs-mu-form .rs-btn { flex: none; height: 32px; }
+.rs-mu-list { margin: 0; padding: 0; list-style: none; }
+#rs-classic > #rs-multi .rs-mu-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); column-gap: 16px; }
+#rs-multi:not(.rs-open) .rs-mu-list li:nth-child(n+13) { display: none; }
+.rs-mu-list a { display: flex; align-items: center; gap: 8px; margin: 0 -6px; padding: 3px 6px; border-radius: 8px; color: var(--rs-text); font-weight: 500; text-decoration: none; }
+.rs-mu-list a:hover { background: var(--rs-hover); }
+.rs-mu-list img, .rs-mu-list .rs-ms-noicon { flex: none; width: 20px !important; height: 20px !important; margin: 0; border-radius: 50%; object-fit: cover; font-size: 8px; }
+.rs-mu-list .rs-ms-noicon { background: var(--rs-line); } /* Reddit's strong background is plain white in light mode */
+.rs-mu-list a > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.rs-mu-more { margin: 6px 0 0; padding: 0; border: 0; background: none; color: var(--rs-weak); font: 600 12px/1.6 var(--rs-font); cursor: pointer; }
+.rs-mu-more:hover { color: var(--rs-text); }
 
 /* Comment pages */
 html.rs-on.rs-hide-badges shreddit-comment-badges { display: none !important; }

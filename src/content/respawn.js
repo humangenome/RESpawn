@@ -57,7 +57,8 @@
     if (!store) return res();
     store.get(['respawn'], (r) => { cfg = { ...cfg, ...(r?.respawn || {}) }; res(); });
   });
-  const saveCfg = (patch) => { cfg = { ...cfg, ...patch }; if (store) store.set({ respawn: cfg }); else localStorage.setItem('respawn-cfg', JSON.stringify(cfg)); };
+  let away = false; // this page is in old Reddit's design: RESpawn stays out of it (see "run" at the end)
+  const saveCfg = (patch) => { if (away) return; cfg = { ...cfg, ...patch }; if (store) store.set({ respawn: cfg }); else localStorage.setItem('respawn-cfg', JSON.stringify(cfg)); };
   if (!store) { try { cfg = { ...cfg, ...JSON.parse(localStorage.getItem('respawn-cfg') || '{}'), ...(window.__RS_CFG || {}) }; } catch { /* ignore */ } }
 
   // ---------- page arranged before it shows ----------
@@ -72,7 +73,31 @@
     const m = path.match(/^\/r\/([A-Za-z0-9_]{2,21})(?:\/(hot|new|rising|controversial|top))?\/?$/);
     return m && !/^(all|popular|mod|friends|random|randnsfw|myrandom)$/i.test(m[1]) && !new URLSearchParams(search).has('f') ? { sub: m[1], sort: m[2] || 'hot' } : null;
   };
-  const isClassicUrl = (c) => !!c.enabled && ((location.pathname === '/' && !new URLSearchParams(location.search).has('feed') && (/^#all(\/|$)/.test(location.hash) || !!c.classicHome)) || (!!c.classicSubs && !!subListOf()));
+  // Combined subreddits, old Reddit's r/a+b+c addresses. New Reddit has no page for them: www.reddit.com answers every
+  // one with old Reddit's own page design (checked 11/9, even r/pics+aww). So RESpawn shows them as one of its own lists
+  // on Home's page, at /#r/a+b+c (/#r/a+b+c/new, /#r/a+b+c/top/week), and sends the old address there as the page
+  // starts. Each name must be a real subreddit name (no special lists like all or popular), at most 150 of them.
+  const MULTI_MAX = 150;
+  const MULTI_TIMES = ['hour', 'day', 'week', 'month', 'year', 'all'];
+  const multiNames = (s) => {
+    const n = String(s || '').split('+');
+    return n.length >= 2 && n.length <= MULTI_MAX && n.every((x) => /^[A-Za-z0-9_]{2,21}$/.test(x) && !/^(all|popular|mod|friends|random|randnsfw|myrandom)$/i.test(x)) ? n : null;
+  };
+  const multiTime = (sort, t) => (sort === 'top' || sort === 'controversial' ? (MULTI_TIMES.includes(t) ? t : 'day') : '');
+  // the old address (/r/a+b/top/?t=week) and RESpawn's own (#r/a+b/top/week)
+  const multiOf = (path = location.pathname, search = location.search) => {
+    const m = path.match(/^\/r\/([A-Za-z0-9_+]+)(?:\/(hot|new|rising|controversial|top))?\/?$/);
+    return m && multiNames(m[1]) ? { subs: m[1], sort: m[2] || 'hot', t: multiTime(m[2], new URLSearchParams(search).get('t')) } : null;
+  };
+  const multiHashOf = (hash = location.hash) => {
+    const p = hash.replace(/^#/, '').split('/');
+    if (p[0] !== 'r' || !multiNames(p[1]) || p.length > 4) return null;
+    const sort = ['hot', 'new', 'rising', 'controversial', 'top'].includes(p[2]) ? p[2] : 'hot';
+    return { subs: p[1], sort, t: multiTime(sort, p[3]) };
+  };
+  const multiHash = (m) => `#r/${m.subs}${m.sort === 'hot' ? '' : `/${m.sort}`}${m.t ? `/${m.t}` : ''}`;
+  const multiOldHref = (m) => `/r/${m.subs}/${m.sort === 'hot' ? '' : `${m.sort}/`}${m.t ? `?t=${m.t}` : ''}`;
+  const isClassicUrl = (c) => !!c.enabled && ((location.pathname === '/' && !new URLSearchParams(location.search).has('feed') && (/^#all(\/|$)/.test(location.hash) || !!multiHashOf() || !!c.classicHome)) || (!!c.classicSubs && !!subListOf()));
   const setPageClasses = (c) => {
     const on = {
       'rs-on': !!c.enabled, 'rs-hide-ads': !!c.hideAds, 'rs-hide-badges': !!c.hideBadges, 'rs-hide-recent': !!c.hideRecent,
@@ -85,6 +110,10 @@
   const saveBoot = () => { try { localStorage.setItem(BOOT_KEY, JSON.stringify(Object.fromEntries(BOOT_FIELDS.map((k) => [k, cfg[k]])))); } catch { /* storage full or blocked */ } };
   let boot = cfg;
   try { boot = { ...cfg, ...(store ? JSON.parse(localStorage.getItem(BOOT_KEY) || '{}') : {}) }; } catch { /* keep the defaults */ }
+  // A combined list's old address goes straight to RESpawn's own list, in place of this page in the tab's history (so
+  // Back still goes where you came from). The old page is stopped first, so none of it shows on the way.
+  const multiAway = (m) => { window.stop(); location.replace(`/${multiHash(m)}`); };
+  { const m = boot.enabled && multiOf(); if (m) { multiAway(m); return; } }
   setPageClasses(boot);
   html.classList.toggle('rs-classic', isClassicUrl(boot)); // Reddit's own Home (or subreddit) feed never shows under it
   html.classList.add(/^\/(r\/[^/]+\/|user\/[^/]+\/)?comments\//.test(location.pathname) ? 'rs-comments' : 'rs-feed'); // checked again once the page is in
@@ -116,6 +145,9 @@
 
   // ---------- on/off switch (bottom-left, see-through) ----------
   const applyEnabled = () => {
+    // switched off on a combined list: Reddit's own page for it (old Reddit's design) takes its place
+    const mh = !cfg.enabled && location.pathname === '/' && multiHashOf();
+    if (mh) { saveBoot(); location.replace(multiOldHref(mh)); return; }
     setPageClasses(cfg); saveBoot(); clMount();
     document.querySelector('#rs-sorts .rs-funnel')?.setAttribute('aria-pressed', String(!!cfg.filterline));
     applySubStyle();
@@ -532,7 +564,7 @@
       out.shortcuts = o.shortcuts.map((x) => {
         const v = typeof x === 'string' ? { sub: x } : x && typeof x === 'object' ? x : {};
         if (typeof v.feed === 'string') return FEED_PATH.test(v.feed) ? { feed: v.feed, name: clip(v.name, 40) } : null;
-        if (!validSub(v.sub)) return null;
+        if (!validSub(v.sub) && !multiNames(v.sub)) return null;
         const name = clip(typeof v.name === 'string' ? v.name.trim() : '', 40);
         return name ? { sub: v.sub, name } : v.sub;
       }).filter(Boolean).slice(0, 300);
@@ -660,14 +692,19 @@
 
   // ---------- shortcut bar (RES's subreddit manager) ----------
   // Shortcuts are kept as "sub", { sub, name } (name = what the bar shows) or { feed, name } for a Reddit custom feed
-  // (a group of subreddits: the new-design version of old Reddit's r/a+b+c links).
+  // (a group of subreddits: the new-design version of old Reddit's r/a+b+c links). A sub can also be a combined list,
+  // "a+b+c" (see "Combined subreddits" at the top), opened as RESpawn's own list at /#r/a+b+c.
   const scList = () => (cfg.shortcuts || []).map((x) => (typeof x === 'string' ? { sub: x } : x)).filter((x) => x?.sub || x?.feed);
-  const scSave = (list) => { saveCfg({ shortcuts: list.map(({ sub, feed, name }) => (feed ? { feed, name } : name && name.toLowerCase() !== sub.toLowerCase() ? { sub, name } : sub)) }); shortcutBar(); scButton(true); const card = document.getElementById('rs-about'); if (card) paintCard(card); };
-  const scIndex = (sub) => scList().findIndex((x) => x.sub && x.sub.toLowerCase() === String(sub).toLowerCase());
+  const scSave = (list) => { saveCfg({ shortcuts: list.map(({ sub, feed, name }) => (feed ? { feed, name } : name && name.toLowerCase() !== sub.toLowerCase() ? { sub, name } : sub)) }); shortcutBar(); scButton(true); const card = document.getElementById('rs-about'); if (card) paintCard(card); multiShow(true); };
+  // a combined list is the same list whatever the order or capitals of its names
+  const scKey = (sub) => String(sub).toLowerCase().split('+').sort().join('+');
+  const scIndex = (sub) => scList().findIndex((x) => x.sub && scKey(x.sub) === scKey(sub));
   const scFeedIndex = (path) => scList().findIndex((x) => x.feed && x.feed.toLowerCase() === String(path).toLowerCase());
-  const scHref = (x) => x.feed || `/r/${x.sub}/`;
-  const scName = (x) => x.name || x.sub || x.feed.replace(/\/$/, '').split('/').pop();
-  const scWhat = (x) => (x.feed ? `the ${scName(x)} feed` : `r/${x.sub}`);
+  const scHref = (x) => x.feed || (x.sub.includes('+') ? `/#r/${x.sub}` : `/r/${x.sub}/`);
+  // a combined list with no name of its own shows its first name and how many more ("aww+pics", "ClaudeAI +94")
+  const multiShort = (subs) => { const n = subs.split('+'); return n.length <= 2 ? n.join('+') : `${n[0]} +${n.length - 1}`; };
+  const scName = (x) => x.name || (x.sub?.includes('+') ? multiShort(x.sub) : x.sub) || x.feed.replace(/\/$/, '').split('/').pop();
+  const scWhat = (x) => (x.feed ? `the ${scName(x)} feed` : x.sub.includes('+') ? scName(x) : `r/${x.sub}`);
   const scFeedToggle = (f) => {
     const l = scList(), i = scFeedIndex(f.path);
     if (i >= 0) l.splice(i, 1); else l.push({ feed: f.path, name: f.name });
@@ -751,8 +788,8 @@
     }
     bar.classList.remove('rs-dragging'); // a finished drag rebuilds the bar
     const path = location.pathname;
-    const allOn = path === '/' && /^#all(\/|$)/.test(location.hash);
-    const fixed = [['HOME', '/', !allOn && (path === '/' || /^\/(best|hot|new|top|rising)\/?$/.test(path))], ['POPULAR', '/r/popular/', /^\/r\/popular/i.test(path)], ['ALL', '/#all', allOn || /^\/r\/all/i.test(path)]];
+    const allOn = path === '/' && /^#all(\/|$)/.test(location.hash), multiOn = path === '/' && multiHashOf();
+    const fixed = [['HOME', '/', !allOn && !multiOn && (path === '/' || /^\/(best|hot|new|top|rising)\/?$/.test(path))], ['POPULAR', '/r/popular/', /^\/r\/popular/i.test(path)], ['ALL', '/#all', allOn || /^\/r\/all/i.test(path)]];
     const link = ([label, href, on]) => el('a', { href, class: on ? 'rs-fixed rs-cur' : 'rs-fixed', text: label });
     for (const f of fixed) bar.append(link(f));
     if (loggedIn()) {
@@ -767,8 +804,8 @@
     const list = el('div', { class: 'rs-sc-list' });
     const cur = (subOf() || '').toLowerCase(), here = location.pathname.toLowerCase();
     items.forEach((x, i) => {
-      const on = x.feed ? here.startsWith(x.feed.toLowerCase()) : cur === x.sub.toLowerCase();
-      const a = el('a', { href: scHref(x), class: [on ? 'rs-cur' : '', x.feed ? 'rs-sc-feed' : ''].join(' ').trim() || null, title: x.feed ? `${scName(x)} (custom feed)` : `r/${x.sub}`, text: scName(x).toUpperCase(), 'data-i': String(i), draggable: auto ? null : 'true' });
+      const on = x.feed ? here.startsWith(x.feed.toLowerCase()) : x.sub.includes('+') ? !!multiOn && scKey(multiOn.subs) === scKey(x.sub) : cur === x.sub.toLowerCase();
+      const a = el('a', { href: scHref(x), class: [on ? 'rs-cur' : '', x.feed ? 'rs-sc-feed' : ''].join(' ').trim() || null, title: x.feed ? `${scName(x)} (custom feed)` : x.sub.includes('+') ? `${x.sub.split('+').length} subreddits` : `r/${x.sub}`, text: scName(x).toUpperCase(), 'data-i': String(i), draggable: auto ? null : 'true' });
       list.append(a);
     });
     if (!items.length) list.append(el('span', { class: 'rs-sc-hint', text: auto ? 'Visit a few subreddits and your most visited show up here.' : 'Add shortcuts with "+ Shortcut" on any subreddit, or from My subreddits.' }));
@@ -1228,7 +1265,7 @@
         nameIn.onchange = () => { const l = scList(); const v = nameIn.value.trim(); l[i] = feed ? { feed, name: v || scName({ feed }) } : { sub, name: v }; scSave(l); };
         const del = el('button', { type: 'button', class: 'rs-ed-del', 'aria-label': `Remove ${scWhat(x)}`, html: ICON.close });
         del.onclick = () => { const l = scList(); l.splice(i, 1); scSave(l); draw(); };
-        const row = el('div', { class: 'rs-ed-row', draggable: 'true', 'data-i': String(i) }, [el('span', { class: 'rs-ed-grip', 'aria-hidden': 'true', text: '⋮⋮' }), feed ? el('a', { class: 'rs-ed-sub rs-ed-feed', href: feed, title: 'Open this custom feed on Reddit to change its subreddits', text: 'Custom feed ↗' }) : el('span', { class: 'rs-ed-sub', text: `r/${sub}` }), nameIn, del]);
+        const row = el('div', { class: 'rs-ed-row', draggable: 'true', 'data-i': String(i) }, [el('span', { class: 'rs-ed-grip', 'aria-hidden': 'true', text: '⋮⋮' }), feed ? el('a', { class: 'rs-ed-sub rs-ed-feed', href: feed, title: 'Open this custom feed on Reddit to change its subreddits', text: 'Custom feed ↗' }) : sub.includes('+') ? el('span', { class: 'rs-ed-sub', title: sub.split('+').join(', '), text: `${sub.split('+').length} subreddits` }) : el('span', { class: 'rs-ed-sub', text: `r/${sub}` }), nameIn, del]);
         row.addEventListener('dragstart', (e) => { if (e.target.closest('input, a')) { e.preventDefault(); return; } from = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', scName(x)); row.classList.add('rs-moving'); });
         row.addEventListener('dragover', (e) => { if (from < 0) return; e.preventDefault(); const r = row.getBoundingClientRect(); rows.querySelectorAll('.rs-ed-row').forEach((o) => o.classList.remove('rs-drop-before', 'rs-drop-after')); row.classList.add(e.clientY < r.top + r.height / 2 ? 'rs-drop-before' : 'rs-drop-after'); });
         row.addEventListener('drop', (e) => {
@@ -1938,6 +1975,8 @@
   // A subreddit opens on new Reddit's "Best", a few posts at a time; old Reddit opens it on Hot, 25 at once, pinned posts
   // first. So a subreddit's own list addresses (/r/kings/, /r/kings/new/, /r/kings/top/?t=week) show old Reddit's list
   // instead of Reddit's feed (setting "Subreddits show old Reddit's list", on by default); its header and sidebar stay.
+  // A combined list (r/a+b+c) has no new-design page at all, so it always shows here, at /#r/a+b+c, /#r/a+b+c/new,
+  // /#r/a+b+c/top/week, with its own heading and a "These subreddits" card (see "Combined subreddits" at the top).
   // Where each list comes from: a subreddit's hot, top and controversial are the very same list on this site (checked
   // post by post against old Reddit), so they are read here. Home's lists come in a different order here, and Reddit
   // refuses list data for new and rising, so those are read from old.reddit.com by the background helper (new, rising
@@ -1945,7 +1984,7 @@
   // Old Reddit is closing: Reddit said (Sept 2026) it will soon open only for accounts that used it in the last six
   // months, and its list data ends in March 2027. So when old Reddit says no, a list falls back to this site's own copy
   // where there is one, and otherwise the page goes back to Reddit's own feed: never a dead end.
-  const CL_SORTS = { home: ['best', 'hot', 'new', 'rising', 'controversial', 'top'], all: ['hot', 'new', 'rising', 'controversial', 'top'], sub: ['hot', 'new', 'rising', 'controversial', 'top'] };
+  const CL_SORTS = { home: ['best', 'hot', 'new', 'rising', 'controversial', 'top'], all: ['hot', 'new', 'rising', 'controversial', 'top'], sub: ['hot', 'new', 'rising', 'controversial', 'top'], multi: ['hot', 'new', 'rising', 'controversial', 'top'] };
   const CL_TIMES = [['hour', 'Past hour'], ['day', 'Past 24 hours'], ['week', 'Past week'], ['month', 'Past month'], ['year', 'Past year'], ['all', 'All time']];
   const CL_LABEL = { best: 'Best', hot: 'Hot', new: 'New', rising: 'Rising', controversial: 'Controversial', top: 'Top' };
   // Old Reddit saying no to a signed-in account (its log-in page, or a refusal) is remembered for a few hours, so pages
@@ -1958,9 +1997,10 @@
     if (!isClassicUrl(c)) return null;
     // Old Reddit needs an account now, so a signed-out visitor keeps Reddit's own Home or subreddit (ALL explains itself)
     const out = !!document.querySelector('shreddit-app') && !loggedIn();
-    const s = subListOf();
+    const s = subListOf(), mh = location.pathname === '/' && multiHashOf();
     let r;
-    if (s) {
+    if (mh) r = { list: 'multi', sub: mh.subs, sort: mh.sort, t: mh.t }; // a combined list (see "Combined subreddits" at the top)
+    else if (s) {
       if (out) return null;
       const t = new URLSearchParams(location.search).get('t');
       r = { list: 'sub', sub: s.sub, sort: s.sort, t: s.sort === 'top' || s.sort === 'controversial' ? (CL_TIMES.some(([v]) => v === t) ? t : 'day') : '' };
@@ -1973,14 +2013,16 @@
       const timed = sort === 'top' || sort === 'controversial';
       r = { list, sort, t: timed ? (CL_TIMES.some(([v]) => v === parts[1]) ? parts[1] : 'day') : '' };
     }
-    // ALL has nothing else to show; other lists old Reddit won't give (and this site has no copy of) stay Reddit's own
-    if (r.list !== 'all' && (Date.now() - (clBacked()[clHref(r)] || 0) < 10 * 60e3 || (oldOff() && !clWww(r)))) return null;
+    // ALL and combined lists have nothing else to show; other lists old Reddit won't give (and this site has no copy of)
+    // stay Reddit's own
+    if (r.list !== 'all' && r.list !== 'multi' && (Date.now() - (clBacked()[clHref(r)] || 0) < 10 * 60e3 || (oldOff() && !clWww(r)))) return null;
     return r;
   };
   const clHref = (r) => {
     const tail = `${r.sort}${r.t ? `/${r.t}` : ''}`;
     if (r.list === 'sub') return `/r/${r.sub}/${r.sort === 'hot' ? '' : `${r.sort}/`}${r.t ? `?t=${r.t}` : ''}`;
     if (r.list === 'all') return r.sort === 'hot' ? '/#all' : `/#all/${tail}`;
+    if (r.list === 'multi') return `/${multiHash({ subs: r.sub, sort: r.sort, t: r.t })}`;
     return r.sort === 'best' ? '/' : `/#${tail}`;
   };
   // This site's own copy of a list, where there is one: a subreddit's hot, top and controversial (the same order as old
@@ -1988,6 +2030,16 @@
   // Reddit's own list comes first, as it follows your old Reddit settings (thumbnails: always, never or the subreddit's
   // choice) the way old Reddit itself does.
   const clWww = (r) => {
+    // A combined list: this site has all of it. Hot, top and controversial come as list data; new and rising (whose list
+    // data Reddit refuses) as the page in old Reddit's design that this site serves for every combined address.
+    if (r.list === 'multi') {
+      const page = r.sort === 'new' || r.sort === 'rising';
+      const u = new URL(`/r/${r.sub}/${r.sort === 'hot' ? '' : `${r.sort}/`}${page ? '' : '.json'}`, location.origin);
+      if (!page) { u.searchParams.set('limit', '25'); u.searchParams.set('raw_json', '1'); }
+      if (r.t) u.searchParams.set('t', r.t);
+      u.rsPage = page;
+      return u;
+    }
     if (r.list === 'all' || r.sort === 'new' || r.sort === 'rising' || (r.list === 'home' && r.sort === 'hot')) return null;
     const u = new URL(r.list === 'sub' ? `/r/${r.sub}/${r.sort === 'hot' ? '' : `${r.sort}/`}.json` : `/${r.sort}/.json`, location.origin);
     u.searchParams.set('limit', '25'); u.searchParams.set('raw_json', '1');
@@ -2072,6 +2124,12 @@
   });
   const clWwwGet = async (u, after, count) => {
     if (after) { u.searchParams.set('after', after); u.searchParams.set('count', String(count)); }
+    if (u.rsPage) {
+      const res = await fetch(u, { credentials: 'include', headers: { accept: 'text/html' } });
+      const text = res.ok ? await res.text() : '';
+      if (!/id="siteTable"/.test(text)) throw new Error(`Reddit answered ${res.status}`);
+      return clFromPage(text.slice(0, 3_000_000));
+    }
     const res = await fetch(u, { credentials: 'include', headers: { accept: 'application/json' } });
     const j = res.ok ? await res.json().catch(() => null) : null;
     if (!j?.data) throw new Error(`Reddit answered ${res.status}`);
@@ -2084,13 +2142,13 @@
     const e = a?.error || 'no answer';
     // its log-in page while you are logged in here, or no list where there always is one: old Reddit won't open for you
     // (a subreddit can say no by itself: private, banned or quarantined, so only Home's and r/all's missing list count)
-    if ((e === 'login' && loggedIn()) || (e === 'no list' && r.list !== 'sub')) { try { localStorage.setItem(OLD_OFF, String(Date.now())); } catch { /* storage blocked */ } }
+    if ((e === 'login' && loggedIn()) || (e === 'no list' && r.list !== 'sub' && r.list !== 'multi')) { try { localStorage.setItem(OLD_OFF, String(Date.now())); } catch { /* storage blocked */ } }
     throw new Error(e);
   };
   const clFetch = async (r, after, count) => {
     const www = clWww(r);
     if (!www || !oldOff()) {
-      try { return await clOld(r, after, count); } catch (e) { if (!www || (e.message === 'login' && !loggedIn())) throw e; }
+      try { return await clOld(r, after, count); } catch (e) { if (!www || (e.message === 'login' && !loggedIn() && r.list !== 'multi')) throw e; }
     }
     return clWwwGet(www, after, count);
   };
@@ -2231,7 +2289,7 @@
     const st = { r, key, after: null, count: 0, page: 0, loading: false, done: false, y: null, seen: new Set(), resume: false };
     st.list = el('div', { class: 'rs-cl-list' });
     st.more = el('div', { class: 'rs-cl-more' });
-    st.root = el('div', { id: 'rs-classic', 'data-list': r.list }, [clBar(r), filterLine(), st.list, st.more]);
+    st.root = el('div', { id: 'rs-classic', 'data-list': r.list }, [r.list === 'multi' ? el('h1', { class: 'rs-cl-title' }) : null, clBar(r), filterLine(), st.list, st.more]);
     st.io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) clLoad(st); }, { rootMargin: '0px 0px 1500px 0px' });
     st.io.observe(st.more);
     return st;
@@ -2272,8 +2330,8 @@
       st.loading = false;
       if (st !== cl) return;
       // nothing from old Reddit or this site for a subreddit or Home: Reddit's own feed takes over
-      if (!st.page && st.r.list !== 'all' && loggedIn()) { clHandBack(st); return; }
-      if (!st.page && (e?.message === 'login' || !loggedIn() || oldOff())) {
+      if (!st.page && st.r.list !== 'all' && st.r.list !== 'multi' && loggedIn()) { clHandBack(st); return; }
+      if (!st.page && st.r.list !== 'multi' && (e?.message === 'login' || !loggedIn() || oldOff())) {
         st.more.replaceChildren(el('div', { class: 'rs-cl-err', role: 'status' }, [
           el('span', { text: loggedIn() ? 'r/all is only on old Reddit now, and old Reddit would not open for your account.' : st.r.list === 'all' ? 'r/all is only on old Reddit now, and old Reddit needs you to log in.' : 'This list comes from old Reddit, which needs you to log in.' }),
           loggedIn() ? null : el('a', { class: 'rs-btn', href: '/login/', text: 'Log in' }), el('a', { class: 'rs-btn rs-btn-quiet', href: '/r/popular/', text: 'Popular' }),
@@ -2354,6 +2412,13 @@
     if (!a || a.target === '_blank') return;
     const u = new URL(a.getAttribute('href'), location.href);
     if (u.origin !== location.origin) return;
+    // a combined list's old address (r/a+b+c) opens as RESpawn's own list without a trip through old Reddit's page
+    const mu = multiOf(u.pathname, u.search);
+    if (mu) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (location.pathname === '/') clGo(`/${multiHash(mu)}`); else location.assign(`/${multiHash(mu)}`);
+      return;
+    }
     const to = cfg.classicSubs && subListOf(u.pathname, u.search), now = subListOf();
     if (to) {
       if (!now || !cl?.root.isConnected || cl.r.list !== 'sub' || to.sub.toLowerCase() !== now.sub.toLowerCase()) return;
@@ -2362,7 +2427,7 @@
       return;
     }
     if (u.pathname !== '/' || u.search) return;
-    if (!/^#all(\/|$)/.test(u.hash) && !cfg.classicHome) return;
+    if (!/^#all(\/|$)/.test(u.hash) && !multiHashOf(u.hash) && !cfg.classicHome) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (location.pathname === '/') clGo(u.pathname + u.hash);
     else location.assign(u.pathname + u.hash);
@@ -2370,6 +2435,75 @@
   // The first list is asked for as the page starts, alongside Reddit's own page, so it can show the moment the page is in.
   // (A list handed back to Reddit's own feed, see above, lets that feed show from the start.)
   { const r = clRoute(boot); if (r) { clFirst = { key: clHref(r), p: clFetch(r, null, 0), at: Date.now() }; clFirst.p.catch(() => { /* asked again when shown */ }); } else html.classList.remove('rs-classic'); }
+
+  // ---------- combined lists: their heading, the tab's title and "These subreddits" ----------
+  // Named like old Reddit's own page for them would be, or by your shortcut's name once you have one.
+  const multiTitle = (subs) => {
+    const i = scIndex(subs), n = subs.split('+');
+    if (i >= 0 && scList()[i].name) return scList()[i].name;
+    return n.length <= 3 ? n.map((x) => `r/${x}`).join(' + ') : `r/${n[0]} + ${n.length - 1} more`;
+  };
+  const MULTI_FOLD = 12; // names shown before "Show all"
+  let multiTitleOwn = '', multiTitleShown = '';
+  const multiShow = (repaint) => {
+    const r = cfg.enabled && cl?.root.isConnected && cl.r.list === 'multi' ? cl.r : null;
+    let card = document.getElementById('rs-multi');
+    // the tab's title: ours while the list shows, Reddit's own back after (unless Reddit has set a new one meanwhile)
+    const t = r ? multiTitle(r.sub) : '';
+    if (t && document.title !== t) { if (document.title !== multiTitleShown) multiTitleOwn = document.title; document.title = t; }
+    if (!t && multiTitleShown && document.title === multiTitleShown) document.title = multiTitleOwn;
+    multiTitleShown = t;
+    if (!r) { card?.remove(); return; }
+    setText(cl.root.querySelector('.rs-cl-title'), t);
+    // The card sits at the top of the right column, or above the list when the window is too narrow for that column
+    // (Reddit then hides the column itself, or a box around it)
+    const box = document.getElementById('right-sidebar-container');
+    const rail = !html.classList.contains('rs-no-rail') && box?.getClientRects().length ? document.getElementById('right-sidebar-contents') || box : null;
+    const spot = rail || cl.root;
+    if (card && card.dataset.subs === r.sub && !repaint) {
+      if (card.parentElement !== spot) { if (rail) { rail.prepend(card); railCheck(); } else cl.root.querySelector('#rs-sortbar')?.before(card); }
+      return;
+    }
+    const open = card?.dataset.subs === r.sub && card.classList.contains('rs-open');
+    card?.remove();
+    const names = r.sub.split('+'), icons = new Map(joined().map((j) => [j.name.toLowerCase(), j.icon]));
+    card = el('section', { id: 'rs-multi', 'data-subs': r.sub, 'aria-label': 'These subreddits', class: open ? 'rs-open' : null });
+    const list = el('ul', { class: 'rs-mu-list' });
+    for (const n of names) {
+      const icon = icons.get(n.toLowerCase());
+      list.append(el('li', {}, [el('a', { href: `/r/${n}/` }, [icon ? el('img', { src: icon, alt: '' }) : el('span', { class: 'rs-ms-noicon', 'aria-hidden': 'true', text: 'r/' }), el('span', { text: `r/${n}` })])]));
+    }
+    const more = names.length > MULTI_FOLD ? el('button', { type: 'button', class: 'rs-mu-more', 'aria-expanded': String(open), text: open ? 'Show fewer' : `Show all ${names.length}` }) : null;
+    if (more) more.onclick = () => { const o = card.classList.toggle('rs-open'); more.textContent = o ? 'Show fewer' : `Show all ${names.length}`; more.setAttribute('aria-expanded', String(o)); };
+    // "+ Shortcut" sits on the card's title line; adding asks for the name the bar shows (yours, or the suggested one)
+    // right below it. Saving or taking it away redraws the card through scSave.
+    const sc = el('button', { type: 'button', class: 'rs-btn rs-mu-sc' });
+    const form = el('div', { class: 'rs-mu-form', hidden: true });
+    const inList = scIndex(r.sub);
+    sc.textContent = inList >= 0 ? '− Shortcut' : '+ Shortcut';
+    sc.setAttribute('aria-pressed', String(inList >= 0));
+    sc.title = inList >= 0 ? `Remove ${scName(scList()[inList])} from your shortcut bar` : 'Add this list to your shortcut bar';
+    if (inList < 0) sc.setAttribute('aria-expanded', 'false');
+    const shut = () => { form.hidden = true; form.replaceChildren(); sc.setAttribute('aria-expanded', 'false'); };
+    sc.onclick = () => {
+      const j = scIndex(r.sub);
+      if (j >= 0) { const l = scList(); const [gone] = l.splice(j, 1); scSave(l); toast(`Removed ${scWhat(gone)} from your shortcuts.`); return; }
+      if (!form.hidden) { shut(); return; }
+      const name = el('input', { type: 'text', class: 'rs-ed-add', maxlength: '40', spellcheck: 'false', 'aria-label': 'Shortcut name', placeholder: 'Shortcut name' });
+      name.value = multiShort(r.sub);
+      const add = el('button', { type: 'button', class: 'rs-done', text: 'Add' });
+      const cancel = el('button', { type: 'button', class: 'rs-btn rs-btn-quiet', text: 'Cancel' });
+      const save = () => { const v = name.value.trim() || multiShort(r.sub); if (scIndex(r.sub) < 0) scSave([...scList(), { sub: r.sub, name: v }]); toast(`Added ${v} to your shortcuts.`); };
+      add.onclick = save;
+      cancel.onclick = () => { shut(); sc.focus(); };
+      name.onkeydown = (e) => { if (e.key === 'Enter') save(); else if (e.key === 'Escape') { e.stopPropagation(); shut(); sc.focus(); } };
+      form.replaceChildren(name, add, cancel); form.hidden = false; sc.setAttribute('aria-expanded', 'true');
+      name.focus(); name.select();
+    };
+    card.append(el('div', { class: 'rs-mu-head' }, [el('b', {}, ['These subreddits', el('span', { class: 'rs-mu-n', text: String(names.length) })]), sc]), form, list);
+    if (more) card.append(more);
+    if (rail) { rail.prepend(card); railCheck(); } else cl.root.querySelector('#rs-sortbar')?.before(card);
+  };
 
   // ---------- page header + side clutter ----------
   const tidy = () => {
@@ -3479,7 +3613,7 @@
     });
     for (const c of all) if (c.classList.contains('rs-wide') !== wide.has(c)) c.classList.toggle('rs-wide', wide.has(c));
   };
-  window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(() => { railCheck(); addGear(); }, 150); }, { passive: true });
+  window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(() => { railCheck(); addGear(); multiShow(); }, 150); }, { passive: true });
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     railCheck();
@@ -3494,10 +3628,24 @@
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
     karmaSplit();
+    multiShow();
   };
   // The page's own parts are read once the page is in; the switches above are already on it.
   const pageIn = new Promise((res) => { if (document.readyState !== 'loading') res(); else document.addEventListener('DOMContentLoaded', () => res(), { once: true }); });
+  // A few addresses on www.reddit.com still come back in old Reddit's own page design (a combined list RESpawn did not
+  // take over, say one with a special list in it, and a handful of old pages). RESpawn's bar, gear and the rest are made
+  // for the new design, so on those pages it stays out entirely: never a second bar on top of old Reddit's own. Being
+  // off here is never saved, so every other page keeps RESpawn as you set it.
+  const oldDesign = () => !document.querySelector('shreddit-app') && !!document.querySelector('#sr-header-area, #header-bottom-left');
   Promise.all([loadCfg(), pageIn]).then(() => {
+    if (oldDesign()) {
+      const m = cfg.enabled && multiOf(); // the quick copy of the on/off switch said off, the real setting says on
+      if (m) { multiAway(m); return; }
+      cfg = { ...cfg, enabled: false }; away = true;
+      for (const c of [...html.classList]) if (/^rs-/.test(c)) html.classList.remove(c);
+      for (const e of document.querySelectorAll('[id^="rs-"]')) e.remove();
+      return;
+    }
     applyEnabled(); leftSlide(); tick();
     // Typing in a comment box, or dragging its corner, changes only that box: nothing there for a pass to do
     new MutationObserver((L) => {
