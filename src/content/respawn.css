@@ -54,6 +54,9 @@ html:not(.rs-on) .rs-page, html:not(.rs-on) .rs-pause, html:not(.rs-on) .rs-ut, 
 #rs-shortcuts::-webkit-scrollbar { display: none; }
 /* Reddit's search suggestions drop down from its top bar over this bar, so its top bar sits above this one */
 html.rs-on reddit-header-large { z-index: 6 !important; }
+/* Phones get Reddit's small top bar instead (Reddit picks it by the phone's browser name, so a phone held sideways too):
+   the shortcut bar goes under it, never on top of it, and the same layering holds */
+html.rs-on reddit-header-small { z-index: 6 !important; }
 #rs-shortcuts a, #rs-shortcuts button { flex: none; padding: 6px 8px; border: 0; border-radius: 999px; background: none; color: var(--rs-weak); text-decoration: none; letter-spacing: .02em; font: inherit; cursor: pointer; text-transform: none; }
 #rs-shortcuts a:hover, #rs-shortcuts a.rs-cur, #rs-shortcuts button:hover { background: var(--rs-hover); color: var(--rs-text); }
 #rs-shortcuts .rs-mine { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; padding: 6px 8px 6px 10px; background: var(--rs-hover); color: var(--rs-text); letter-spacing: 0; }
@@ -148,6 +151,9 @@ html.rs-on.rs-feed shreddit-sort-dropdown[header-text="Sort by"] { display: none
 html.rs-on #subgrid-container { max-width: none !important; width: auto !important; margin-inline: 24px !important; }
 html.rs-on .main-container { max-width: none !important; grid-template-columns: minmax(0, 1fr) 316px !important; }
 html.rs-on main#main-content { max-width: none !important; width: auto !important; }
+/* Reddit's phone post page lays the column out in a row box and keeps its own size fixed there: at "auto" it grew as
+   wide as the post's longest line (a post page 3,000 px wide on a phone, 11/9). Its own full width keeps it on screen. */
+html.rs-on .main-container.flex > main#main-content.flex-none { width: 100% !important; }
 /* Use full width (setting, on by default): like old Reddit, the page runs to the window's edges with small even margins,
    the right column keeps its width at the right edge and the posts take the rest */
 html.rs-on.rs-full #subgrid-container { margin-inline: 0 !important; padding-inline: 16px !important; }
@@ -666,6 +672,9 @@ html.rs-on.rs-left-slide:not(.rs-left-hover) #rs-left-tab { display: inline-flex
 #rs-left-tab:focus-visible { outline: 2px solid var(--color-interactive-focused, #01668d); outline-offset: 2px; }
 #rs-left-tab svg { flex: none; width: 13px; height: 13px; transition: transform .18s; }
 html.rs-left-open #rs-left-tab { left: 272px; }
+/* Phones: Reddit's small top bar has its own menu button for the left menu (its sidebar never shows there), and a thin
+   tab on a phone's edge is where the swipe for Back starts */
+html.rs-small-head #rs-left-tab, html.rs-small-head #rs-left-edge { display: none !important; }
 html.rs-left-open #rs-left-tab svg { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { #rs-left-tab, #rs-left-tab svg { transition: none; } }
 html.rs-on.rs-hide-recent recent-posts, html.rs-on.rs-hide-recent aside:has(> recent-posts) { display: none !important; }
@@ -826,6 +835,15 @@ html:not(.rs-on) #rs-apptext { display: none !important; }
 /* Old Reddit: the top bar scrolls away with the page (setting: keep it on screen) */
 html.rs-on:not(.rs-pin-header) reddit-header-large { position: absolute !important; overflow-x: clip; } /* Reddit's own bar runs past the edge in narrow windows; it must not widen the page */
 html.rs-on:not(.rs-pin-header) #rs-shortcuts { position: relative; top: 0; }
+/* the same for the phone's small top bar where Reddit fixes it to the screen (Home lets it scroll away already); kept
+   on screen, the shortcut bar stays right under it (Reddit pads the page by the bar's height) */
+html.rs-on:not(.rs-pin-header) reddit-header-small.fixed { position: absolute !important; overflow-x: clip; } /* its menu waits past the right edge */
+html.rs-on.rs-pin-header.rs-small-head #rs-shortcuts { top: var(--page-y-padding, 0px); }
+/* a post page's strip under Reddit's phone top bar (the subreddit, Join): the shortcut bar goes under it, and the room
+   Reddit leaves for the strip at the top of the post closes up */
+html.rs-on.rs-strip #rs-shortcuts { margin-top: var(--rs-strip-h, 0px); }
+html.rs-on.rs-pin-header.rs-strip #rs-shortcuts { top: calc(var(--page-y-padding, 0px) + var(--rs-strip-h, 0px)); }
+html.rs-on.rs-strip:not(.rs-no-shortcuts) shreddit-post[view-context="CommentsPage"] > #slot-credit-bar { height: 0 !important; }
 html.rs-on.rs-left-slide:not(.rs-pin-header) #left-sidebar-container { top: 0 !important; z-index: 1000 !important; }
 
 /* Keyboard: the picked post or comment */
@@ -1025,7 +1043,6 @@ html.rs-on.rs-dash-open { overflow: hidden !important; }
 }
 html.rs-dash-open #rs-shortcuts a.rs-cur { background: none; color: var(--rs-weak); }
 
-/* Phone-sized windows (Firefox on Android runs add-ons): no thumbnail or post number, and the sort row wraps */
 /* Narrow windows: the whole shortcut bar slides sideways inside itself instead of making the page wider */
 @media (max-width: 720px) {
   #rs-shortcuts { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
@@ -1034,22 +1051,86 @@ html.rs-dash-open #rs-shortcuts a.rs-cur { background: none; color: var(--rs-wea
   #rs-shortcuts .rs-sc-arrow { display: none !important; }
   #rs-mysubs { max-width: calc(100vw - 16px); }
 }
-/* Phone widths: light/dark lives in the settings panel so Reddit's header still fits */
-@media (max-width: 560px) {
+/* ---------- Phones (Firefox for Android, Orion on iPhone): 640 px wide and narrower ----------
+   Everything here is for phone-width windows only; a computer's window never gets this narrow in everyday use, so the
+   desktop look is untouched. Things you tap are about 36 to 40 px, nothing runs past the screen's right edge. */
+@media (max-width: 640px) {
+  /* light/dark lives in the settings window so Reddit's header still fits; the gear rides at the start of the shortcut bar */
   #rs-theme { display: none !important; }
-  #rs-shortcuts #rs-gear { flex: none; width: 28px; height: 28px; margin: 0 4px 0 -6px; padding: 0; color: var(--rs-text); }
-  #rs-shortcuts #rs-gear svg { width: 18px; height: 18px; }
+  #rs-shortcuts #rs-gear { flex: none; width: 36px; height: 36px; margin: 0 2px 0 -4px; padding: 0; color: var(--rs-text); }
+  #rs-shortcuts #rs-gear svg { width: 20px; height: 20px; }
   html.rs-on div:has(> #rs-sc-btn) { flex-wrap: wrap !important; row-gap: 8px; } /* subreddit buttons go onto two lines instead of past the edge */
-  #rs-classic #rs-sorts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } /* old Reddit's tabs stay on one line you can swipe */
-  #rs-classic #rs-sorts::-webkit-scrollbar { display: none; }
-  #rs-classic #rs-sorts > * { flex: none; }
-}
-@media (max-width: 560px) {
   html.rs-on #subgrid-container { margin-inline: 10px !important; }
-  .rs-row { grid-template-columns: 40px minmax(0, 1fr); column-gap: 6px; }
+
+  /* Shortcut bar: taller, with links you can hit with a thumb */
+  #rs-shortcuts { height: 44px; padding: 0 8px; }
+  #rs-shortcuts a, #rs-shortcuts button { display: inline-flex; align-items: center; height: 36px; padding: 0 10px; }
+  #rs-shortcuts .rs-mine { padding: 0 10px 0 12px; }
+  #rs-shortcuts .rs-sc-edit { padding-left: 12px; }
+
+  /* Rows: no thumbnail or post number, the opened picture or text takes the row's whole width */
+  .rs-row { grid-template-columns: 40px minmax(0, 1fr); column-gap: 6px; padding-top: 8px; padding-bottom: 4px; }
   .rs-row .rs-rank, .rs-row .rs-thumb { display: none; }
-  #rs-sorts { flex-wrap: wrap; row-gap: 6px; }
-  #rs-sorts .rs-expand-all { margin-left: 0; }
+  .rs-row > .rs-box { grid-column: 1 / -1; margin-top: 6px; }
+  .rs-vote button { width: 40px; height: 30px; }
+  html.rs-on .rs-row .rs-x { width: 32px; height: 32px; }
+  html.rs-on .rs-row .rs-acts { gap: 0; margin: 0 0 0 -8px; }
+  html.rs-on .rs-row .rs-acts > * { height: 36px; padding: 0 8px; }
+  .rs-hidden-note button { padding: 8px 14px; }
+  .rs-keep { white-space: nowrap; }
+  .rs-who { display: inline-flex; flex-wrap: wrap; align-items: center; max-width: 100%; } /* together, unless wider than the line */
+  /* the tag button beside a name: a bigger place to tap, the same small icon */
+  .rs-ut-btn { width: 28px; height: 28px; margin: -4px -2px; }
+
+  /* Sort tabs and filter bar: one line each, as on a computer (what does not fit goes into More) */
+  #rs-sorts > a, #rs-sorts > button { box-sizing: border-box; min-height: 36px; display: inline-flex; align-items: center; }
+  .rs-more-menu > .rs-expand-all { gap: 8px; } /* "Show images" folded into More keeps a space after its picture */
+  #rs-sorts .rs-funnel { width: 40px; height: 36px; }
+  #rs-sorts .rs-expand-all, #rs-profbar .rs-expand-all { height: 36px; }
+  .rs-more-menu > a, .rs-more-menu > button { height: 42px; }
+  #rs-classic .rs-cl-time { height: 36px; }
+  .rs-chip, #rs-filterline .rs-fl-clear, #rs-filterline .rs-fl-lists { height: 34px; }
+
+  /* Comments: old RES's link row with room for a finger */
+  .rs-cacts a { padding: 8px 6px; }
+
+  /* Galleries: bigger previous and next buttons */
+  .rs-gal-btn { width: 42px; height: 42px; }
+
+  /* Comment navigator and back to top: a little bigger, a little closer to the corner */
+  :root { --rs-nav-h: 140px; }
+  #rs-nav { right: 12px; bottom: 16px; width: 46px; border-radius: 23px; }
+  #rs-nav > button { width: 40px; height: 36px; }
+  #rs-nav .rs-nav-kind { height: 32px; }
+  #rs-nav-menu button { padding: 12px 12px; font-size: 14px; }
+  #rs-top { right: 12px; bottom: 16px; }
+  html.rs-comments #rs-top { width: 44px; height: 44px; bottom: calc(16px + var(--rs-nav-h) + 8px); right: 13px; }
+
+  /* My subreddits: the screen's width less a small margin, rows tall enough to tap */
+  #rs-mysubs { left: 8px !important; right: 8px; width: auto; max-width: none; }
+  .rs-ms-row { padding-top: 9px; padding-bottom: 9px; }
+  .rs-ms-add { height: 32px; }
+  #rs-mysubs .rs-seg button { height: 34px; }
+  .rs-ms-search { height: 40px; }
+
+  /* Smaller windows (shortcut editor, hide lists, tags, keys): from the top of the screen, as tall as it allows */
+  .rs-modal, #rs-sc-editor, #rs-blocked, #rs-taglist, #rs-keyhelp { top: 8px; width: calc(100vw - 16px); max-width: none; max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
+  .rs-panel-x { width: 40px; height: 40px; }
+  .rs-panel-foot { gap: 12px; }
+  .rs-panel-foot > .rs-done { flex: none; } /* the other buttons go onto two lines before Done gets squeezed */
+  .rs-ed-del { width: 36px; height: 36px; }
+  .rs-ed-row { grid-template-columns: 16px minmax(0, 1fr) 120px 36px; }
+  .rs-ed-name { width: 120px; }
+
+  /* Settings window: the whole screen, only the settings scroll */
+  #rs-shade { padding: 0; }
+  #rs-panel { width: 100%; height: 100%; border: 0; border-radius: 0; }
+  .rs-pn-head .rs-panel-x { width: 40px; height: 40px; }
+  #rs-panel .rs-seg button { height: 34px; }
+  #rs-panel .rs-pn-font { height: 38px; }
+  #rs-panel .rs-pn-i { width: 32px; height: 32px; margin: -6px -4px; opacity: .8; }
+  #rs-panel .rs-pn-foot .rs-btn, #rs-panel .rs-pn-foot .rs-done { height: 40px; }
+  .rs-pn-foot { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
 }
 /* Narrow window on a post page: the post gets the full width (Reddit already drops the right side on feeds) */
 @media (max-width: 960px) {
