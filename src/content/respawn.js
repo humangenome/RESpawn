@@ -942,10 +942,12 @@
     return frag;
   };
   // Reddit's own Join button for this subreddit: in the header on its pages, in the side box's shadow on post pages
-  // (that one was missed before, so the card showed no Join or Leave on posts).
+  // (that one was missed before, so the card showed no Join or Leave on posts), on a phone's post page in the
+  // subreddit's strip at the top.
   const joinButton = (sub) => {
     const L = [document.querySelector('shreddit-subreddit-header-buttons')?.shadowRoot?.querySelector('shreddit-join-button'),
-      document.querySelector('#right-sidebar-container shreddit-subreddit-header')?.shadowRoot?.querySelector('shreddit-join-button')];
+      document.querySelector('#right-sidebar-container shreddit-subreddit-header')?.shadowRoot?.querySelector('shreddit-join-button'),
+      PHONE.matches ? document.querySelector('#pdp-credit-bar shreddit-join-button') : null];
     return L.find((b) => b && (!sub || String(b.getAttribute('name')).toLowerCase() === sub.toLowerCase())) || null;
   };
   const paintJoin = (card) => {
@@ -962,7 +964,7 @@
   // is tucked away, so the two don't repeat each other.
   const myFlair = { sub: '', d: null, failed: false };
   const flairWidget = (sub) => {
-    const f = document.querySelector('#right-sidebar-container community-author-flair');
+    const f = document.querySelector(':is(#right-sidebar-container, #rs-about-sheet) community-author-flair'); // the sheet: phones
     return f && String(f.getAttribute('subreddit-name')).toLowerCase() === sub.toLowerCase() ? f : null;
   };
   const loadMyFlair = (card) => {
@@ -986,7 +988,7 @@
     if (row.hidden !== !show) row.hidden = !show;
     // Reddit's own "User flair" section, and the divider that would then start its box; tucked away already while
     // about.json is on its way, so the side column doesn't jump when the line arrives
-    const sec = f?.closest('#right-sidebar-container .px-md');
+    const sec = f?.closest(':is(#right-sidebar-container, #rs-about-sheet) .px-md');
     const tuck = !open && (show || (!!f && !d && !myFlair.failed && myFlair.sub === sub && loggedIn()));
     sec?.classList.toggle('rs-hide-flairsec', tuck);
     let hr = sec?.nextElementSibling;
@@ -1022,22 +1024,43 @@
     sc.textContent = inList ? '− Shortcut' : '+ Shortcut'; sc.setAttribute('aria-pressed', String(inList));
     card.querySelector('.rs-ab-style input').checked = subStyleOn(sub.toLowerCase());
   };
+  // A phone's post page comes without Reddit's side column, so there the card is made from the subreddit's about.json
+  // (the same answer the flair line asks for, asked once). It has no weekly numbers, so the card goes without them.
+  const phoneAbout = () => {
+    const sub = subOf(), k = sub?.toLowerCase();
+    if (!k) return null;
+    if (phoneAbout.k !== k) {
+      phoneAbout.k = k; phoneAbout.d = null;
+      fetch(`/r/${sub}/about.json?raw_json=1`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((j) => {
+        const d = j?.kind === 't5' ? j.data : null;
+        if (phoneAbout.k !== k || !d?.display_name) return;
+        phoneAbout.d = d;
+        if (loggedIn()) { myFlair.sub = d.display_name; myFlair.d = d; myFlair.failed = false; }
+        sideCard(); aboutBtn();
+      });
+    }
+    return phoneAbout.d;
+  };
   const sideCard = () => {
     const hdr = document.querySelector('#right-sidebar-container shreddit-subreddit-header[name]');
     let card = document.getElementById('rs-about');
-    if (!hdr) { card?.remove(); return; }
-    const sub = hdr.getAttribute('name');
+    const ph = !hdr && PHONE.matches && cfg.enabled && isCommentsPage() ? phoneAbout() : null;
+    if (!hdr && !ph) { card?.remove(); return; }
+    const sub = hdr ? hdr.getAttribute('name') : ph.display_name;
     if (card?.isConnected && card.dataset.sub === sub) { paintJoin(card); paintFlairRow(card); return; } // Reddit's parts can change (or arrive late)
+    const top = document.getElementById('right-sidebar-contents') || (hdr ? hdr.closest('#right-sidebar-container') : document.getElementById('right-sidebar-container'));
+    if (!top) return;
     card?.remove();
-    const g = (k) => hdr.getAttribute(k) || '';
+    const g = hdr ? (k) => hdr.getAttribute(k) || '' : (k) => ({ 'display-name': ph.title, description: ph.public_description, 'subreddit-id': ph.name }[k] || '');
     // The community icon: the picture Reddit marks as this community's icon (header, or the post's own header on
-    // post pages), else its style-folder icon, else your joined list.
+    // post pages), else its style-folder icon, else your joined list (else, on a phone's post page, about.json's).
     const sid = g('subreddit-id');
     const iconSrc = document.querySelector('.masthead img.shreddit-subreddit-icon__icon')?.getAttribute('src')
       || (sid && document.querySelector(`shreddit-post[subreddit-id="${sid}"] img.shreddit-subreddit-icon__icon`)?.getAttribute('src'))
       || (sid && document.querySelector(`img[src*="/${sid}/styles/communityIcon"]`)?.getAttribute('src'))
-      || joined().find((j) => j.name.toLowerCase() === sub.toLowerCase())?.icon || '';
-    const created = (hdr.querySelector('[slot="community-details"]')?.textContent.match(/Created\s+([A-Z][a-z]+ \d{1,2}, \d{4})/) || [])[1];
+      || joined().find((j) => j.name.toLowerCase() === sub.toLowerCase())?.icon || ph?.community_icon || ph?.icon_img || '';
+    const created = hdr ? (hdr.querySelector('[slot="community-details"]')?.textContent.match(/Created\s+([A-Z][a-z]+ \d{1,2}, \d{4})/) || [])[1]
+      : ph.created_utc ? new Date(ph.created_utc * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
     const visitors = +g('weekly-active-users') || 0, posts = +g('weekly-contributions') || 0;
     card = el('section', { id: 'rs-about', 'data-sub': sub, 'aria-label': `About r/${sub}` });
     const desc = el('p', { class: 'rs-ab-desc' }, [linkify(g('description'))]);
@@ -1063,6 +1086,8 @@
       const f = flairWidget(sub);
       if (!f) return;
       if (f.getAttribute('aria-expanded') !== 'true') (f.querySelector('[slot="toggle"] button') || f.shadowRoot?.querySelector('[role="button"]'))?.click();
+      // in a phone's sheet the box shows as soon as Reddit has marked it open (a moment later), and the sheet scrolls to it
+      if (card.closest('#rs-about-sheet')) { setTimeout(() => { paintFlairRow(card); f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 200); return; }
       paintFlairRow(card);
       requestAnimationFrame(() => f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
     };
@@ -1085,14 +1110,85 @@
       el('div', { class: 'rs-ab-flair', hidden: true }, [el('label', { class: 'rs-ab-fl-top' }, [el('span', { text: 'Show my flair' }), flairSw]), flairMe]),
       el('label', { class: 'rs-ab-style' }, [el('span', { text: 'Use subreddit style' }), style]),
     );
-    const top = document.getElementById('right-sidebar-contents') || hdr.closest('#right-sidebar-container');
     const info = document.getElementById('rs-postinfo');
     if (info?.isConnected) info.after(card); else top.prepend(card);
-    hdr.classList.add('rs-hide-about');
+    hdr?.classList.add('rs-hide-about');
     loadMyFlair(card);
     paintCard(card);
     requestAnimationFrame(() => { more.hidden = desc.scrollHeight <= desc.clientHeight + 2; });
   };
+
+  // ---------- the card on a phone: a round button by the subreddit's name opens it in a sheet ----------
+  // Reddit drops its whole right column on a phone, and the card with it. A small round button next to the subreddit's
+  // name (its own page) or before Join (in the strip at the top of a post) brings the card up from the bottom of the
+  // screen; the X, a tap outside it, Esc or Back put it away. The card moves into the sheet while it is open, with
+  // Reddit's own flair box (so "edit" opens there too), and both go back into the side column when it closes.
+  const ABOUT_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 9.2v4.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="10" cy="6.3" r="1.15" fill="currentColor"/></svg>';
+  let about = null; // the open sheet: { shade, sheet, card, homes (what moved in, and the marker where each goes back), back, href }
+  // Where the button goes: before Join in a post's strip (or before its ⋯), else at the end of the name's row
+  const aboutSpot = () => {
+    const strip = document.getElementById('pdp-credit-bar');
+    const b4 = strip?.querySelector('shreddit-join-button') || strip?.querySelector('shreddit-post-overflow-menu');
+    if (b4) return { box: b4.parentElement, b4 };
+    const row = document.querySelector('.masthead h1')?.parentElement?.parentElement;
+    return row ? { box: row, b4: null } : null;
+  };
+  const aboutBtn = () => {
+    const card = document.getElementById('rs-about');
+    if (about && (about.card !== card || !PHONE.matches || !cfg.enabled)) closeAbout(true); // another page, or a wider window
+    let b = document.getElementById('rs-about-btn');
+    const at = PHONE.matches && cfg.enabled && card ? aboutSpot() : null;
+    if (!at) { b?.remove(); return; }
+    if (!b) {
+      b = el('button', { id: 'rs-about-btn', type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', html: ABOUT_ICON });
+      b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openAbout(); };
+    }
+    const label = `About r/${card.dataset.sub}`;
+    if (b.title !== label) { b.title = label; b.setAttribute('aria-label', label); }
+    if (b.parentElement !== at.box || (at.b4 ? b.nextElementSibling !== at.b4 : b !== at.box.lastElementChild)) at.box.insertBefore(b, at.b4);
+  };
+  const openAbout = () => {
+    const card = document.getElementById('rs-about');
+    if (about || !card) return;
+    closePanel(); closeMore(); closeMySubs();
+    const sec = flairWidget(card.dataset.sub)?.closest('#right-sidebar-container .px-md');
+    const x = el('button', { type: 'button', class: 'rs-panel-x', 'aria-label': 'Close', title: 'Close', html: ICON.close });
+    const sheet = el('div', { id: 'rs-about-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': `About r/${card.dataset.sub}`, tabindex: '-1' }, [el('div', { class: 'rs-as-top' }, [x])]); // the X stays at the top while it scrolls
+    const shade = el('div', { id: 'rs-about-shade' }, [sheet]);
+    const homes = [];
+    for (const n of [card, sec]) if (n) { const m = document.createComment('rs-about'); n.before(m); homes.push([n, m]); sheet.append(n); }
+    about = { shade, sheet, card, homes, back: false, href: location.href };
+    x.onclick = () => closeAbout();
+    // a tap on the dimmed page closes it (one that started there), and the page behind doesn't scroll
+    let downOnShade = false;
+    shade.addEventListener('pointerdown', (e) => { downOnShade = e.target === shade; });
+    shade.addEventListener('click', (e) => { if (e.target === shade && downOnShade) closeAbout(); });
+    shade.addEventListener('touchmove', (e) => { if (e.target === shade || sheet.scrollHeight <= sheet.clientHeight) e.preventDefault(); }, { passive: false });
+    sheet.addEventListener('click', (e) => { const a = e.target.closest?.('a[href]'); if (a && a.getAttribute('href') !== '#' && a.target !== '_blank') closeAbout(true); }); // off to another page
+    document.body.append(shade);
+    // made in the hidden side column, the description had no size to measure: "Show more" is decided now
+    const desc = card.querySelector('.rs-ab-desc'), more = card.querySelector('.rs-ab-more');
+    if (desc && more && !desc.classList.contains('rs-open')) more.hidden = desc.scrollHeight <= desc.clientHeight + 2;
+    // Back closes it: it gets a step of its own in the history (the same address, Reddit's own state) while it is open
+    try { history.pushState(history.state, ''); about.back = true; } catch { /* no history here */ }
+    window.addEventListener('keydown', aboutKeys, true);
+    document.getElementById('rs-about-btn')?.setAttribute('aria-expanded', 'true');
+    sheet.focus({ preventScroll: true });
+  };
+  const aboutKeys = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeAbout(); } };
+  // leaving: the page is changing anyway, so its step in the history stays
+  const closeAbout = (leaving) => {
+    if (!about) return;
+    const { shade, sheet, homes, back, href } = about;
+    about = null;
+    // back where each came from; one that was taken out meanwhile (a new page's card replaced it) stays out
+    for (const [n, m] of homes) { if (n.parentNode === sheet && m.isConnected) m.replaceWith(n); else { m.remove(); if (n.parentNode === sheet) n.remove(); } }
+    shade.remove();
+    window.removeEventListener('keydown', aboutKeys, true);
+    document.getElementById('rs-about-btn')?.setAttribute('aria-expanded', 'false');
+    if (back && !leaving && location.href === href) history.back();
+  };
+  window.addEventListener('popstate', () => { if (about) { about.back = false; closeAbout(); } });
 
   // ---------- "My subreddits" menu: your communities, most visited first ----------
   let mySubs = null;
@@ -2897,10 +2993,12 @@
   // Links to these lists (HOME, ALL, the sort tabs) switch the list in place on Home, or open it fresh from other pages
   // (Reddit's own page change would drop the part after #). A subreddit's sort tabs switch its list in place too.
   // Listened for on the window, ahead of Reddit's own link handling, which would otherwise turn them into its own pages.
+  // A link to "#" is a button made of a link (the card's flair "edit"): on a subreddit's list it was taken for a link to
+  // that same list and swallowed (found 11/12), so it is left to its own handler.
   window.addEventListener('click', (e) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !cfg.enabled) return;
     const a = e.target.closest?.('a[href]');
-    if (!a || a.target === '_blank') return;
+    if (!a || a.target === '_blank' || a.getAttribute('href') === '#') return;
     const u = new URL(a.getAttribute('href'), location.href);
     if (u.origin !== location.origin) return;
     // a combined list's old address (r/a+b+c) opens as RESpawn's own list without a trip through old Reddit's page
@@ -4348,7 +4446,7 @@
     });
     for (const c of all) if (c.classList.contains('rs-wide') !== wide.has(c)) c.classList.toggle('rs-wide', wide.has(c));
   };
-  window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(() => { railCheck(); addGear(); multiShow(); fitBars(); }, 150); }, { passive: true });
+  window.addEventListener('resize', () => { clearTimeout(railCheck.t); railCheck.t = setTimeout(() => { railCheck(); addGear(); multiShow(); fitBars(); aboutBtn(); }, 150); }, { passive: true });
   const tick = () => {
     if (location.href !== lastUrl) { lastUrl = location.href; onRoute(); }
     railCheck();
@@ -4365,7 +4463,7 @@
     if (sh !== (tick.strip || 0)) { tick.strip = sh; html.style.setProperty('--rs-strip-h', `${sh}px`); html.classList.toggle('rs-strip', sh > 0); }
     if (cfg.showShortcuts && (!bar?.isConnected || (header && bar.previousElementSibling !== header))) shortcutBar();
     else if (bar && bar.dataset.mods !== undefined && navLoaded() && String(modded().length) !== bar.dataset.mods) shortcutBar(); // Reddit's menu just told us you moderate
-    clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); postVideo(); commentBoxes(); applyFilters(); fitBars(); scButton(); postInfo(); appText(); sideCard(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
+    clMount(); densify(); rankCheck(); pager(); sortTabs(); profileBar(); showSweep(); postVideo(); commentBoxes(); applyFilters(); fitBars(); scButton(); postInfo(); appText(); sideCard(); aboutBtn(); applySubStyle(); comments(); tagRecent(); addGear(); restoreSel(); topButton(); hideMyName();
     if (Date.now() - (tidy.t || 0) > 1500) { tidy.t = Date.now(); tidy(); }
     if (cfg.enabled && cfg.leftNav === 'slide') ensureNav();
     karmaSplit();

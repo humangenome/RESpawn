@@ -484,6 +484,7 @@ html.rs-on.rs-font-old shreddit-post[view-context="CommentsPage"] h1[slot="title
 }
 @keyframes rs-pn-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
 @keyframes rs-pn-fade { from { opacity: 0; } }
+@keyframes rs-sheet-up { from { transform: translateY(32px); opacity: .5; } }
 @media (prefers-reduced-motion: reduce) { #rs-shade, #rs-panel { animation: none; } }
 /* Reddit styles bare buttons, headings and inputs; nothing of that may leak in */
 #rs-panel, #rs-panel * { box-sizing: border-box; text-transform: none !important; letter-spacing: normal; }
@@ -756,6 +757,9 @@ html.rs-on .rs-hide-about ~ hr:first-of-type { display: none !important; }
 /* and the box's own top padding doubled up with the hidden About box's, an empty grey band: "User flair" starts the box */
 html.rs-on .py-md:has(> .rs-hide-about) { padding-top: 0 !important; }
 html:not(.rs-on) #rs-about { display: none !important; }
+/* the card's button and sheet are for phones (respawn.css, 640 px and narrower; aboutBtn in respawn.js) */
+#rs-about-btn { display: none; }
+html:not(.rs-on) #rs-about-shade { display: none !important; }
 #rs-about { margin: 12px 0 8px; padding: 14px 16px; border: 1px solid var(--rs-line); border-radius: 14px; background: var(--rs-bg); color: var(--rs-text); font: 400 14px/1.45 var(--rs-font); }
 #rs-about, #rs-about * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
 .rs-ab-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
@@ -1098,6 +1102,24 @@ html.rs-dash-open #rs-shortcuts a.rs-cur { background: none; color: var(--rs-wea
   .rs-more-menu > a, .rs-more-menu > button { height: 42px; }
   #rs-classic .rs-cl-time { height: 36px; }
   .rs-chip, #rs-filterline .rs-fl-clear, #rs-filterline .rs-fl-lists { height: 34px; }
+
+  /* The subreddit card (Reddit drops its right column on a phone): a round button by the subreddit's name, matching
+     Reddit's own round buttons, with room round it for a thumb; the card comes up from the bottom in a sheet */
+  html.rs-on #rs-about-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; align-self: center; box-sizing: border-box; width: 32px; height: 32px; margin: 0 6px 0 auto; padding: 0; border: 1px solid var(--rs-line); border-radius: 50%; background: none; color: var(--rs-text); cursor: pointer; }
+  html.rs-on #rs-about-btn::before { content: ""; position: absolute; inset: -5px; }
+  html.rs-on #rs-about-btn[aria-expanded="true"] { background: var(--rs-hover); }
+  #rs-about-btn svg { width: 18px; height: 18px; }
+  #rs-about-shade { position: fixed; inset: 0; z-index: 2147483001; display: flex; flex-direction: column; justify-content: flex-end; background: rgba(0,0,0,.45); animation: rs-pn-fade .14s ease-out; }
+  #rs-about-sheet { position: relative; box-sizing: border-box; max-height: calc(100vh - 56px); max-height: calc(100dvh - 56px); overflow-y: auto; overscroll-behavior: contain; padding: 0 16px max(18px, env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; background: var(--rs-bg); color: var(--rs-text); box-shadow: 0 -10px 36px rgba(0,0,0,.22); outline: none; animation: rs-sheet-up .2s ease-out; }
+  #rs-about-sheet > .rs-as-top { position: sticky; top: 0; z-index: 1; height: 0; } /* the sheet has no top padding, so it sticks at the very top in every browser */
+  #rs-about-sheet .rs-as-top > .rs-panel-x { position: absolute; top: 12px; right: -6px; background: var(--rs-bg); }
+  #rs-about-sheet > #rs-about { margin: 16px 0 0; padding: 0; border: 0; border-radius: 0; background: none; }
+  #rs-about-sheet .rs-ab-head { min-height: 40px; padding-right: 44px; }
+  #rs-about-sheet .rs-ab-acts .rs-btn { height: 40px; }
+  #rs-about-sheet .rs-ab-style, #rs-about-sheet .rs-ab-fl-top { min-height: 40px; }
+  #rs-about-sheet .rs-ab-fl-edit { padding: 12px 10px; margin: -12px -10px -12px -2px; } /* a thumb-sized place round the small word */
+  #rs-about-sheet > .px-md { margin-top: 12px; padding: 10px 0 0; border-top: 1px solid var(--rs-line); } /* Reddit's own flair box, opened by "edit" */
+  @media (prefers-reduced-motion: reduce) { #rs-about-shade, #rs-about-sheet { animation: none; } }
 
   /* Comments: old RES's link row with room for a finger */
   .rs-cacts a { padding: 8px 6px; }
