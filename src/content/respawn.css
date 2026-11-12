@@ -167,8 +167,8 @@ html.rs-on.rs-rail-empty #right-sidebar-container { position: fixed !important; 
 /* Post pages: a comment that starts below the end of the right column runs on under it at the full width, like
    text flowing around a box (the script marks those comments and measures the column) */
 html.rs-on.rs-comments shreddit-comment.rs-wide { margin-right: calc(-1 * var(--rs-wide-reach, 0px)); }
-/* No right column (narrow window): the post's column keeps clear of the navigator's buttons in the corner */
-@media (min-width: 561px) { html.rs-on.rs-comments.rs-no-rail main#main-content { padding-right: var(--rs-nav-gutter, 0px) !important; } }
+/* No right column (narrow window, phones too): the post's column keeps clear of the navigator's buttons in the corner */
+html.rs-on.rs-comments.rs-no-rail main#main-content { padding-right: var(--rs-nav-gutter, 0px) !important; }
 html.rs-on .rs-hide-icon, html.rs-on .rs-hide-games,
 html.rs-on in-feed-community-recommendations, html.rs-on #mod-recruitment-banner { display: none !important; }
 html.rs-on .masthead { margin-top: 8px !important; }
@@ -1143,14 +1143,17 @@ html.rs-dash-open #rs-shortcuts a.rs-cur { background: none; color: var(--rs-wea
   .rs-grip svg { margin: 7px; }
   .rs-zoom > .rs-grip { opacity: 1; }
 
-  /* Comment navigator and back to top: a little bigger, a little closer to the corner */
-  :root { --rs-nav-h: 140px; }
-  #rs-nav { right: 12px; bottom: 16px; width: 46px; border-radius: 23px; }
-  #rs-nav > button { width: 40px; height: 36px; }
+  /* Comment navigator and back to top: a slim column with buttons for a thumb, close to the screen's edge, so the post's
+     column only steps in a little to keep its words clear of it (railCheck), and up off the bottom, clear of Firefox's
+     address bar and the phone's own bar */
+  :root { --rs-nav-h: 140px; --rs-nav-b: calc(20px + env(safe-area-inset-bottom, 0px)); }
+  #rs-nav { right: 6px; bottom: var(--rs-nav-b); width: 40px; border-radius: 20px; }
+  #rs-nav > button { width: 36px; height: 36px; }
   #rs-nav .rs-nav-kind { height: 32px; }
   #rs-nav-menu button { padding: 12px 12px; font-size: 14px; }
-  #rs-top { right: 12px; bottom: 16px; }
-  html.rs-comments #rs-top { width: 44px; height: 44px; bottom: calc(16px + var(--rs-nav-h) + 8px); right: 13px; }
+  #rs-top { right: 12px; bottom: var(--rs-nav-b); }
+  html.rs-on.rs-comments.rs-no-rail main#main-content { box-sizing: border-box; } /* Reddit's phone column is 100% wide: the room comes out of it, not past the screen's edge */
+  html.rs-comments #rs-top { width: 40px; height: 40px; bottom: calc(var(--rs-nav-b) + var(--rs-nav-h) + 8px); right: 6px; }
 
   /* My subreddits: the screen's width less a small margin, rows tall enough to tap */
   #rs-mysubs { left: 8px !important; right: 8px; width: auto; max-width: none; }

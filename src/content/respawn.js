@@ -4493,9 +4493,17 @@
       if (main) { railCheck.ro ||= new ResizeObserver(() => railWide(railCheck.el)); for (const x of [main, ...rail.children]) railCheck.ro.observe(x); }
     }
     railWide(rail);
-    // With no right column (narrow window) the post's column keeps clear of the navigator's buttons in the corner
+    // With no right column (narrow window) the post's column keeps clear of the navigator's buttons in the corner.
+    // On a phone every bit of width counts: the words there already stop short of the column's edge (Reddit's own
+    // margin), so the column steps in only as far as keeps them 8 px clear of the buttons.
     const edge = gone && isCommentsPage() ? navEdge() : null, m = edge !== null && document.querySelector('main#main-content');
-    html.style.setProperty('--rs-nav-gutter', `${m ? Math.max(0, Math.ceil(m.getBoundingClientRect().right - edge + 12)) : 0}px`);
+    let gutter = 0;
+    if (m) {
+      const right = m.getBoundingClientRect().right, words = PHONE.matches && m.querySelector('shreddit-comment > [slot="comment"]');
+      const margin = !PHONE.matches ? -12 : words?.getClientRects().length ? right - (parseFloat(getComputedStyle(m).paddingRight) || 0) - words.getBoundingClientRect().right - 8 : 8;
+      gutter = Math.max(0, Math.ceil(right - edge - margin));
+    }
+    html.style.setProperty('--rs-nav-gutter', `${gutter}px`);
   };
   // Left edge of the navigator's column of buttons and back-to-top in the bottom-right corner (fixed on screen)
   const navEdge = () => {
