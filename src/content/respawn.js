@@ -2047,13 +2047,31 @@
   // dragged out as a file. o: width() its width now, set(w), reset(), done() after a drag, surface (where a drag may
   // start besides the grip), controls (the height of a video's own control bar, left to the video).
   // The grip is 26 px square and hangs 8 px past the corner, so its lines sit just inside the corner (18, 18).
+  // A finger (or pen) drags the grip too: a touch that starts on the grip resizes instead of scrolling the page (the grip
+  // alone has touch-action: none, so the page still scrolls from anywhere else, the picture itself included), and a
+  // double tap on it is the double-click. A mouse keeps its own events, exactly as before.
   const GRIP_ICON = '<svg viewBox="0 0 26 26" aria-hidden="true"><path d="M17 8 8 17M17 13l-4 4" fill="none" stroke="rgba(0,0,0,.55)" stroke-width="4" stroke-linecap="round"/><path d="M17 8 8 17M17 13l-4 4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>';
+  // The events one drag listens to on the window: a mouse's, or one finger's (only the finger that started it)
+  const dragEvents = (e, move, stop) => {
+    const finger = e.type === 'pointerdown', id = e.pointerId;
+    const L = finger
+      ? [['pointermove', (ev) => { if (ev.pointerId === id) move(ev); }], ['pointerup', (ev) => { if (ev.pointerId === id) stop(ev); }], ['pointercancel', (ev) => { if (ev.pointerId === id) stop(ev); }]]
+      : [['mousemove', move], ['mouseup', stop]];
+    for (const [t, f] of L) window.addEventListener(t, f, true);
+    return () => { for (const [t, f] of L) window.removeEventListener(t, f, true); };
+  };
+  // A finger on a grip: no scrolling, no mouse events after it (a pointerdown that is prevented sends none)
+  const onFinger = (grip, start) => grip.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' || !e.isPrimary) return; e.preventDefault(); e.stopPropagation(); start(e); });
+  // Two taps on a grip within 400 ms, for fingers (a prevented touch sends no dblclick)
+  const doubleTap = (grip) => { const t = Date.now(), two = t - (grip.rsTap || 0) < 400; grip.rsTap = two ? 0 : t; return two; };
   const zoomable = (wrap, o) => {
     const grip = el('span', { class: 'rs-grip', title: 'Drag to resize · double-click for normal size', html: GRIP_ICON });
     wrap.classList.add('rs-zoom');
     wrap.append(grip);
-    grip.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); wrap.classList.remove('rs-zoomed'); o.reset(); });
+    const normal = () => { wrap.classList.remove('rs-zoomed'); o.reset(); };
+    grip.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); normal(); });
     const begin = (e, onGrip) => {
+      const finger = e.type === 'pointerdown';
       if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       if (!onGrip && o.controls && e.clientY > o.surface.getBoundingClientRect().bottom - o.controls) return;
       e.preventDefault();
@@ -2063,7 +2081,7 @@
       let moved = false, frame = 0, last = e;
       const apply = () => { frame = 0; const room = document.documentElement.clientWidth - box.left - 12; o.set(Math.round(Math.max(120, Math.min(room, w0 * diag(last.clientX, last.clientY) / d0)))); };
       const move = (ev) => {
-        if (!(ev.buttons & 1)) { stop(); return; }
+        if (!finger && !(ev.buttons & 1)) { stop(); return; }
         last = ev;
         if (!moved) {
           if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
@@ -2072,8 +2090,8 @@
         if (!frame) frame = requestAnimationFrame(apply);
       };
       const stop = () => {
-        window.removeEventListener('mousemove', move, true); window.removeEventListener('mouseup', stop, true);
-        if (!moved) return;
+        off();
+        if (!moved) { if (finger && doubleTap(grip)) normal(); return; }
         if (frame) { cancelAnimationFrame(frame); apply(); }
         html.classList.remove('rs-resizing');
         // the click that ends a drag opens nothing and doesn't start the video
@@ -2081,9 +2099,10 @@
         window.addEventListener('click', eat, true); setTimeout(() => window.removeEventListener('click', eat, true), 0);
         o.done?.();
       };
-      window.addEventListener('mousemove', move, true); window.addEventListener('mouseup', stop, true);
+      const off = dragEvents(e, move, stop);
     };
     grip.addEventListener('mousedown', (e) => { e.stopPropagation(); begin(e, true); });
+    onFinger(grip, (e) => begin(e, true));
     if (o.surface) { o.surface.addEventListener('mousedown', (e) => begin(e, false)); o.surface.addEventListener('dragstart', (e) => e.preventDefault()); }
   };
   // A picture in a row. info { w, h, sizes } (Reddit's own pictures) lets it take its room before it loads, in the copy
@@ -3223,6 +3242,14 @@
   };
   // the room a box may take: its own column (a reply: the comment's row, under the buttons)
   const boxRoom = (host) => (host.closest('[slot="actionRow"]') || host.parentElement)?.getBoundingClientRect().width || innerWidth;
+  // A phone gets Reddit's simple box instead, its writing area inside the box's own walled-off part where the stylesheet
+  // can't reach: that area takes the same height (the size you gave it passes through), and the grip replaces the
+  // browser's own resize corner it had, which a finger can't drag.
+  const simpleBox = (form) => {
+    const ed = PHONE.matches ? form?.querySelector('shreddit-simple-composer')?.shadowRoot?.querySelector('[contenteditable], textarea') : null;
+    if (ed && !ed.rsBox) { ed.rsBox = true; ed.style.setProperty('min-height', 'var(--rs-box-h, 120px)', 'important'); ed.style.setProperty('resize', 'none', 'important'); }
+    return ed || null;
+  };
   const commentBoxes = () => {
     if (!cfg.enabled) return;
     for (const host of document.querySelectorAll('comment-composer-host')) {
@@ -3231,40 +3258,53 @@
       const strip = host.querySelector(':scope > faceplate-tracker faceplate-textarea-input');
       if (strip && strip.getAttribute('size') !== 'expanded') strip.setAttribute('size', 'expanded');
       const form = host.querySelector(':scope > faceplate-form');
-      const ed = form?.querySelector('shreddit-composer > div[slot="rte"]');
+      const ed = form?.querySelector('shreddit-composer > div[slot="rte"]') || simpleBox(form);
       if (!ed || !form.getClientRects().length || form.querySelector(':scope > .rs-box-grip')) continue;
       const grip = el('span', { class: 'rs-grip rs-box-grip', title: 'Drag to resize · double-click for the normal size', html: GRIP_ICON });
       form.append(grip);
-      grip.addEventListener('dblclick', (e) => {
-        e.preventDefault(); e.stopPropagation();
+      const normal = () => {
         const k = boxKind(host), all = { ...(cfg.boxSizes || {}) };
         delete all[k]; saveCfg({ boxSizes: all });
         for (const h of document.querySelectorAll('comment-composer-host')) if (boxKind(h) === k) boxApply(h);
-      });
-      grip.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return;
-        e.preventDefault(); e.stopPropagation();
+      };
+      grip.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); normal(); });
+      // Drag with a mouse or a finger. On a phone the box is already the screen's width, so only its height changes
+      // there (and the width you gave it on a computer is kept).
+      const start = (e) => {
+        const finger = e.type === 'pointerdown', tall = PHONE.matches;
         const k = boxKind(host), room = boxRoom(host);
         const x0 = e.clientX, y0 = e.clientY, w0 = host.getBoundingClientRect().width, h0 = ed.getBoundingClientRect().height;
-        let w = w0, h = h0, frame = 0, last = e;
+        let w = w0, h = h0, frame = 0, last = e, moved = !finger;
         const apply = () => {
           frame = 0;
-          w = Math.round(Math.max(280, Math.min(room, w0 + last.clientX - x0)));
+          if (!tall) w = Math.round(Math.max(280, Math.min(room, w0 + last.clientX - x0)));
           h = Math.round(Math.max(44, Math.min(innerHeight * 0.85, h0 + last.clientY - y0)));
-          host.style.setProperty('--rs-box-w', `${w}px`); host.style.setProperty('--rs-box-h', `${h}px`);
+          if (!tall) host.style.setProperty('--rs-box-w', `${w}px`);
+          host.style.setProperty('--rs-box-h', `${h}px`);
         };
-        const move = (ev) => { if (!(ev.buttons & 1)) { stop(); return; } last = ev; if (!frame) frame = requestAnimationFrame(apply); };
+        const move = (ev) => {
+          if (!finger && !(ev.buttons & 1)) { stop(); return; }
+          last = ev; moved ||= Math.hypot(ev.clientX - x0, ev.clientY - y0) >= 4;
+          if (moved && !frame) frame = requestAnimationFrame(apply);
+        };
         const stop = () => {
-          window.removeEventListener('mousemove', move, true); window.removeEventListener('mouseup', stop, true);
-          if (frame) { cancelAnimationFrame(frame); apply(); }
+          off();
           html.classList.remove('rs-resizing');
+          if (!moved) { if (doubleTap(grip)) normal(); return; } // a finger's tap is not a drag
+          if (frame) { cancelAnimationFrame(frame); apply(); }
           // as wide as it can go counts as "full width", so it follows the window from then on
-          saveCfg({ boxSizes: { ...(cfg.boxSizes || {}), [k]: { w: w >= room - 2 ? null : w, h } } });
+          saveCfg({ boxSizes: { ...(cfg.boxSizes || {}), [k]: { w: tall ? ((cfg.boxSizes || {})[k]?.w ?? null) : w >= room - 2 ? null : w, h } } });
           for (const o of document.querySelectorAll('comment-composer-host')) if (o !== host && boxKind(o) === k) boxApply(o);
         };
         html.classList.add('rs-resizing');
-        window.addEventListener('mousemove', move, true); window.addEventListener('mouseup', stop, true);
+        const off = dragEvents(e, move, stop);
+      };
+      grip.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        start(e);
       });
+      onFinger(grip, start);
     }
   };
   // A box opens without a page change RESpawn would notice (its own insides are left alone for speed): look again when

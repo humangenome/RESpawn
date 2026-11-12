@@ -267,7 +267,7 @@ html.rs-on.rs-classic #main-content > :not(#rs-classic) { display: none !importa
 .rs-zoom.rs-zoomed > a > img, .rs-zoom.rs-zoomed > video { width: 100%; height: auto; max-width: none; max-height: none; }
 .rs-frame { width: min(100%, 854px); }
 .rs-frame > .rs-yt { width: 100%; }
-.rs-grip { position: absolute; right: -8px; bottom: -8px; z-index: 5; display: block; width: 26px; height: 26px; cursor: nwse-resize; opacity: 0; transition: opacity .12s; }
+.rs-grip { position: absolute; right: -8px; bottom: -8px; z-index: 5; display: block; width: 26px; height: 26px; cursor: nwse-resize; opacity: 0; transition: opacity .12s; touch-action: none; } /* a finger on the grip resizes; anywhere else it scrolls */
 .rs-zoom:hover > .rs-grip, html.rs-resizing .rs-zoomed > .rs-grip { opacity: 1; }
 .rs-grip svg { display: block; width: 26px; height: 26px; }
 /* a post's own video sits in Reddit's rounded box, which cuts off the corner: its lines move in, the grip stays put */
@@ -1126,6 +1126,13 @@ html.rs-dash-open #rs-shortcuts a.rs-cur { background: none; color: var(--rs-wea
 
   /* Galleries: bigger previous and next buttons */
   .rs-gal-btn { width: 42px; height: 42px; }
+
+  /* Resize grips (pictures, videos, comment boxes): a 40 px place for a finger round the same small corner lines, which
+     always show (a phone has no pointer to bring them up). It stops at the screen's edge even on a picture made as wide
+     as it goes, so the page never slides sideways. */
+  .rs-grip { width: 40px; height: 40px; right: -12px; bottom: -12px; }
+  .rs-grip svg { margin: 7px; }
+  .rs-zoom > .rs-grip { opacity: 1; }
 
   /* Comment navigator and back to top: a little bigger, a little closer to the corner */
   :root { --rs-nav-h: 140px; }
