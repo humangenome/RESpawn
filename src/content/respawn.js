@@ -4371,6 +4371,22 @@
     karmaSplit();
     multiShow();
   };
+  // RESpawn's look at the page after Reddit changes it waits for a quiet moment, so your clicks never wait for it: never
+  // within a third of a second of a click or tap (Reddit is answering it, e.g. opening a reply box; measured 11/12: the
+  // look itself is 10-15 ms, but run then it made the page re-measure itself while Reddit built the box), and just after
+  // the browser has drawn the page, when reading where things are costs nothing. A tab in the background runs it at once.
+  let pressAt = -1e9;
+  addEventListener('pointerdown', () => { pressAt = performance.now(); }, { capture: true, passive: true });
+  const tickSoon = (ms = 120) => { clearTimeout(tick.t); tick.t = setTimeout(tickQuiet, ms); };
+  const tickQuiet = () => {
+    const since = performance.now() - pressAt;
+    if (since < 320) { tick.t = setTimeout(tickQuiet, 320 - since); return; }
+    if (document.hidden) { tick(); return; }
+    let ran = false;
+    const go = () => { if (!ran) { ran = true; tick(); } };
+    requestAnimationFrame(() => setTimeout(go, 0));
+    setTimeout(go, 250); // should the browser not draw (a covered window), it runs anyway
+  };
   // The page's own parts are read once the page is in; the switches above are already on it.
   const pageIn = new Promise((res) => { if (document.readyState !== 'loading') res(); else document.addEventListener('DOMContentLoaded', () => res(), { once: true }); });
   // A few addresses on www.reddit.com still come back in old Reddit's own page design (a combined list RESpawn did not
@@ -4392,7 +4408,7 @@
     new MutationObserver((L) => {
       if (L.every((m) => m.target.closest?.('shreddit-composer, comment-composer-host'))) return;
       if (cl && !cl.root.isConnected && html.classList.contains('rs-classic')) clMount(); // Reddit swapped its page under the list: put it straight back
-      clearTimeout(tick.t); tick.t = setTimeout(tick, 120);
+      tickSoon();
     }).observe(document.body, { childList: true, subtree: true });
     setInterval(() => { if (location.href !== lastUrl) tick(); }, 800);
   });
