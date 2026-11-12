@@ -1102,6 +1102,15 @@ html.rs-dash-open #rs-shortcuts a.rs-cur { background: none; color: var(--rs-wea
   .rs-more-menu > a, .rs-more-menu > button { height: 42px; }
   #rs-classic .rs-cl-time { height: 36px; }
   .rs-chip, #rs-filterline .rs-fl-clear, #rs-filterline .rs-fl-lists { height: 34px; }
+  /* the chips that don't fit fold into More, at the end of the chips, so "+ Hide…" always shows whole (fitFilters) */
+  #rs-filterline.rs-fl-fold { position: relative; overflow: visible; }
+  #rs-filterline .rs-fl-more { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 34px; padding: 0; border: 1px solid var(--rs-line); border-radius: 999px; background: none; color: var(--rs-weak); }
+  #rs-filterline .rs-fl-more[hidden] { display: none; }
+  #rs-filterline .rs-fl-more svg { width: 16px; height: 16px; }
+  #rs-filterline .rs-fl-more[aria-expanded="true"] { background: var(--rs-hover); color: var(--rs-text); }
+  #rs-filterline .rs-fl-more.rs-fl-active::after { content: ""; position: absolute; top: 4px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--rs-up); }
+  .rs-fl-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 40; display: flex; flex-wrap: wrap; gap: 6px; box-sizing: border-box; width: max-content; max-width: 100%; padding: 8px; border: 1px solid var(--rs-line); border-radius: 12px; background: var(--rs-bg); box-shadow: 0 12px 32px rgba(0,0,0,.16); }
+  .rs-fl-menu[hidden] { display: none; }
 
   /* The subreddit card (Reddit drops its right column on a phone): a round button by the subreddit's name, matching
      Reddit's own round buttons, with room round it for a thumb; the card comes up from the bottom in a sheet */

@@ -1705,7 +1705,7 @@
     if (clear) clear.hidden = !on.length;
   };
   const paintFilters = () => {
-    for (const chip of document.querySelectorAll('#rs-filterline .rs-chip')) {
+    for (const chip of document.querySelectorAll('#rs-filterline .rs-chip')) { // folded into the bar's More on a phone too
       const k = chip.dataset.f, s = fstate(k), [label, not, what] = fdef(k);
       chip.dataset.state = s;
       chip.textContent = s === 'only' ? `only ${label}` : s === 'hide' ? not : label;
@@ -1713,6 +1713,12 @@
         : s === 'hide' ? `Hiding ${what}. Click to turn off.`
           : `Click to show only ${what}. Click again to hide them.`;
     }
+    paintFlMore();
+  };
+  // The filter bar's More (phones): a dot while a filter folded into it is on, as on the funnel
+  const paintFlMore = () => {
+    const more = document.querySelector('#rs-filterline .rs-fl-more');
+    if (more) more.classList.toggle('rs-fl-active', !!more.rsMenu.querySelector('.rs-chip:not([data-state="off"])'));
   };
   const refilter = () => { fVer++; seen = null; paintFilters(); applyFilters(); };
   const setFilter = (k, s) => { saveCfg({ filters: { ...(cfg.filters || {}), [k]: s } }); refilter(); };
@@ -1737,13 +1743,20 @@
   // Ryan: the tabs broke mid-word ("Bes / t") in a narrow window, and the filter bar "should always be on one line".
   // When the tabs run out of room they first tighten, then Show images, the time range and the last tabs (never the one
   // you are on) fold into a More menu. The filter bar first shortens its last button to "Hide…", and past that its
-  // chips slide sideways inside the bar. Checked when the width or the font changes, not on every pass.
+  // chips slide sideways inside the bar; on a phone they fold into a More of their own instead, so "+ Hide…" is never
+  // cut off at the screen's edge. Checked when the width or the font changes, not on every pass.
   const MORE = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4.5" cy="10" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="15.5" cy="10" r="1.6" fill="currentColor"/></svg>';
-  const fitsIn = (box) => { const r = box.getBoundingClientRect(), pad = parseFloat(getComputedStyle(box).paddingRight) || 0; return [...box.children].every((k) => !k.getClientRects().length || k.getBoundingClientRect().right <= r.right - pad + 0.5); };
+  const fitsIn = (box) => { const r = box.getBoundingClientRect(), pad = parseFloat(getComputedStyle(box).paddingRight) || 0; return [...box.children].every((k) => !k.getClientRects().length || k.classList.contains('rs-fl-menu') || k.getBoundingClientRect().right <= r.right - pad + 0.5); };
   const fontNow = () => (html.className.match(/rs-font-\w+/) || [''])[0];
-  const closeMore = () => { const m = document.querySelector('.rs-more-menu:not([hidden])'); if (m) { m.hidden = true; m.rsBtn?.setAttribute('aria-expanded', 'false'); } };
-  document.addEventListener('click', (e) => { if (e.isTrusted && !e.target.closest?.('.rs-more, .rs-more-menu')) closeMore(); }, true);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.querySelector('.rs-more-menu:not([hidden])')) { closeMore(); e.stopPropagation(); } }, true);
+  const OPEN_MORE = '.rs-more-menu:not([hidden]), .rs-fl-menu:not([hidden])';
+  const closeMore = () => {
+    const m = document.querySelector(OPEN_MORE);
+    if (!m) return;
+    m.hidden = true; m.rsBtn?.setAttribute('aria-expanded', 'false');
+    if (m.classList.contains('rs-fl-menu')) setTimeout(fitFilters, 0); // the filters picked in it may leave room for chips again
+  };
+  document.addEventListener('click', (e) => { if (e.isTrusted && !e.target.closest?.('.rs-more, .rs-more-menu, .rs-fl-menu')) closeMore(); }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.querySelector(OPEN_MORE)) { closeMore(); e.stopPropagation(); } }, true);
   const fitSorts = () => {
     const bar = document.getElementById('rs-sorts'), wrap = bar?.parentElement;
     if (!bar?.isConnected || !wrap || !bar.offsetWidth) return;
@@ -1782,11 +1795,34 @@
   const fitFilters = () => {
     const bar = document.getElementById('rs-filterline');
     if (!bar?.isConnected || !bar.offsetWidth) return;
+    let more = bar.querySelector(':scope > .rs-fl-more'), menu = more?.rsMenu;
+    // Filters being picked in its More: nothing comes back out while it is open, but when a pick brings "1 hidden" and
+    // Clear the bar folds a chip more, so "+ Hide…" stays whole. The full fit waits for it to close.
+    if (menu && !menu.hidden) { bar.rsFit = ''; for (const c of [...bar.querySelectorAll(':scope > .rs-chip')].reverse()) { if (fitsIn(bar)) break; menu.prepend(c); } return; }
     const sig = `${bar.clientWidth}|${fontNow()}|${bar.textContent}`;
     if (bar.rsFit === sig) return;
     bar.rsFit = sig;
+    if (more) { // chips back in their places (More stays at the end of them, put away)
+      for (const k of FILTER_KEYS) { const c = bar.querySelector(`.rs-chip[data-f="${k}"]`); if (c) more.before(c); }
+      more.hidden = true; bar.classList.remove('rs-fl-fold');
+    }
     bar.classList.remove('rs-fl-tight');
-    if (!fitsIn(bar)) bar.classList.add('rs-fl-tight');
+    if (fitsIn(bar)) return;
+    bar.classList.add('rs-fl-tight');
+    if (!PHONE.matches) return;
+    bar.scrollLeft = 0;
+    if (fitsIn(bar)) return;
+    // Phones: the last chips go into More (at the end of the chips), as many as it takes for the rest to fit
+    if (!more) {
+      more = el('button', { type: 'button', class: 'rs-more rs-fl-more', title: 'More filters', 'aria-label': 'More filters', 'aria-haspopup': 'true', 'aria-expanded': 'false', html: MORE });
+      menu = el('div', { class: 'rs-fl-menu', role: 'group', 'aria-label': 'More filters', hidden: true });
+      more.rsMenu = menu; menu.rsBtn = more;
+      more.onclick = () => { const open = menu.hidden; closeMore(); menu.hidden = !open; more.setAttribute('aria-expanded', String(open)); };
+      bar.querySelector(':scope > .rs-fl-count').before(more); bar.append(menu);
+    }
+    more.hidden = false; bar.classList.add('rs-fl-fold');
+    for (const c of [...bar.querySelectorAll(':scope > .rs-chip')].reverse()) { if (fitsIn(bar)) break; menu.prepend(c); }
+    paintFlMore();
   };
   const fitBars = () => { fitSorts(); fitFilters(); };
 
