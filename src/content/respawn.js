@@ -121,6 +121,19 @@
   const saveBoot = () => { try { localStorage.setItem(BOOT_KEY, JSON.stringify(Object.fromEntries(BOOT_FIELDS.map((k) => [k, cfg[k]])))); } catch { /* storage full or blocked */ } };
   let boot = cfg;
   try { boot = { ...cfg, ...(store ? JSON.parse(localStorage.getItem(BOOT_KEY) || '{}') : {}) }; } catch { /* keep the defaults */ }
+  // Many people coming from RES once told Reddit to keep its old design ("opt out of the redesign"). Reddit remembers
+  // that in a cookie, redesign_optout, and then serves every www.reddit.com page in the old design, where RESpawn has to
+  // step aside, so nothing of it shows. RESpawn is made for the new design: while it is on, it clears that cookie and
+  // loads the page again. old.reddit.com still opens the old design. Tried once per tab, so it can never loop.
+  const OPTOUT = /(?:^|;\s*)redesign_optout=/;
+  if (boot.enabled && OPTOUT.test(document.cookie)) {
+    let first = true;
+    try { first = !sessionStorage.getItem('rs-optout'); sessionStorage.setItem('rs-optout', '1'); } catch { /* storage blocked: still once, this page */ }
+    if (first) {
+      for (const d of ['; domain=.reddit.com', '; domain=www.reddit.com', '']) document.cookie = `redesign_optout=${d}; path=/; max-age=0; secure; samesite=lax`;
+      if (!OPTOUT.test(document.cookie)) { window.stop(); location.reload(); return; }
+    }
+  }
   // A combined list's old address goes straight to RESpawn's own list, in place of this page in the tab's history (so
   // Back still goes where you came from). The old page is stopped first, so none of it shows on the way.
   const multiAway = (m) => { window.stop(); location.replace(`/${multiHash(m)}`); };
