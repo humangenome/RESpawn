@@ -320,6 +320,10 @@ html.rs-on comment-composer-host faceplate-textarea-input { --rem90: calc(var(--
 .rs-box-grip:hover, html.rs-resizing .rs-box-grip { opacity: 1; }
 html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"] { max-height: 460px; overflow: hidden; }
 html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"] img { max-height: 440px !important; width: auto !important; }
+/* Another site's player (RedGifs, YouTube, Streamable ...) sits in Reddit's own box, which Reddit already keeps within the
+   window's height (the window less the header and 250 px for the title). The picture cap above cut 100 px or more off a
+   tall one (Ryan 11/16: a RedGifs video showed without its bottom), so these keep Reddit's own size. */
+html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"]:has(shreddit-embed) { max-height: none; overflow: visible; }
 /* The post's own video takes its own shape (no black strip), with its controls on screen: as wide as the column allows
    while it stays within Reddit's own height for it (the window less the header and 250 px for the title) */
 html.rs-on shreddit-post[view-context="CommentsPage"] [slot="post-media-container"]:has(.rs-pv) { max-height: none; overflow: visible; }
