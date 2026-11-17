@@ -180,8 +180,6 @@ html.rs-on.rs-feed article:has(shreddit-post[data-rs]), html.rs-on.rs-feed shred
 /* Reddit's big cards never show before their compact rows are made (a post RESpawn could not turn into a row stays as it is) */
 html.rs-on.rs-feed article:has(> shreddit-post:not([data-rs-failed])), html.rs-on.rs-feed shreddit-post:not([data-rs-failed]) { display: none !important; }
 html.rs-on.rs-feed shreddit-feed hr { display: none !important; }
-html.rs-on.rs-hide-ads shreddit-ad-post, html.rs-on.rs-hide-ads article:has(shreddit-ad-post),
-html.rs-on.rs-hide-ads shreddit-comments-page-ad, html.rs-on.rs-hide-ads shreddit-comment-tree-ad, html.rs-on.rs-hide-ads shreddit-sidebar-ad { display: none !important; }
 
 .rs-row {
   display: grid; grid-template-columns: 24px 38px 70px minmax(0, 1fr); column-gap: 6px; align-items: start;
@@ -285,9 +283,11 @@ html:not(.rs-on) #rs-multi { display: none !important; }
 #rs-multi, #rs-multi * { text-transform: none !important; letter-spacing: normal; box-sizing: border-box; }
 #right-sidebar-contents > #rs-multi:first-child, #right-sidebar-container > #rs-multi:first-child { margin-top: 0; } /* level with the heading */
 #rs-classic > #rs-multi { margin: 0 0 12px; }
-.rs-mu-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.rs-mu-head b { display: flex; align-items: baseline; gap: 8px; font-size: 16px; line-height: 1.25; }
-.rs-mu-n { color: var(--rs-weak); font: 600 13px/1 var(--rs-font); }
+/* "These subreddits 100" stays one line, the count never splits ("10" over "0" in a narrow sidebar with Old Reddit's
+   wider font, Ryan 11/17); when the card is too narrow for the button too, the button moves under it. */
+.rs-mu-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; margin-bottom: 8px; }
+.rs-mu-head b { display: flex; align-items: baseline; gap: 8px; font-size: 16px; line-height: 1.25; white-space: nowrap; }
+.rs-mu-n { flex: none; color: var(--rs-weak); font: 600 13px/1 var(--rs-font); white-space: nowrap; }
 #rs-multi .rs-mu-sc { flex: none; height: 28px; padding: 0 12px; }
 .rs-mu-form { display: flex; gap: 6px; margin: 0 0 10px; }
 .rs-mu-form[hidden] { display: none; }
@@ -424,12 +424,9 @@ html:not(.rs-on) #rs-theme { display: none !important; }
 /* Font (setting): one of the fonts every computer has, on RESpawn's rows and on Reddit's own text. Icons, code and the
    settings window keep their own (the window stays put while the page behind it previews the pick). */
 html.rs-on.rs-font-old { --rs-pick: verdana, arial, helvetica, sans-serif; }
-html.rs-on.rs-font-arial { --rs-pick: arial, helvetica, sans-serif; }
-html.rs-on.rs-font-tahoma { --rs-pick: tahoma, verdana, "Segoe UI", sans-serif; }
-html.rs-on.rs-font-georgia { --rs-pick: georgia, "Times New Roman", serif; }
-html.rs-on:is(.rs-font-old, .rs-font-arial, .rs-font-tahoma, .rs-font-georgia) { --font-sans: var(--rs-pick) !important; --rs-font: var(--rs-pick); }
-html.rs-on:is(.rs-font-old, .rs-font-arial, .rs-font-tahoma, .rs-font-georgia) body,
-html.rs-on:is(.rs-font-old, .rs-font-arial, .rs-font-tahoma, .rs-font-georgia) body :not(svg, svg *, code, pre, pre *, kbd, samp, [class*="icon"], #rs-panel, #rs-panel *) { font-family: var(--rs-pick) !important; }
+html.rs-on.rs-font-old { --font-sans: var(--rs-pick) !important; --rs-font: var(--rs-pick); }
+html.rs-on.rs-font-old body,
+html.rs-on.rs-font-old body :not(svg, svg *, code, pre, pre *, kbd, samp, [class*="icon"], #rs-panel, #rs-panel *) { font-family: var(--rs-pick) !important; }
 
 /* Old Reddit font: Verdana runs large and wide, so rows take old Reddit's own sizes (plain 16 px titles, 11 px lines
    under them) and keep its tight rows; comments stay 14 px as on old Reddit */
@@ -586,9 +583,6 @@ html.rs-on.rs-font-old shreddit-post[view-context="CommentsPage"] h1[slot="title
 #rs-panel .rs-pn-font[aria-checked="true"] { border-color: var(--rs-up); background: color-mix(in srgb, var(--rs-up) 10%, var(--rs-pn-bg)); box-shadow: inset 0 0 0 1px var(--rs-up); }
 #rs-panel .rs-pn-font[data-v="reddit"] { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
 #rs-panel .rs-pn-font[data-v="old"] { font-family: verdana, arial, helvetica, sans-serif; }
-#rs-panel .rs-pn-font[data-v="arial"] { font-family: arial, helvetica, sans-serif; }
-#rs-panel .rs-pn-font[data-v="tahoma"] { font-family: tahoma, verdana, "Segoe UI", sans-serif; }
-#rs-panel .rs-pn-font[data-v="georgia"] { font-family: georgia, "Times New Roman", serif; }
 /* Backup: what a saved file holds */
 .rs-pn-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .rs-pn-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; }
@@ -633,7 +627,7 @@ html.rs-on.rs-font-old shreddit-post[view-context="CommentsPage"] h1[slot="title
   .rs-pn-pane { padding: 16px 12px 20px; }
   .rs-pn-row { gap: 12px; padding: 9px 12px; }
   .rs-pn-keys { grid-template-columns: minmax(0, 1fr); }
-  .rs-pn-fonts { display: grid; flex: 1 1 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rs-pn-fonts { display: grid; flex: 1 1 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rs-pn-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rs-pn-tile:nth-child(3) { border-left: 0; }
   .rs-pn-tile:nth-child(n+3) { border-top: 1px solid var(--rs-line); }

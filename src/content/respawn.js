@@ -8,11 +8,12 @@
   window.__respawnLoaded = true;
 
   const html = document.documentElement;
-  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', navHover: false, font: 'reddit', fullWidth: true, hideRecent: true, hideAds: true, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, classicSubs: true, simulateLastVisitHoursAgo: 0 };
+  const DEFAULTS = { enabled: true, shortcuts: [], showShortcuts: true, leftNav: 'slide', navHover: false, font: 'reddit', fullWidth: true, hideRecent: true, themeSchedule: false, hideBadges: true, hideSuggested: true, filterline: true, filters: {}, filterScore: 0, scMode: 'mine', mySubsSort: 'visits', subStyles: true, subStyleOverrides: {}, pinHeader: false, keys: true, linkFriends: true, linkMod: true, feeds: {}, hoverCards: true, highlight: true, tags: {}, blockWords: [], blockSubs: [], blockSites: [], autoReplies: true, pauseEvery: 0, maxVideos: 2, hideChat: false, topButton: true, hideKids: false, hideMyName: false, linkDashboard: true, classicHome: true, classicSubs: true, simulateLastVisitHoursAgo: 0 };
   let cfg = { ...DEFAULTS, ...(window.__RS_CFG || {}) };
   // Fonts every computer already has (nothing is downloaded). Reddit's own is your computer's font (Segoe UI on
-  // Windows, San Francisco on a Mac); Old Reddit is the Verdana stack old Reddit used.
-  const FONTS = [['reddit', 'Reddit'], ['old', 'Old Reddit'], ['arial', 'Arial'], ['tahoma', 'Tahoma'], ['georgia', 'Georgia']];
+  // Windows, San Francisco on a Mac); Old Reddit is the Verdana stack old Reddit used. (Arial, Tahoma and Georgia were
+  // choices until 11/17 (Ryan: "those are off"); a saved one of those reads as Reddit's own, see loadCfg.)
+  const FONTS = [['reddit', 'Reddit'], ['old', 'Old Reddit']];
 
   // ---------- small helpers ----------
   // Our own fixed icon drawings (never text from a page), read once and copied in without innerHTML
@@ -65,7 +66,7 @@
   const store = typeof chrome !== 'undefined' && chrome.storage?.local;
   const loadCfg = () => new Promise((res) => {
     if (!store) return res();
-    store.get(['respawn'], (r) => { cfg = { ...cfg, ...(r?.respawn || {}) }; res(); });
+    store.get(['respawn'], (r) => { cfg = { ...cfg, ...(r?.respawn || {}) }; if (!FONTS.some(([f]) => f === cfg.font)) cfg.font = 'reddit'; res(); });
   });
   let away = false; // this page is in old Reddit's design: RESpawn stays out of it (see "run" at the end)
   const saveCfg = (patch) => { if (away) return; cfg = { ...cfg, ...patch }; if (store) store.set({ respawn: cfg }); else localStorage.setItem('respawn-cfg', JSON.stringify(cfg)); };
@@ -75,7 +76,7 @@
   // RESpawn starts as the page starts, so the sidebar, ads and the rest never appear and then vanish. The add-on's own
   // storage answers a moment too late for that, so a copy of just these on/off switches is kept in the site's storage.
   const BOOT_KEY = 'rs-boot';
-  const BOOT_FIELDS = ['enabled', 'hideAds', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'navHover', 'font', 'fullWidth', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'classicHome', 'classicSubs'];
+  const BOOT_FIELDS = ['enabled', 'hideBadges', 'hideRecent', 'hideSuggested', 'showShortcuts', 'leftNav', 'navHover', 'font', 'fullWidth', 'filterline', 'pinHeader', 'highlight', 'hideChat', 'classicHome', 'classicSubs', 'themeSchedule'];
   // Old Reddit's lists (see "old Reddit's lists" below) live on / : r/all at /#all..., Home at / unless that is switched off;
   // and on a subreddit's own list addresses (/r/kings/, /r/kings/new/, /r/kings/top/?t=week) unless that is switched off.
   // Special lists that only look like subreddits, and Reddit's flair filter (?f=), keep Reddit's own page.
@@ -110,7 +111,7 @@
   const isClassicUrl = (c) => !!c.enabled && ((location.pathname === '/' && !new URLSearchParams(location.search).has('feed') && (/^#all(\/|$)/.test(location.hash) || !!multiHashOf() || !!c.classicHome)) || (!!c.classicSubs && !!subListOf()));
   const setPageClasses = (c) => {
     const on = {
-      'rs-on': !!c.enabled, 'rs-hide-ads': !!c.hideAds, 'rs-hide-badges': !!c.hideBadges, 'rs-hide-recent': !!c.hideRecent,
+      'rs-on': !!c.enabled, 'rs-hide-badges': !!c.hideBadges, 'rs-hide-recent': !!c.hideRecent,
       'rs-hide-suggested': !!c.hideSuggested, 'rs-no-shortcuts': !c.showShortcuts, 'rs-left-slide': c.leftNav === 'slide',
       'rs-left-hide': c.leftNav === 'hide', 'rs-left-hover': !!c.navHover, 'rs-fl-hidden': !c.filterline, 'rs-pin-header': !!c.pinHeader, 'rs-hl': !!c.highlight,
       'rs-no-chat': !!c.hideChat, 'rs-full': !!c.fullWidth,
@@ -147,10 +148,64 @@
   // the same way keeps Reddit's own menu in agreement, and every page opens in that mode from the start.
   const themeNow = () => ({ 1: 'light', 2: 'dark' })[(document.cookie.match(/(?:^|;\s*)theme=(\d)/) || [])[1]] || 'auto';
   const darkShown = () => { const t = themeNow(); return t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches); };
-  const setTheme = (t) => {
+  const themeCookie = (t) => {
     document.cookie = t === 'auto' ? 'theme=; domain=.reddit.com; path=/; max-age=0; secure; samesite=lax'
       : `theme=${t === 'dark' ? 2 : 1}; domain=.reddit.com; path=/; max-age=31536000; secure; samesite=lax`;
     html.classList.toggle('theme-dark', t === 'dark'); html.classList.toggle('theme-light', t === 'light');
+  };
+  // Day and night (a fourth choice, Ryan 11/17: "dark mode at night and then light mode during the day" on both his
+  // computers; Windows can't switch by itself). Dark from sunset to sunrise where you are, light the rest of the day.
+  // Where you are comes from the computer's time zone only (no location asked, nothing sent): the zone's middle, or for
+  // a zone not listed here the longitude its clock implies. Sunrise and sunset: the usual solar formula (the one the
+  // suncalc library uses), worked out for today; checked again every minute, so an open page switches at sunset.
+  const SUN_ZONES = {
+    'America/Los_Angeles': [37.5, -120.5], 'America/Denver': [40, -106], 'America/Phoenix': [33.4, -112], 'America/Chicago': [38, -91],
+    'America/New_York': [40, -77], 'America/Anchorage': [61.2, -149.9], 'Pacific/Honolulu': [21.3, -157.9], 'America/Toronto': [44, -79.4],
+    'America/Vancouver': [49.3, -123.1], 'America/Edmonton': [52, -114], 'America/Winnipeg': [49.9, -97.1], 'America/Halifax': [44.6, -63.6],
+    'America/Mexico_City': [19.4, -99.1], 'America/Sao_Paulo': [-23.5, -46.6], 'America/Argentina/Buenos_Aires': [-34.6, -58.4],
+    'Europe/London': [52.5, -1.5], 'Europe/Dublin': [53.3, -6.3], 'Europe/Paris': [46.8, 2.4], 'Europe/Berlin': [51.2, 10.4],
+    'Europe/Madrid': [40.4, -3.7], 'Europe/Rome': [42, 12.5], 'Europe/Amsterdam': [52.4, 4.9], 'Europe/Stockholm': [59.3, 18.1],
+    'Europe/Warsaw': [52.2, 21], 'Europe/Moscow': [55.8, 37.6], 'Europe/Istanbul': [41, 29], 'Asia/Kolkata': [22, 79],
+    'Asia/Tokyo': [35.7, 139.7], 'Asia/Shanghai': [31.2, 114], 'Asia/Singapore': [1.35, 103.8], 'Asia/Seoul': [37.6, 127],
+    'Asia/Dubai': [25.2, 55.3], 'Asia/Manila': [14.6, 121], 'Asia/Jakarta': [-6.2, 106.8], 'Australia/Sydney': [-33.9, 151.2],
+    'Australia/Melbourne': [-37.8, 145], 'Australia/Brisbane': [-27.5, 153], 'Australia/Perth': [-31.95, 115.9], 'Pacific/Auckland': [-37, 175],
+    'Africa/Johannesburg': [-26.2, 28],
+  };
+  const sunPlace = () => {
+    let z = ''; try { z = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* no zone: the clock's offset below */ }
+    if (SUN_ZONES[z]) return SUN_ZONES[z];
+    const y = new Date().getFullYear(), std = Math.max(new Date(y, 0, 1).getTimezoneOffset(), new Date(y, 6, 1).getTimezoneOffset());
+    return [40, -std / 4];
+  };
+  const sunTimes = (day, lat, lng) => {
+    const rad = Math.PI / 180, e = rad * 23.4397, J0 = 0.0009, toDays = (d) => d.valueOf() / 864e5 - 0.5 + 2440588 - 2451545;
+    const lw = rad * -lng, phi = rad * lat, d = toDays(day), n = Math.round(d - J0 - lw / (2 * Math.PI));
+    const ds = J0 + lw / (2 * Math.PI) + n, M = rad * (357.5291 + 0.98560028 * ds);
+    const L = M + rad * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M)) + rad * 102.9372 + Math.PI;
+    const dec = Math.asin(Math.sin(e) * Math.sin(L)), transit = (a) => 2451545 + a + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L);
+    const w = Math.acos((Math.sin(rad * -0.833) - Math.sin(phi) * Math.sin(dec)) / (Math.cos(phi) * Math.cos(dec)));
+    if (!Number.isFinite(w)) return null; // the sun stays up (or down) all day: plain clock hours below
+    const set = transit(J0 + (w + lw) / (2 * Math.PI) + n), noon = transit(ds), date = (j) => new Date((j + 0.5 - 2440588) * 864e5);
+    return { rise: date(noon - (set - noon)), set: date(set) };
+  };
+  const nightNow = (now = new Date()) => {
+    const noon = new Date(now); noon.setHours(12, 0, 0, 0);
+    const [lat, lng] = sunPlace(), t = sunTimes(noon, lat, lng);
+    if (!t) { const h = now.getHours(); return h < 7 || h >= 19; }
+    return now < t.rise || now >= t.set;
+  };
+  const daySync = (c) => {
+    if (!c.enabled || !c.themeSchedule) return;
+    const want = nightNow() ? 'dark' : 'light';
+    if (themeNow() !== want) { themeCookie(want); paintTheme(); }
+  };
+  const themeChoice = () => (cfg.themeSchedule ? 'sun' : themeNow());
+  // A choice in the settings, or the one-click button. The button picks light or dark for good (Day and night off),
+  // so a click at noon is never undone a minute later.
+  const setTheme = (t) => {
+    const sched = t === 'sun';
+    if (!!cfg.themeSchedule !== sched) { saveCfg({ themeSchedule: sched }); saveBoot(); }
+    if (sched) daySync(cfg); else themeCookie(t);
     paintTheme();
   };
   const MOON = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.2 12.6A6.8 6.8 0 0 1 7.4 3.8a6.8 6.8 0 1 0 8.8 8.8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
@@ -163,9 +218,10 @@
       if (b.dataset.dark !== String(dark)) { b.dataset.dark = String(dark); b.replaceChildren(svgOf(dark ? SUN : MOON)); }
       b.title = t; b.setAttribute('aria-label', t);
     }
-    document.querySelectorAll('#rs-panel .rs-seg[data-key="theme"] button').forEach((o) => o.setAttribute('aria-checked', String(o.dataset.v === themeNow())));
+    document.querySelectorAll('#rs-panel .rs-seg[data-key="theme"] button').forEach((o) => o.setAttribute('aria-checked', String(o.dataset.v === themeChoice())));
   };
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintTheme);
+  daySync(boot); // before the page draws, so it opens in the right mode
 
   // ---------- on/off switch (bottom-left, see-through) ----------
   const applyEnabled = () => {
@@ -248,8 +304,8 @@
   const SETTINGS = [
     { id: 'look', name: 'Appearance', icon: PN_ICON.look, words: 'look style layout clutter', groups: [
       ['Colors and text', [
-        { key: 'theme', label: 'Light or dark', choices: [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']], info: true, tip: "Auto follows your computer. This is Reddit's own Display Mode, so Reddit's menu changes with it.", words: 'theme dark mode light mode night display' },
-        { key: 'font', label: 'Font', kind: 'font', info: true, tip: "Old Reddit is Verdana, the font old Reddit used. Reddit is your computer's own font. Posts, comments and sidebars change as you pick.", words: 'typeface verdana arial tahoma georgia text size' },
+        { key: 'theme', label: 'Light or dark', choices: [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark'], ['sun', 'Day and night']], info: true, tip: "Auto follows your computer. Day and night is dark from sunset to sunrise, worked out from your computer's time zone. This is Reddit's own Display Mode, so Reddit's menu changes with it.", words: 'theme dark mode light mode night display day sunset sunrise schedule' },
+        { key: 'font', label: 'Font', kind: 'font', info: true, tip: "Old Reddit is Verdana, the font old Reddit used. Reddit is your computer's own font. Posts, comments and sidebars change as you pick.", words: 'typeface verdana text size' },
         { key: 'subStyles', label: 'Subreddit styles', info: true, tip: "Each subreddit's own colors and banner. The switch on a subreddit's side card changes that one subreddit only.", words: 'community theme css custom' },
       ]],
       ['Layout', [
@@ -260,7 +316,6 @@
         { key: 'topButton', label: 'Back to top button', tip: 'A round button in the bottom right corner once you scroll down. It jumps back to the top.', words: 'scroll up jump' },
       ]],
       ['Clutter', [
-        { key: 'hideAds', label: 'Hide ads', tip: 'Promoted posts in the feed and ads beside it.', words: 'promoted sponsored' },
         { key: 'hideRecent', label: 'Hide "Recent posts"', tip: 'The list of posts you opened lately, on the right side of the feed.', words: 'history recently viewed sidebar' },
         { key: 'hideSuggested', label: 'Hide suggestions and games', info: true, tip: "Reddit's suggested communities and its games, in the feed and the left menu.", words: 'recommended communities' },
         { key: 'hideBadges', label: 'Hide "Top 1%" badges', tip: 'The Top 1% poster and commenter badges beside names.', words: 'flair award' },
@@ -375,7 +430,7 @@
     let ctl;
     if (s.choices) {
       ctl = el('div', { class: 'rs-seg', role: 'radiogroup', 'aria-labelledby': `${id}-l`, 'data-key': s.key });
-      const now = s.key === 'theme' ? themeNow() : cfg[s.key]; // light or dark is Reddit's own setting, not kept in ours
+      const now = s.key === 'theme' ? themeChoice() : cfg[s.key]; // light or dark is Reddit's own setting, not kept in ours (Day and night is)
       for (const [v, t] of s.choices) {
         const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(now === v), 'data-v': v, text: t });
         b.onclick = () => {
@@ -600,7 +655,7 @@
   };
   const cleanSettings = (o) => {
     const out = {};
-    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideAds', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome', 'classicSubs', 'navHover', 'fullWidth']) if (typeof o[k] === 'boolean') out[k] = o[k];
+    for (const k of ['enabled', 'showShortcuts', 'hideRecent', 'hideBadges', 'hideSuggested', 'filterline', 'subStyles', 'pinHeader', 'keys', 'linkFriends', 'linkMod', 'hoverCards', 'highlight', 'autoReplies', 'hideChat', 'topButton', 'hideKids', 'hideMyName', 'linkDashboard', 'classicHome', 'classicSubs', 'navHover', 'fullWidth', 'themeSchedule']) if (typeof o[k] === 'boolean') out[k] = o[k];
     for (const [k, ok] of [['leftNav', ['show', 'slide', 'hide']], ['scMode', ['mine', 'visits']], ['mySubsSort', ['visits', 'az']], ['font', FONTS.map(([f]) => f)]]) if (ok.includes(o[k])) out[k] = o[k];
     for (const [k, lo, hi] of [['filterScore', -99999, 99999], ['pauseEvery', 0, 99], ['maxVideos', 0, 99]]) if (Number.isFinite(o[k])) out[k] = Math.max(lo, Math.min(hi, Math.round(o[k])));
     if (Array.isArray(o.shortcuts)) {
@@ -4599,6 +4654,7 @@
       return;
     }
     applyEnabled(); leftSlide(); tick();
+    daySync(cfg); setInterval(() => daySync(cfg), 60000); // sunset and sunrise reach a page left open
     // Typing in a comment box, or dragging its corner, changes only that box: nothing there for a pass to do
     new MutationObserver((L) => {
       if (L.every((m) => m.target.closest?.('shreddit-composer, comment-composer-host'))) return;
