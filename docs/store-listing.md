@@ -17,16 +17,16 @@ Keeps the new Reddit look and brings back RES and old Reddit features: compact p
 RESpawn keeps the new Reddit design and brings back the way old Reddit and Reddit Enhancement Suite (RES) worked.
 
 Posts and feeds
-- HOME, ALL and subreddits show old Reddit's lists again, with best, hot, new, rising, controversial and top, when you are logged in to Reddit (the new site has dropped r/all, and old Reddit now needs an account)
+- HOME, ALL and subreddits show old Reddit's lists again, with all of old Reddit's sorts, when you are logged in to Reddit (the new site has dropped r/all, and old Reddit now needs an account)
 - More posts on a screen, numbered, with votes, comments, share, save and hide on every row
-- Sort tabs in the open, and RES's filter bar: nsfw, spoiler, visited, comments opened, expando, score
+- Sort tabs in the open, and RES's filter bar for hiding posts by type, score or what you've already seen
 - Hide posts by words in the title, by subreddit or by website
-- Pictures and videos open right in the feed, including Streamable, Vimeo, Twitch clips, TikTok, Instagram, Imgur and Giphy; a limit on videos playing at once
+- Pictures and videos open right in the feed, from Reddit and the sites people link to most, and you set how many videos play at once
 - Endless scrolling with page dividers and an optional pause every few pages
 - Old Reddit's bold scores between the vote arrows and green titles on pinned posts; crossposts link to the original
 
 Subreddits
-- A shortcut bar across the top, with your own order, groups of subreddits and DASHBOARD, FRIENDS, MOD, MODQUEUE and SAVED links
+- A shortcut bar across the top, with your own order, groups of subreddits, and links to your saved posts, friends and mod queue
 - A switch for subreddit styles, on every subreddit or one at a time
 - Hover cards for users and subreddits
 
@@ -45,7 +45,7 @@ Also
 - RES's keyboard shortcuts (press ? for the list)
 - A dashboard with your saved comments, tags and hide lists
 - Hide chat, badges, "Recent posts" and suggestions; back-to-top button; hide your username on screen
-- A one-click light and dark switch, or Auto to follow your computer; settings backup file
+- A one-click light and dark switch, Auto to follow your computer, or Day and night to go dark at sunset; a settings backup file
 
 Not made by the RES team, and not affiliated with or endorsed by Reddit. Free and open source (GPL-3.0): https://github.com/humangenome/RESpawn
 
