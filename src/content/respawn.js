@@ -3156,15 +3156,29 @@
     return n.length <= 3 ? n.map((x) => `r/${x}`).join(' + ') : `r/${n[0]} + ${n.length - 1} more`;
   };
   const MULTI_FOLD = 12; // names shown before "Show all"
-  let multiTitleOwn = '', multiTitleShown = '';
+  // The tab's title on Home, ALL and combined lists. Reddit moves to Home without reloading the page and never renames
+  // the tab (seen 11/20: Home kept "r/popular", or the last subreddit's name, also from Reddit's own logo), so RESpawn
+  // names it: Reddit's own name for Home, "r/all", or the combined list's name. After a combined list Reddit's own
+  // title comes back (unless Reddit has set a new one meanwhile).
+  const HOME_TITLE = 'Reddit - The heart of the internet';
+  const listTitle = () => {
+    if (!cfg.enabled || !/^\/((best|hot|new|top|rising)\/?)?$/.test(location.pathname)) return null;
+    if (cl?.root.isConnected && cl.r.list === 'multi') return { t: multiTitle(cl.r.sub), back: true };
+    if (location.pathname === '/' && multiHashOf()) return null; // a combined list still opening
+    return { t: /^#all(\/|$)/.test(location.hash) ? 'r/all' : HOME_TITLE };
+  };
+  let titleOwnL = '', titleShownL = '', titleBackL = false;
+  const tabTitle = () => {
+    const { t = '', back = false } = listTitle() || {};
+    if (t && document.title !== t) { if (document.title !== titleShownL) titleOwnL = document.title; document.title = t; }
+    if (!t && titleBackL && titleShownL && document.title === titleShownL) document.title = titleOwnL;
+    titleShownL = t; titleBackL = back;
+  };
   const multiShow = (repaint) => {
     const r = cfg.enabled && cl?.root.isConnected && cl.r.list === 'multi' ? cl.r : null;
     let card = document.getElementById('rs-multi');
-    // the tab's title: ours while the list shows, Reddit's own back after (unless Reddit has set a new one meanwhile)
+    tabTitle();
     const t = r ? multiTitle(r.sub) : '';
-    if (t && document.title !== t) { if (document.title !== multiTitleShown) multiTitleOwn = document.title; document.title = t; }
-    if (!t && multiTitleShown && document.title === multiTitleShown) document.title = multiTitleOwn;
-    multiTitleShown = t;
     if (!r) { card?.remove(); return; }
     setText(cl.root.querySelector('.rs-cl-title'), t);
     // The card sits at the top of the right column, or above the list when the window is too narrow for that column
